@@ -81,7 +81,7 @@ class SimpleTaskRunner:
         loss = self.model(
             input_ids=batch.input_ids,
             token_type_ids=batch.segment_ids,
-            input_mask=batch.input_mask,
+            attention_mask=batch.input_mask,
             labels=batch.label_ids,
         )[0]
         loss = self.complex_backpropagate(loss)
@@ -111,13 +111,13 @@ class SimpleTaskRunner:
                 tmp_eval_loss = self.model(
                     input_ids=batch.input_ids,
                     token_type_ids=batch.segment_ids,
-                    input_mask=batch.input_mask,
+                    attention_mask=batch.input_mask,
                     labels=batch.label_ids,
                 )[0]
                 logits = self.model(
                     input_ids=batch.input_ids,
                     token_type_ids=batch.segment_ids,
-                    input_mask=batch.input_mask,
+                    attention_mask=batch.input_mask,
                 )[0]
 
             logits = logits.detach().cpu().numpy()
@@ -146,7 +146,7 @@ class SimpleTaskRunner:
                 logits = self.model(
                     input_ids=batch.input_ids,
                     token_type_ids=batch.segment_ids,
-                    input_mask=batch.input_mask,
+                    attention_mask=batch.input_mask,
                 )[0]
             logits = logits.detach().cpu().numpy()
             all_logits.append(logits)
