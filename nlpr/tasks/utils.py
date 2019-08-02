@@ -23,9 +23,12 @@ def truncate_sequences(tokens_ls, max_length, truncate_end=True):
     ]
 
 
-def pad_to_max_seq_length(ls, max_seq_length, pad_idx=0, check=True):
+def pad_to_max_seq_length(ls, max_seq_length, pad_idx=0, pad_right=True, check=True):
     padding = [pad_idx] * (max_seq_length - len(ls))
-    result = ls + padding
+    if pad_right:
+        result = ls + padding
+    else:
+        result = padding + ls
 
     if check:
         assert len(result) == max_seq_length

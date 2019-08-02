@@ -1,2 +1,0 @@
-CLS = "[CLS]"
-SEP = "[SEP]"

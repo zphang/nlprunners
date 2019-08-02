@@ -1,7 +1,76 @@
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
 
-from pytorch_transformers import AdamW, WarmupLinearSchedule
+import pytorch_transformers
+
+
+@dataclass
+class ModelClassSpec:
+    config_class: type
+    tokenizer_class: type
+    model_class:type
+
+
+def resolve_model_setup_classes(model_type):
+    if model_type.startswith("bert-"):
+        model_class_spec = ModelClassSpec(
+            config_class=pytorch_transformers.BertConfig,
+            tokenizer_class=pytorch_transformers.BertTokenizer,
+            # TODO: resolve correct model
+            model_class=pytorch_transformers.BertForSequenceClassification,
+        )
+    elif model_type.startswith("xlnet-"):
+        model_class_spec = ModelClassSpec(
+            config_class=pytorch_transformers.XLNetConfig,
+            tokenizer_class=pytorch_transformers.XLNetTokenizer,
+            # TODO: resolve correct model
+            model_class=pytorch_transformers.XLNetForSequenceClassification,
+        )
+    elif model_type.startswith("xlm-"):
+        model_class_spec = ModelClassSpec(
+            config_class=pytorch_transformers.XLMConfig,
+            tokenizer_class=pytorch_transformers.XLMTokenizer,
+            # TODO: resolve correct model
+            model_class=pytorch_transformers.XLMForSequenceClassification,
+        )
+    else:
+        raise KeyError(model_type)
+    return model_class_spec
+
+
+def simple_model_setup(model_type, model_class_spec, config_path, tokenizer_path):
+    config = model_class_spec.config_class.from_json_file(config_path)
+    model = model_class_spec.model_class(config)
+    if "-cased" in model_type:
+        do_lower_case = False
+    elif "-uncased" in model_type:
+        do_lower_case = True
+    else:
+        raise RuntimeError(model_type)
+    tokenizer = model_class_spec.tokenizer_class.from_pretrained(
+        tokenizer_path, do_lower_case=do_lower_case,
+    )
+    return ModelWrapper(
+        model=model,
+        tokenizer=tokenizer
+    )
+
+
+def load_model(model, state_dict, max_miss_fraction=0.9, verbose=True):
+    missed, unused = model.load_state_dict(state_dict, strict=False)
+    total_mismatched = len(missed) + len(unused)
+    total_params = len(model.state_dict())
+    if verbose:
+        print(f"Missed {len(missed)}:")
+        for pname in missed:
+            print(f"  {pname}")
+        print(f"Unused {len(unused)}:")
+        for pname in unused:
+            print(f"  {pname}")
+    if total_mismatched / total_params > 1 - max_miss_fraction:
+        raise RuntimeError(f"Mismatched {total_mismatched} out of {total_params} parameters")
 
 
 class OptimizerScheduler:
@@ -11,8 +80,9 @@ class OptimizerScheduler:
         self.scheduler = scheduler
 
     def step(self):
-        self.optimizer.step()
+        # Scheduler updates first
         self.scheduler.step()
+        self.optimizer.step()
 
     def state_dict(self):
         return {
@@ -48,8 +118,12 @@ def create_optimizer(model, learning_rate, t_total, warmup_steps, adam_epsilon=1
             'weight_decay': 0.0,
         }
     ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate, eps=adam_epsilon)
-    scheduler = WarmupLinearSchedule(optimizer, warmup_steps=warmup_steps, t_total=t_total)
+    optimizer = pytorch_transformers.AdamW(
+        optimizer_grouped_parameters, lr=learning_rate, eps=adam_epsilon
+    )
+    scheduler = pytorch_transformers.WarmupLinearSchedule(
+        optimizer, warmup_steps=warmup_steps, t_total=t_total
+    )
     optimizer_scheduler = OptimizerScheduler(
         optimizer=optimizer,
         scheduler=scheduler,

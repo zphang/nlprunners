@@ -1,0 +1,20 @@
+{
+  "prince": {
+    "ssh_key_path": "/Users/zhansheng/keypairs/nyu_rsa_nopass",
+    "local_path": "/Users/zhansheng/nyu/bowman/code/nlprunners",
+    "remote_user": "zp489",
+    "remote_host": "prince",
+    "remote_path": "/home/zp489/code/bowman/nlprunners",
+    "exclude_list": [
+      "__pycache__/",
+      ".git/",
+      ".zsync.json",
+      ".zsync.conf",
+      ".circleci",
+      ".pytest_cache",
+      "archive",
+      "slurm-*.out"
+    ],
+    "delete": true
+  }
+}

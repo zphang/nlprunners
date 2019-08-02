@@ -16,7 +16,7 @@ def quick_init(args, verbose=True):
         fp16=args.fp16,
         verbose=verbose,
     )
-    args.seed = init_seed(given_seed=args.seed, n_gpu=args.n_gpu)
+    args.seed = init_seed(given_seed=args.seed, n_gpu=n_gpu)
     init_output_dir(output_dir=args.output_dir, force_overwrite=args.force_overwrite)
     save_args(args=args, verbose=verbose)
     return device, n_gpu
