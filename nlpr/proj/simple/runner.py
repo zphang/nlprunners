@@ -154,12 +154,13 @@ class SimpleTaskRunner:
         all_logits = np.concatenate(all_logits, axis=0)
         return all_logits
 
-    def get_train_dataloader(self, train_examples):
+    def get_train_dataloader(self, train_examples, verbose=True):
         dataset_with_metadata = convert_examples_to_dataset(
             examples=train_examples,
             feat_spec=self.rparams.feat_spec,
             tokenizer=self.tokenizer,
             task=self.task,
+            verbose=verbose,
         )
         train_sampler = get_sampler(
             dataset=dataset_with_metadata.dataset,

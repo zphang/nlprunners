@@ -40,8 +40,9 @@ def resolve_model_setup_classes(model_type):
     return model_class_spec
 
 
-def simple_model_setup(model_type, model_class_spec, config_path, tokenizer_path):
+def simple_model_setup(model_type, model_class_spec, config_path, tokenizer_path, task):
     config = model_class_spec.config_class.from_json_file(config_path)
+    config.num_labels = len(task.LABELS)
     model = model_class_spec.model_class(config)
     if "-cased" in model_type:
         do_lower_case = False

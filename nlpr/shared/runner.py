@@ -7,6 +7,8 @@ import torch.nn.functional as F
 from torch.utils.data import TensorDataset, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 
+from pyutils.display import maybe_tqdm
+
 
 @dataclass
 class TrainEpochState:
@@ -45,22 +47,10 @@ class DataDescriptor:
 
 
 def convert_examples_to_dataset(examples, tokenizer, feat_spec, task, verbose=False):
-    if verbose:
-        examples_iter = tqdm(examples, desc="Tokenizing")
-    else:
-        examples_iter = examples
     data_rows = [
         example.tokenize(tokenizer).featurize(tokenizer, feat_spec)
-        for example in examples_iter
+        for example in maybe_tqdm(examples, desc="Tokenizing", verbose=verbose)
     ]
-    print("*** Example ***")
-    print("guid: %s" % (data_rows[0].guid))
-    print("tokens: %s" % " ".join(
-        [str(x) for x in data_rows[0].tokens]))
-    print("input_ids: %s" % " ".join([str(x) for x in data_rows[0].input_ids]))
-    print("input_mask: %s" % " ".join([str(x) for x in data_rows[0].input_mask]))
-    print("segment_ids: %s" % " ".join([str(x) for x in data_rows[0].segment_ids]))
-    print("label: (id = %d)" % (data_rows[0].label_id))
     full_batch = task.Batch.from_data_rows(data_rows)
     dataset_with_metadata = full_batch_to_dataset(full_batch)
     dataset_with_metadata.metadata["descriptors"].append(
