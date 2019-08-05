@@ -2,7 +2,9 @@ import torch
 from dataclasses import dataclass
 from typing import List
 
-from .shared import read_json_lines, Task, create_input_set_from_tokens_and_segments, add_cls_token
+from .shared import (
+    read_json_lines, Task, create_input_set_from_tokens_and_segments, add_cls_token, TaskTypes,
+)
 from ..core import BaseExample, BaseTokenizedExample, BaseDataRow, BatchMixin, labels_to_bimap
 from ..utils import truncate_sequences
 
@@ -151,6 +153,7 @@ class CopaTask(Task):
     DataRow = DataRow
     Batch = Batch
 
+    TASK_TYPE = TaskTypes.CLASSIFICATION
     LABELS = [0, 1]
     LABEL_BIMAP = labels_to_bimap(LABELS)
 

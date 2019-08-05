@@ -1,43 +1,7 @@
-from dataclasses import dataclass
-
 import torch
 import torch.nn as nn
 
 import pytorch_transformers
-
-
-@dataclass
-class ModelClassSpec:
-    config_class: type
-    tokenizer_class: type
-    model_class:type
-
-
-def resolve_model_setup_classes(model_type):
-    if model_type.startswith("bert-"):
-        model_class_spec = ModelClassSpec(
-            config_class=pytorch_transformers.BertConfig,
-            tokenizer_class=pytorch_transformers.BertTokenizer,
-            # TODO: resolve correct model
-            model_class=pytorch_transformers.BertForSequenceClassification,
-        )
-    elif model_type.startswith("xlnet-"):
-        model_class_spec = ModelClassSpec(
-            config_class=pytorch_transformers.XLNetConfig,
-            tokenizer_class=pytorch_transformers.XLNetTokenizer,
-            # TODO: resolve correct model
-            model_class=pytorch_transformers.XLNetForSequenceClassification,
-        )
-    elif model_type.startswith("xlm-"):
-        model_class_spec = ModelClassSpec(
-            config_class=pytorch_transformers.XLMConfig,
-            tokenizer_class=pytorch_transformers.XLMTokenizer,
-            # TODO: resolve correct model
-            model_class=pytorch_transformers.XLMForSequenceClassification,
-        )
-    else:
-        raise KeyError(model_type)
-    return model_class_spec
 
 
 def simple_model_setup(model_type, model_class_spec, config_path, tokenizer_path, task):

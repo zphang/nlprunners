@@ -13,6 +13,8 @@ from nlpr.shared.runner import (
     get_sampler,
     TrainEpochState,
 )
+from nlpr.shared.modeling import forward_batch_basic
+from nlpr.shared.train_setup import TrainSchedule
 import nlpr.tasks.evaluate as evaluate
 
 
@@ -28,18 +30,17 @@ class RunnerParameters:
 
 
 class SimpleTaskRunner:
-    def __init__(self, task, model_wrapper, optimizer_scheduler,
-                 device, rparams, train_schedule=None):
+    def __init__(self, task, model_wrapper, optimizer_scheduler, loss_criterion,
+                 device, rparams: RunnerParameters, train_schedule: TrainSchedule = None):
         self.task = task
         self.model_wrapper = model_wrapper
         self.optimizer_scheduler = optimizer_scheduler
+        self.loss_criterion = loss_criterion
         self.device = device
-        assert isinstance(rparams, RunnerParameters)
-        import nlpr.shared.train_setup
-        assert isinstance(train_schedule, nlpr.shared.train_setup.TrainSchedule)
         self.rparams = rparams
         self.train_schedule = train_schedule
 
+        # Convenience
         self.model = self.model_wrapper.model
         self.tokenizer = self.model_wrapper.tokenizer
 
@@ -77,12 +78,9 @@ class SimpleTaskRunner:
     def run_train_step(self, step, batch, train_epoch_state):
         self.model.train()
         batch = batch.to(self.device)
-        #loss = self.model.forward_batch(batch)
-        loss = self.model(
-            input_ids=batch.input_ids,
-            token_type_ids=batch.segment_ids,
-            attention_mask=batch.input_mask,
-            labels=batch.label_ids,
+        loss = forward_batch_basic(
+            model=self.model,
+            batch=batch,
         )[0]
         loss = self.complex_backpropagate(loss)
 
@@ -106,18 +104,14 @@ class SimpleTaskRunner:
             batch = batch.to(self.device)
 
             with torch.no_grad():
-                #tmp_eval_loss = self.model.forward_batch(batch)
-                #logits = self.model.forward_batch_hide_label(batch)
-                tmp_eval_loss = self.model(
-                    input_ids=batch.input_ids,
-                    token_type_ids=batch.segment_ids,
-                    attention_mask=batch.input_mask,
-                    labels=batch.label_ids,
+                tmp_eval_loss = forward_batch_basic(
+                    model=self.model,
+                    batch=batch,
                 )[0]
-                logits = self.model(
-                    input_ids=batch.input_ids,
-                    token_type_ids=batch.segment_ids,
-                    attention_mask=batch.input_mask,
+                logits = forward_batch_basic(
+                    model=self.model,
+                    batch=batch,
+                    omit_label_ids=True,
                 )[0]
 
             logits = logits.detach().cpu().numpy()
@@ -142,11 +136,10 @@ class SimpleTaskRunner:
         for step, (batch, batch_metadata) in enumerate(tqdm(test_dataloader, desc="Predictions (Test)")):
             batch = batch.to(self.device)
             with torch.no_grad():
-                #logits = self.model.forward_batch_hide_label(batch)
-                logits = self.model(
-                    input_ids=batch.input_ids,
-                    token_type_ids=batch.segment_ids,
-                    attention_mask=batch.input_mask,
+                logits = forward_batch_basic(
+                    model=self.model,
+                    batch=batch,
+                    omit_label_ids=True,
                 )[0]
             logits = logits.detach().cpu().numpy()
             all_logits.append(logits)

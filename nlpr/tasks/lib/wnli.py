@@ -1,12 +1,9 @@
-import os
-import pandas as pd
-
 import torch
 from dataclasses import dataclass
 from typing import List
 
 from .shared import (
-    Task, single_sentence_featurize, TaskTypes,
+    read_json_lines, Task, double_sentence_featurize, TaskTypes,
 )
 from ..core import BaseExample, BaseTokenizedExample, BaseDataRow, BatchMixin, labels_to_bimap
 
@@ -14,27 +11,31 @@ from ..core import BaseExample, BaseTokenizedExample, BaseDataRow, BatchMixin, l
 @dataclass
 class Example(BaseExample):
     guid: str
-    input_text: str
+    input_premise: str
+    input_hypothesis: str
     label: str
 
     def tokenize(self, tokenizer):
         return TokenizedExample(
             guid=self.guid,
-            input_tokens=tokenizer.tokenize(self.input_text),
-            label_id=YelpPolarityTask.LABEL_BIMAP.a[self.label],
+            input_premise=tokenizer.tokenize(self.input_premise),
+            input_hypothesis=tokenizer.tokenize(self.input_hypothesis),
+            label_id=WnliTask.LABEL_BIMAP.a[self.label],
         )
 
 
 @dataclass
 class TokenizedExample(BaseTokenizedExample):
     guid: str
-    input_tokens: List
+    input_premise: List
+    input_hypothesis: List
     label_id: int
 
     def featurize(self, tokenizer, feat_spec):
-        return single_sentence_featurize(
+        return double_sentence_featurize(
             guid=self.guid,
-            input_tokens=self.input_tokens,
+            input_tokens_a=self.input_premise,
+            input_tokens_b=self.input_hypothesis,
             label_id=self.label_id,
             tokenizer=tokenizer,
             feat_spec=feat_spec,
@@ -74,34 +75,33 @@ class Batch(BatchMixin):
         )
 
 
-class YelpPolarityTask(Task):
+class WnliTask(Task):
     Example = Example
     TokenizedExample = Example
     DataRow = DataRow
     Batch = Batch
 
     TASK_TYPE = TaskTypes.CLASSIFICATION
-    LABELS = [1, 2]
+    LABELS = ["0", "1"]
     LABEL_BIMAP = labels_to_bimap(LABELS)
 
     def get_train_examples(self):
-        df = pd.read_csv(
-            os.path.join(self.data_dir, "train.csv"),
-            header=None,
-            names=["label", "text"],
-        )
-        examples = [
-            Example(
-                guid=f"train-{i}",
-                input_text=row["text"],
-                label=row["label"],
-            )
-            for i, row in df.iterrows()
-        ]
-        return examples
+        return self._create_examples(lines=read_json_lines(self.train_path), set_type="train")
 
     def get_val_examples(self):
-        raise NotImplementedError()
+        return self._create_examples(lines=read_json_lines(self.val_path), set_type="val")
 
     def get_test_examples(self):
-        raise NotImplementedError()
+        return self._create_examples(lines=read_json_lines(self.test_path), set_type="test")
+
+    @classmethod
+    def _create_examples(cls, lines, set_type):
+        examples = []
+        for (i, line) in enumerate(lines):
+            examples.append(Example(
+                guid="%s-%s" % (set_type, i),
+                input_premise=line["text_a"],
+                input_hypothesis=line["text_b"],
+                label=line["label"] if set_type != "test" else cls.LABELS[-1],
+            ))
+        return examples

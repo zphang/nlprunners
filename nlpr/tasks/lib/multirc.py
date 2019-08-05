@@ -6,6 +6,7 @@ from typing import List
 
 from .shared import (
     read_json_lines, Task, create_generic_data_row_from_tokens_and_segments, add_cls_token,
+    TaskTypes,
 )
 from ..core import BaseExample, BaseTokenizedExample, BaseDataRow, BatchMixin, labels_to_bimap
 from ..utils import truncate_sequences
@@ -107,6 +108,7 @@ class MultiRCTask(Task):
     DataRow = DataRow
     Batch = Batch
 
+    TASK_TYPE = TaskTypes.UNDEFINED
     LABELS = [False, True]
     LABEL_BIMAP = labels_to_bimap(LABELS)
 

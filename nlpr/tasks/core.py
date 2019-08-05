@@ -10,6 +10,19 @@ class IDS:
     MASK = 103
 
 
+@dataclass
+class FeaturizationSpec:
+    max_seq_length: int
+    cls_token_at_end: bool
+    pad_on_left: bool
+    cls_token_segment_id: int
+    pad_token_segment_id: int
+    pad_token_id: int
+    pad_token_mask_id: int
+    sequence_a_segment_id: int
+    sequence_b_segment_id: int
+
+
 class ExtendedDataClassMixin:
 
     @property
@@ -56,7 +69,7 @@ class BaseExample(ExtendedDataClassMixin):
 
 
 class BaseTokenizedExample(ExtendedDataClassMixin):
-    def featurize(self, tokenizer, feat_spec):
+    def featurize(self, tokenizer, feat_spec: FeaturizationSpec):
         raise NotImplementedError
 
 
@@ -78,17 +91,6 @@ class BiMap:
             self.a[i] = j
             self.b[j] = i
         assert len(self.a) == len(self.b) == len(a) == len(b)
-
-
-@dataclass
-class FeaturizationSpec:
-    max_seq_length: int
-    cls_token_at_end: bool
-    pad_on_left: bool
-    cls_token_segment_id: int
-    pad_token_segment_id: int
-    pad_token_id: int
-    pad_token_mask_id: int
 
 
 def labels_to_bimap(labels):

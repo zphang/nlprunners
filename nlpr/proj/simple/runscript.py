@@ -72,7 +72,10 @@ def main(args):
 
     with distributed.only_first_process(local_rank=args.local_rank):
         # load the model
-        model_class_spec = model_setup.resolve_model_setup_classes(args.model_type)
+        model_class_spec = model_resolution.resolve_model_setup_classes(
+            model_type=args.model_type,
+            task_type=task.TASK_TYPE,
+        )
         model_wrapper = model_setup.simple_model_setup(
             model_type=args.model_type,
             model_class_spec=model_class_spec,
@@ -97,6 +100,7 @@ def main(args):
         per_gpu_train_batch_size=args.train_batch_size,
         n_gpu=n_gpu,
     )
+    print("t_total", train_schedule.t_total)
     optimizer_scheduler = model_setup.create_optimizer(
         model=model_wrapper.model,
         learning_rate=args.learning_rate,

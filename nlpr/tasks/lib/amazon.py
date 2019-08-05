@@ -5,7 +5,9 @@ import torch
 from dataclasses import dataclass
 from typing import List
 
-from .shared import Task, single_sentence_featurize
+from .shared import (
+    Task, single_sentence_featurize, TaskTypes, TaskTypes,
+)
 from ..core import BaseExample, BaseTokenizedExample, BaseDataRow, BatchMixin, labels_to_bimap
 
 
@@ -78,6 +80,7 @@ class AmazonPolarityTask(Task):
     DataRow = DataRow
     Batch = Batch
 
+    TASK_TYPE = TaskTypes.CLASSIFICATION
     LABELS = [1, 2]
     LABEL_BIMAP = labels_to_bimap(LABELS)
 

@@ -2,7 +2,9 @@ import torch
 from dataclasses import dataclass
 from typing import List
 
-from .shared import read_json_lines, Task, single_sentence_featurize
+from .shared import (
+    read_json_lines, Task, single_sentence_featurize, TaskTypes,
+)
 from ..core import BaseExample, BaseTokenizedExample, BaseDataRow, BatchMixin, labels_to_bimap
 
 
@@ -75,6 +77,7 @@ class IMDBTask(Task):
     DataRow = DataRow
     Batch = Batch
 
+    TASK_TYPE = TaskTypes.CLASSIFICATION
     LABELS = ["neg", "pos"]
     LABEL_BIMAP = labels_to_bimap(LABELS)
 

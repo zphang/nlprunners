@@ -1,13 +1,23 @@
 import csv
 import json
 from typing import List
+from enum import Enum
 
 from dataclasses import dataclass
 
+from ..core import FeaturizationSpec
 from ..utils import truncate_sequences, pad_to_max_seq_length
 
 
+class TaskTypes(Enum):
+    CLASSIFICATION = 1
+    REGRESSION = 2
+    UNDEFINED = -1
+
+
 class Task:
+
+    TASK_TYPE = NotImplemented
 
     def __init__(self, name, path_dict):
         self.name = name
@@ -86,7 +96,10 @@ def construct_single_input_tokens_and_segment_ids(input_tokens, tokenizer, feat_
 
     return add_cls_token(
         unpadded_tokens=input_tokens + [tokenizer.sep_token],
-        unpadded_segment_ids=[0] + [0] * (len(input_tokens)),
+        unpadded_segment_ids=(
+            [FeaturizationSpec.sequence_a_segment_id]
+            + [FeaturizationSpec.sequence_a_segment_id] * (len(input_tokens))
+        ),
         tokenizer=tokenizer,
         feat_spec=feat_spec,
     )
@@ -103,8 +116,10 @@ def construct_double_input_tokens_and_segment_ids(input_tokens_a, input_tokens_b
         + input_tokens_b + [tokenizer.sep_token]
     )
     unpadded_segment_ids = (
-        [0] * len(input_tokens_a) + [0]
-        + [1] * len(input_tokens_b) + [1]
+        [FeaturizationSpec.sequence_a_segment_id] * len(input_tokens_a)
+        + [FeaturizationSpec.sequence_a_segment_id]
+        + [FeaturizationSpec.sequence_b_segment_id] * len(input_tokens_b)
+        + [FeaturizationSpec.sequence_b_segment_id]
     )
     return add_cls_token(
         unpadded_tokens=unpadded_tokens,
