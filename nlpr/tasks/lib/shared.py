@@ -97,8 +97,8 @@ def construct_single_input_tokens_and_segment_ids(input_tokens, tokenizer, feat_
     return add_cls_token(
         unpadded_tokens=input_tokens + [tokenizer.sep_token],
         unpadded_segment_ids=(
-            [FeaturizationSpec.sequence_a_segment_id]
-            + [FeaturizationSpec.sequence_a_segment_id] * (len(input_tokens))
+            [feat_spec.sequence_a_segment_id]
+            + [feat_spec.sequence_a_segment_id] * (len(input_tokens))
         ),
         tokenizer=tokenizer,
         feat_spec=feat_spec,
@@ -116,10 +116,10 @@ def construct_double_input_tokens_and_segment_ids(input_tokens_a, input_tokens_b
         + input_tokens_b + [tokenizer.sep_token]
     )
     unpadded_segment_ids = (
-        [FeaturizationSpec.sequence_a_segment_id] * len(input_tokens_a)
-        + [FeaturizationSpec.sequence_a_segment_id]
-        + [FeaturizationSpec.sequence_b_segment_id] * len(input_tokens_b)
-        + [FeaturizationSpec.sequence_b_segment_id]
+        [feat_spec.sequence_a_segment_id] * len(input_tokens_a)
+        + [feat_spec.sequence_a_segment_id]
+        + [feat_spec.sequence_b_segment_id] * len(input_tokens_b)
+        + [feat_spec.sequence_b_segment_id]
     )
     return add_cls_token(
         unpadded_tokens=unpadded_tokens,

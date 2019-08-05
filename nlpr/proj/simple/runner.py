@@ -78,10 +78,12 @@ class SimpleTaskRunner:
     def run_train_step(self, step, batch, train_epoch_state):
         self.model.train()
         batch = batch.to(self.device)
-        loss = forward_batch_basic(
+        logits = forward_batch_basic(
             model=self.model,
             batch=batch,
+            omit_label_ids=True,
         )[0]
+        loss = self.loss_criterion(logits, batch.label_ids)
         loss = self.complex_backpropagate(loss)
 
         train_epoch_state.tr_loss += loss.item()
@@ -104,15 +106,12 @@ class SimpleTaskRunner:
             batch = batch.to(self.device)
 
             with torch.no_grad():
-                tmp_eval_loss = forward_batch_basic(
-                    model=self.model,
-                    batch=batch,
-                )[0]
                 logits = forward_batch_basic(
                     model=self.model,
                     batch=batch,
                     omit_label_ids=True,
                 )[0]
+                tmp_eval_loss = self.loss_criterion(logits, batch.label_ids)
 
             logits = logits.detach().cpu().numpy()
             total_eval_loss += tmp_eval_loss.mean().item()

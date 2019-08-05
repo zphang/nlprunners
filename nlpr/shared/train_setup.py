@@ -1,6 +1,9 @@
 import numpy as np
 
+import torch.nn as nn
+
 from dataclasses import dataclass
+from nlpr.tasks.lib.shared import TaskTypes
 
 
 @dataclass
@@ -32,3 +35,13 @@ def get_train_schedule(num_train_examples,
         t_total=t_total,
         gradient_accumulation_steps=gradient_accumulation_steps,
     )
+
+
+def resolve_loss_function(task_type: TaskTypes):
+    # maybe move this function
+    if task_type == TaskTypes.CLASSIFICATION:
+        return nn.CrossEntropyLoss()
+    elif task_type == TaskTypes.REGRESSION:
+        return nn.MSELoss()
+    else:
+        raise KeyError(task_type)

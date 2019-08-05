@@ -105,19 +105,30 @@ def mean(*args) -> float:
     return float(np.mean(args))
 
 
-def write_val_results(results, output_dir, verbose=True):
-    df = pd.DataFrame(results["logits"])
-    df.to_csv(os.path.join(output_dir, "val_preds.csv"), header=False, index=False)
+def write_metrics(results, output_path, verbose=True):
     metrics_str = json.dumps(
         {"loss": results["loss"], "metrics": results["metrics"].asdict()},
         indent=2,
     )
     if verbose:
         print(metrics_str)
-    with open(os.path.join(output_dir, "val_metrics.json"), "w") as f:
+    with open(output_path, "w") as f:
         f.write(metrics_str)
 
 
-def write_test_preds(logits, output_path):
+def write_preds(logits, output_path):
     df = pd.DataFrame(logits)
     df.to_csv(output_path, header=False, index=False)
+
+
+def write_val_results(results, output_dir, verbose=True):
+    os.makedirs(output_dir, exist_ok=True)
+    write_preds(
+        logits=results["logits"],
+        output_path=os.path.join(output_dir, "val_preds.csv"),
+    )
+    write_metrics(
+        results=results,
+        output_path=os.path.join(output_dir, "val_metrics.json"),
+        verbose=verbose,
+    )

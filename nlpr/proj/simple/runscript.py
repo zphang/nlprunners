@@ -101,6 +101,7 @@ def main(args):
         n_gpu=n_gpu,
     )
     print("t_total", train_schedule.t_total)
+    loss_criterion = train_setup.resolve_loss_function(task_type=task.TASK_TYPE)
     optimizer_scheduler = model_setup.create_optimizer(
         model=model_wrapper.model,
         learning_rate=args.learning_rate,
@@ -129,6 +130,7 @@ def main(args):
         task=task,
         model_wrapper=model_wrapper,
         optimizer_scheduler=optimizer_scheduler,
+        loss_criterion=loss_criterion,
         device=device,
         rparams=rparams,
         train_schedule=train_schedule,
@@ -152,7 +154,7 @@ def main(args):
     if args.do_test:
         test_examples = task.get_test_examples()
         logits = runner.run_test(test_examples)
-        evaluate.write_test_preds(
+        evaluate.write_preds(
             logits=logits,
             output_path=os.path.join(args.output_dir, "test_preds.csv"),
         )
