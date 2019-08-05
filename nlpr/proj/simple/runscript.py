@@ -26,8 +26,6 @@ class RunConfiguration(zconf.RunConfig):
     model_tokenizer_path = zconf.attr(default=None, type=str)
     #model_load_mode = zconf.attr(type=str, required=True)
     model_save_mode = zconf.attr(default="all", type=str)
-    do_lower_case = zconf.attr(action='store_true',
-                               help="Set this flag if you are using an uncased model.")
     max_seq_length = zconf.attr(default=128, type=int)
 
     # === Running Setup === #
@@ -68,6 +66,9 @@ class RunConfiguration(zconf.RunConfig):
 def main(args):
     device, n_gpu = initialization.quick_init(args=args, verbose=True)
     task = tasks.create_task_from_config_path(config_path=args.task_config_path)
+    for phase in ["train", "val", "test"]:
+        if phase in task.path_dict:
+            print(task.path_dict[phase])
 
     with distributed.only_first_process(local_rank=args.local_rank):
         # load the model
@@ -154,4 +155,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(args=RunConfiguration.run_cli())
+    main(args=RunConfiguration.run_cli_json_prepend())
