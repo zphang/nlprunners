@@ -1,10 +1,11 @@
 import collections as col
 import numpy as np
 from dataclasses import dataclass
-from tqdm import tqdm, trange
 
 import torch
 from torch.utils.data import DataLoader, SequentialSampler
+
+from pyutils.display import maybe_tqdm, maybe_trange
 
 from nlpr.shared.runner import (
     convert_examples_to_dataset,
@@ -31,7 +32,7 @@ class RunnerParameters:
 
 class SimpleTaskRunner:
     def __init__(self, task, model_wrapper, optimizer_scheduler, loss_criterion,
-                 device, rparams: RunnerParameters, train_schedule: TrainSchedule = None):
+                 device, rparams: RunnerParameters, train_schedule: TrainSchedule):
         self.task = task
         self.model_wrapper = model_wrapper
         self.optimizer_scheduler = optimizer_scheduler
@@ -43,15 +44,15 @@ class SimpleTaskRunner:
         # Convenience
         self.model = self.model_wrapper.model
 
-    def run_train(self, train_examples):
+    def run_train(self, train_examples, verbose=True):
         train_dataloader = self.get_train_dataloader(train_examples)
 
-        for _ in trange(int(self.train_schedule.num_train_epochs), desc="Epoch"):
+        for _ in maybe_trange(int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
             self.run_train_epoch(train_dataloader)
 
-    def run_train_val(self, train_examples, val_examples):
+    def run_train_val(self, train_examples, val_examples, verbose=True):
         epoch_result_dict = col.OrderedDict()
-        for i in trange(int(self.train_schedule.num_train_epochs), desc="Epoch"):
+        for i in maybe_trange(int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
             train_dataloader = self.get_train_dataloader(train_examples)
             self.run_train_epoch(train_dataloader)
             epoch_result = self.run_val(val_examples)
@@ -60,13 +61,14 @@ class SimpleTaskRunner:
             epoch_result_dict[i] = epoch_result
         return epoch_result_dict
 
-    def run_train_epoch(self, train_dataloader):
-        for _ in self.run_train_epoch_context(train_dataloader):
+    def run_train_epoch(self, train_dataloader, verbose=True):
+        for _ in self.run_train_epoch_context(train_dataloader, verbose=verbose):
             pass
 
-    def run_train_epoch_context(self, train_dataloader):
+    def run_train_epoch_context(self, train_dataloader, verbose=True):
         train_epoch_state = TrainEpochState()
-        for step, (batch, batch_metadata) in enumerate(tqdm(train_dataloader, desc="Training")):
+        for step, (batch, batch_metadata) in enumerate(
+                maybe_tqdm(train_dataloader, desc="Training", verbose=verbose)):
             self.run_train_step(
                 step=step,
                 batch=batch,
@@ -93,7 +95,7 @@ class SimpleTaskRunner:
             self.model.zero_grad()
             train_epoch_state.global_step += 1
 
-    def run_val(self, val_examples):
+    def run_val(self, val_examples, verbose=True):
         if not self.rparams.local_rank == -1:
             return
         self.model.eval()
@@ -101,7 +103,8 @@ class SimpleTaskRunner:
         total_eval_loss = 0
         nb_eval_steps, nb_eval_examples = 0, 0
         all_logits = []
-        for step, (batch, batch_metadata) in enumerate(tqdm(val_dataloader, desc="Evaluating (Val)")):
+        for step, (batch, batch_metadata) in enumerate(
+                maybe_tqdm(val_dataloader, desc="Evaluating (Val)", verbose=verbose)):
             batch = batch.to(self.device)
 
             with torch.no_grad():
@@ -127,11 +130,12 @@ class SimpleTaskRunner:
             "metrics": evaluate.compute_task_metrics(self.task, all_logits, val_examples),
         }
 
-    def run_test(self, test_examples):
+    def run_test(self, test_examples, verbose=True):
         test_dataloader = self.get_eval_dataloader(test_examples)
         self.model.eval()
         all_logits = []
-        for step, (batch, batch_metadata) in enumerate(tqdm(test_dataloader, desc="Predictions (Test)")):
+        for step, (batch, batch_metadata) in enumerate(
+                maybe_tqdm(test_dataloader, desc="Predictions (Test)", verbose=verbose)):
             batch = batch.to(self.device)
             with torch.no_grad():
                 logits = forward_batch_basic(

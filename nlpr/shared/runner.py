@@ -1,13 +1,14 @@
 from dataclasses import dataclass
-from tqdm import tqdm
-from typing import Dict, Union
+from typing import Dict, Union, NamedTuple
 
 import torch
 import torch.nn.functional as F
-from torch.utils.data import TensorDataset, RandomSampler
+from torch.utils.data import TensorDataset, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
 from pyutils.display import maybe_tqdm
+
+from nlpr.tasks.core import BatchMixin
 
 
 @dataclass
@@ -83,6 +84,11 @@ def full_batch_to_dataset(full_batch):
     )
 
 
+class BatchTuple(NamedTuple):
+    batch: BatchMixin
+    metadata: dict
+
+
 class HybridLoader:
     def __init__(self, dataloader, metadata, task):
         self.dataloader = dataloader
@@ -111,13 +117,18 @@ class HybridLoader:
                     ]
                 else:
                     raise KeyError(descriptor.category)
-            yield self.task.Batch(**batch_dict), batch_metadata_dict
+            yield BatchTuple(
+                batch=self.task.Batch(**batch_dict),
+                metadata=batch_metadata_dict,
+            )
 
     def __len__(self):
         return len(self.dataloader)
 
 
-def get_sampler(dataset, local_rank):
+def get_sampler(dataset, local_rank, force_sequential=False):
+    if force_sequential:
+        return SequentialSampler(dataset)
     if local_rank == -1:
         return RandomSampler(dataset)
     else:

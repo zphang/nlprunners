@@ -45,3 +45,34 @@ def resolve_loss_function(task_type: TaskTypes):
         return nn.MSELoss()
     else:
         raise KeyError(task_type)
+
+
+def maybe_subsample_train(train_examples, train_examples_number, train_examples_fraction):
+    if train_examples_fraction == 1.0:
+        train_examples_fraction = None
+    if train_examples_number is None and train_examples_fraction is None:
+        return train_examples, None
+    elif train_examples_number is None and train_examples_fraction is not None:
+        return random_sample_fraction(train_examples, train_examples_fraction, replace=False)
+    elif train_examples_number is not None and train_examples_fraction is None:
+        # Cap at train dataset size
+        train_examples_number = min(len(train_examples), train_examples_number)
+        return random_sample(train_examples, train_examples_number, replace=False)
+    else:
+        raise RuntimeError
+
+
+def random_sample_fraction(ls, fraction, replace=True):
+    return random_sample(
+        ls=ls,
+        size=int(np.floor(len(ls) * fraction)),
+        replace=replace,
+    )
+
+
+def random_sample(ls, size, replace=True):
+    indices = [
+        int(i)
+        for i in np.random.choice(range(len(ls)), size=size, replace=replace)
+    ]
+    return [ls[i] for i in indices], indices

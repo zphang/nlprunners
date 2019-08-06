@@ -1,11 +1,12 @@
 import numpy as np
 from dataclasses import dataclass
-from tqdm import tqdm, trange
 from typing import Union, List
 
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
+
+from pyutils.display import maybe_tqdm, maybe_trange
 
 from nlpr.shared.train_setup import TrainSchedule
 from nlpr.shared.runner import (
@@ -50,24 +51,21 @@ def sup_train_step(model, sup_batch,
                    task, global_step, rparams, uda_params):
     # Compute logits, logprobs
     sup_logits = forward_batch_basic(model=model, batch=sup_batch, omit_label_ids=True)[0]
-    sup_logprobs = F.log_softmax(sup_logits, dim=-1)
-
-    # Convert to one-hot
-    one_hot_labels = F.one_hot(sup_batch.label_ids, num_classes=len(task.LABELS)).float()
-    tgt_label_prob = one_hot_labels  # From UDA code
     # Compute cross entropy (why manually? to get the mask I guess)
-    per_example_loss = -(tgt_label_prob * sup_logprobs).sum(dim=-1)
+    per_example_loss = F.cross_entropy(sup_logits, sup_batch.label_ids, reduction="none")
     # Create mask-template
     loss_mask = torch.ones(
         per_example_loss.size(),
         dtype=per_example_loss.dtype,
         device=per_example_loss.device,
     )
-    # Compute probability of predicting correct label
-    correct_label_probs = (one_hot_labels * torch.exp(sup_logprobs)).sum(dim=-1)
 
     # Using TSA (Training Signal Annealing)
     if uda_params.tsa:
+        # Compute probability of predicting correct label
+        sup_logprobs = F.log_softmax(sup_logits, dim=-1)
+        one_hot_labels = F.one_hot(sup_batch.label_ids, num_classes=len(task.LABELS)).float()
+        correct_label_probs = (one_hot_labels * torch.exp(sup_logprobs)).sum(dim=-1)
         # TSA weight lower-bounded by 1/K
         tsa_threshold = get_tsa_threshold(
             schedule=uda_params.tsa_schedule,
@@ -163,7 +161,7 @@ class UDAParameters:
 class UDARunner:
     def __init__(self, task, model_wrapper, optimizer_scheduler, loss_criterion,
                  device, rparams: RunnerParameters, uda_params: UDAParameters,
-                 train_schedule: TrainSchedule = None):
+                 train_schedule: TrainSchedule):
         self.task = task
         self.model_wrapper = model_wrapper
         self.optimizer_scheduler = optimizer_scheduler
@@ -188,7 +186,7 @@ class UDARunner:
             "unsup_aug_set": [],
         }
 
-        for _ in trange(int(self.train_schedule.num_train_epochs), desc="Epoch"):
+        for _ in maybe_trange(int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
             unsup_dataloaders = self.get_unsup_dataloaders(
                 sup_dataloader=sup_dataloader,
                 task_data=task_data,
@@ -198,7 +196,7 @@ class UDARunner:
                 unsup_orig_loader=unsup_dataloaders.unsup_orig,
                 unsup_aug_loader=unsup_dataloaders.unsup_aug,
             )
-            self.run_train_epoch(dataloader_triplet)
+            self.run_train_epoch(dataloader_triplet, verbose=verbose)
             log_data["unsup_indices"].append(unsup_dataloaders.metadata["unsup_indices"])
             log_data["unsup_aug_set"].append(unsup_dataloaders.metadata["unsup_aug_set"])
         # Todo: log the log data!
@@ -221,25 +219,25 @@ class UDARunner:
             unsup_orig_loader=unsup_dataloaders.unsup_orig,
             unsup_aug_loader=unsup_dataloaders.unsup_aug,
         )
-        self.run_train_epoch(dataloader_triplet)
+        self.run_train_epoch(dataloader_triplet, verbose=verbose)
         # Todo: log the log data!
         log_data = {
             "unsup_indices": unsup_dataloaders.metadata["unsup_indices"],
             "unsup_aug_set": unsup_dataloaders.metadata["unsup_aug_set"],
         }
 
-    def run_train_epoch(self, dataloader_triplet):
-        for _ in self.run_train_epoch_context(dataloader_triplet):
+    def run_train_epoch(self, dataloader_triplet, verbose=True):
+        for _ in self.run_train_epoch_context(dataloader_triplet, verbose=verbose):
             pass
 
-    def run_train_epoch_context(self, dataloader_triplet):
+    def run_train_epoch_context(self, dataloader_triplet, verbose=True):
         self.model.train()
         train_epoch_state = TrainEpochState()
-        train_iterator = enumerate(tqdm(zip(
+        train_iterator = enumerate(maybe_tqdm(zip(
             dataloader_triplet.sup,
             dataloader_triplet.unsup_orig,
             dataloader_triplet.unsup_aug
-        ), total=len(dataloader_triplet.sup), desc="Training"))
+        ), total=len(dataloader_triplet.sup), desc="Training", verbose=verbose))
         for step, (sup_batch, unsup_orig_batch, unsup_aug_batch) in train_iterator:
             batch_triplet = TrainDataTriplet(
                 # batch, batch_metadata hack
@@ -256,6 +254,7 @@ class UDARunner:
 
     def run_train_step(self, step, batch_triplet, train_epoch_state):
         example_count = len(batch_triplet.sup)
+        print(self.uda_params.use_unsup)
         sup_loss = sup_train_step(
             model=self.model,
             sup_batch=batch_triplet.sup[0].to(self.device),
@@ -286,7 +285,7 @@ class UDARunner:
             self.model.zero_grad()
             train_epoch_state.global_step += 1
 
-    def run_val(self, val_examples):
+    def run_val(self, val_examples, verbose=True):
         if not self.rparams.local_rank == -1:
             return
         self.model.eval()
@@ -299,7 +298,8 @@ class UDARunner:
         total_eval_loss = 0
         nb_eval_steps, nb_eval_examples = 0, 0
         all_logits = []
-        for step, (batch, batch_metadata) in enumerate(tqdm(val_dataloader, desc="Evaluating (Val)")):
+        for step, (batch, batch_metadata) in enumerate(maybe_tqdm(
+                val_dataloader, desc="Evaluating (Val)", verbose=verbose)):
             batch = batch.to(self.device)
 
             with torch.no_grad():
@@ -325,7 +325,7 @@ class UDARunner:
             "metrics": evaluate.compute_task_metrics(self.task, all_logits, val_examples),
         }
 
-    def run_test(self, test_examples):
+    def run_test(self, test_examples, verbose=True):
         test_dataloader = self.get_dataloader(
             examples=test_examples,
             batch_size=self.rparams.eval_batch_size,
@@ -334,7 +334,8 @@ class UDARunner:
         )
         self.model.eval()
         all_logits = []
-        for step, batch in enumerate(tqdm(test_dataloader, desc="Predictions (Test)")):
+        for step, batch in enumerate(maybe_tqdm(
+                test_dataloader, desc="Predictions (Test)", verbose=verbose)):
             batch = batch.to(self.device)
             with torch.no_grad():
                 logits = forward_batch_basic(
