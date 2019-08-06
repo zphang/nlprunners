@@ -18,7 +18,6 @@ from nlpr.shared.runner import (
     get_sampler,
     TrainEpochState,
 )
-from nlpr.shared.modeling import forward_batch_basic
 from nlpr.shared.train_setup import TrainSchedule
 import nlpr.tasks.evaluate as evaluate
 import nlpr.shared.torch_utils as torch_utils
@@ -77,34 +76,36 @@ class LLPRunner:
         self.model = self.model_wrapper.model
 
     def init_llp_state(self, train_examples, verbose=True):
-        self.llp_state = self.create_llp_state(train_examples=train_examples, verbose=verbose)
+        self.llp_state = self._create_empty_llp_state(train_examples=train_examples)
+        self._initialize_llp_state(train_examples=train_examples, verbose=verbose)
 
-    def create_llp_state(self, train_examples, verbose=True):
+    def _create_empty_llp_state(self, train_examples):
+        big_m_tensor = torch.empty([
+            len(train_examples), self.llp_params.llp_embedding_dim
+        ]).to(self.device)
         all_labels = evaluate.get_label_ids(
             examples=train_examples,
             task=self.task,
         )
         all_labels_tensor = torch.from_numpy(all_labels).to(self.device)
         all_label_confidence = torch.ones(len(all_labels)).to(self.device)
-
-        big_m_tensor = torch.empty([
-            len(train_examples), self.llp_params.llp_embedding_dim
-        ]).to(self.device)
-        train_dataloader = self.get_train_dataloader(train_examples, use_eval_batch_size=True)
-        with torch.no_grad():
-            for batch, metadata in maybe_tqdm(train_dataloader, desc="Initializing big_m",
-                                              verbose=verbose):
-                batch = batch.to(self.device)
-                embedding = self.model.ZZforward_batch_embedding(batch)
-                big_m_tensor[metadata["example_id"]] = embedding
-        self.run_label_propagate()
-        all_label_confidence[self.llp_params.num_labeled:] = 0
-
         return LlpState(
             big_m_tensor=big_m_tensor,
             all_labels_tensor=all_labels_tensor,
             all_label_confidence=all_label_confidence,
         )
+
+    def _initialize_llp_state(self, train_examples, verbose=True):
+        train_dataloader = self.get_train_dataloader(train_examples, use_eval_batch_size=True,
+                                                     do_override_labels=False)
+        with torch.no_grad():
+            for batch, metadata in maybe_tqdm(train_dataloader, desc="Initializing big_m",
+                                              verbose=verbose):
+                batch = batch.to(self.device)
+                embedding = self.model.forward_batch(batch).embedding
+                self.llp_state.big_m_tensor[metadata["example_id"]] = embedding
+        self.run_label_propagate()
+        self.llp_state.all_label_confidence[self.llp_params.num_labeled:] = 0
 
     def run_train(self, train_examples, verbose=True):
         train_dataloader = self.get_train_dataloader(train_examples)
@@ -155,7 +156,7 @@ class LLPRunner:
 
         # Update memory bank
         with torch.no_grad():
-            new_embedding = self.model.ZZforward_batch_embedding(batch)
+            new_embedding = self.model.forward_batch(batch).embedding
         self.llp_state.big_m_tensor[batch_metadata["example_id"]] = (
                 (1 - self.llp_params.llp_mem_bank_t)
                 * self.llp_state.big_m_tensor[batch_metadata["example_id"]]
@@ -164,13 +165,13 @@ class LLPRunner:
         return loss_details
 
     def compute_representation_loss(self, batch, batch_metadata):
-        logits, raw_embedding = self.model.ZZforward_batch(batch, normalize_embedding=False)
+        output = self.model.forward_batch(batch, normalize_embedding=False)
 
         weight = self.llp_state.all_label_confidence[batch_metadata["example_id"]]
-        per_example_pred_loss = F.cross_entropy(logits, batch.label_ids, reduction="none")
+        per_example_pred_loss = F.cross_entropy(output.logits, batch.label_ids, reduction="none")
         if self.llp_params.llp_compute_global_agg_loss_mode == "v1":
             per_example_global_agg_loss = llp_representation.compute_global_agg_loss(
-                embedding=torch_utils.normalize_embedding_tensor(raw_embedding),
+                embedding=torch_utils.normalize_embedding_tensor(output.embedding),
                 label_ids=batch.label_ids,
                 big_m_tensor=self.llp_state.big_m_tensor,
                 all_labels_tensor=self.llp_state.all_labels_tensor,
@@ -178,7 +179,7 @@ class LLPRunner:
             )
         elif self.llp_params.llp_compute_global_agg_loss_mode == "v2":
             per_example_global_agg_loss = llp_representation.compute_global_agg_loss_v2(
-                embedding=torch_utils.normalize_embedding_tensor(raw_embedding),
+                embedding=torch_utils.normalize_embedding_tensor(output.embedding),
                 label_ids=batch.label_ids,
                 big_m_tensor=self.llp_state.big_m_tensor,
                 all_labels_tensor=self.llp_state.all_labels_tensor,
@@ -187,7 +188,7 @@ class LLPRunner:
             )
         else:
             raise KeyError(self.llp_params.llp_compute_global_agg_loss_mode)
-        per_example_embedding_norm_loss = torch_utils.embedding_norm_loss(raw_embedding)
+        per_example_embedding_norm_loss = torch_utils.embedding_norm_loss(output.embedding)
 
         per_example_representation_loss = (
             per_example_pred_loss
@@ -242,11 +243,7 @@ class LLPRunner:
             batch = batch.to(self.device)
 
             with torch.no_grad():
-                logits = forward_batch_basic(
-                    model=self.model,
-                    batch=batch,
-                    omit_label_ids=True,
-                )[0]
+                logits = self.model.forward_batch(batch).logits
                 tmp_eval_loss = self.loss_criterion(logits, batch.label_ids)
 
             logits = logits.detach().cpu().numpy()
@@ -272,11 +269,7 @@ class LLPRunner:
                 maybe_tqdm(test_dataloader, desc="Predictions (Test)", verbose=verbose)):
             batch = batch.to(self.device)
             with torch.no_grad():
-                logits = forward_batch_basic(
-                    model=self.model,
-                    batch=batch,
-                    omit_label_ids=True,
-                )[0]
+                logits = self.model.forward_batch(batch).logits
             logits = logits.detach().cpu().numpy()
             all_logits.append(logits)
 

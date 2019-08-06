@@ -30,7 +30,10 @@ def setup_model(model_type, task, llp_embedding_dim,
 def load_model(model: llp_modeling.LlpModel, state_dict, load_mode):
     # todo: port to constant
     if load_mode == "ptt_only":
-        model.load_from_ptt_state_dict(state_dict)
+        shared_model_setup.safe_load_model(
+            model=model.ptt_model,
+            state_dict=state_dict,
+        )
     elif load_mode == "all":
         model.load_state_dict(state_dict)
     else:

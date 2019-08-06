@@ -254,7 +254,6 @@ class UDARunner:
 
     def run_train_step(self, step, batch_triplet, train_epoch_state):
         example_count = len(batch_triplet.sup)
-        print(self.uda_params.use_unsup)
         sup_loss = sup_train_step(
             model=self.model,
             sup_batch=batch_triplet.sup[0].to(self.device),
@@ -271,7 +270,6 @@ class UDARunner:
                 unsup_aug_batch=batch_triplet.unsup_aug[0].to(self.device),
                 uda_params=self.uda_params,
             )
-            print(sup_loss.item(), unsup_loss.item())
             loss = sup_loss + self.uda_params.uda_coeff * unsup_loss
         else:
             loss = sup_loss

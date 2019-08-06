@@ -29,7 +29,7 @@ def simple_model_setup(model_type, model_class_spec, config_path, tokenizer_path
     )
 
 
-def load_model(model, state_dict, max_miss_fraction=0.9, verbose=True):
+def safe_load_model(model, state_dict, max_miss_fraction=0.9, verbose=True):
     missed, unused = model.load_state_dict(state_dict, strict=False)
     total_mismatched = len(missed) + len(unused)
     total_params = len(model.state_dict())

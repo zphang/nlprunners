@@ -9,10 +9,10 @@ import nlpr.shared.model_setup as shared_model_setup
 import nlpr.shared.model_resolution as model_resolution
 import nlpr.shared.train_setup as train_setup
 import nlpr.tasks.evaluate as evaluate
+import nlpr.tasks as tasks
 
 import nlpr.proj.llp.runner as llp_runner
 import nlpr.proj.llp.model_setup as llp_model_setup
-import nlpr.proj.uda.load_data as load_data
 
 from pyutils.io import write_json
 
@@ -29,7 +29,7 @@ class RunConfiguration(zconf.RunConfig):
     model_path = zconf.attr(type=str, required=True)
     model_config_path = zconf.attr(default=None, type=str)
     model_tokenizer_path = zconf.attr(default=None, type=str)
-    #model_load_mode = zconf.attr(type=str, required=True)
+    model_load_mode = zconf.attr(type=str, required=True)
     model_save_mode = zconf.attr(default="all", type=str)
     max_seq_length = zconf.attr(default=128, type=int)
 
@@ -85,11 +85,7 @@ class RunConfiguration(zconf.RunConfig):
 
 def main(args):
     device, n_gpu = initialization.quick_init(args=args, verbose=True)
-    task, task_data = load_data.load_task_data_from_path(args.uda_task_config_path)
-
-    for phase in ["train", "val", "test"]:
-        if phase in task.path_dict:
-            print(task.path_dict[phase])
+    task = tasks.create_task_from_config_path(config_path=args.task_config_path)
 
     with distributed.only_first_process(local_rank=args.local_rank):
         # load the model
@@ -112,9 +108,11 @@ def main(args):
         model_wrapper.model.to(device)
 
     # === Train Data Setup [START] === #
-    labeled_examples = task_data["sup"]["train"]
+    labeled_examples = task.get_train_examples()
+    # VERY hacky
+    unlabeled_task = tasks.create_task_from_config_path(args.full_task_config_path)
     unlabeled_examples, indices = train_setup.maybe_subsample_train(
-        train_examples=task.get_examples("train", "/home/zp489/scratch/data/bowman/glue/MNLI/train.jsonl"),
+        train_examples=unlabeled_task.get_train_examples(),
         train_examples_number=args.unlabeled_train_examples_number,
         train_examples_fraction=args.unlabeled_train_examples_fraction,
     )
@@ -143,6 +141,8 @@ def main(args):
         warmup_steps=args.warmup_steps,
         verbose=True,
     )
+
+    # I don't think this works for LLP...
     shared_model_setup.special_model_setup(
         model_wrapper=model_wrapper,
         optimizer_scheduler=optimizer_scheduler,
@@ -185,6 +185,7 @@ def main(args):
     )
 
     if args.do_train:
+        runner.init_llp_state(train_examples)
         runner.run_train(train_examples)
 
     if args.do_save:

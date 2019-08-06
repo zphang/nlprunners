@@ -41,10 +41,10 @@ def get_task_class(task_name):
     return task_class
 
 
-def create_task_from_config(config):
+def create_task_from_config(config: dict):
     task_class = get_task_class(config["task"])
     return task_class(name=config["task"], path_dict=config["paths"])
 
 
-def create_task_from_config_path(config_path):
+def create_task_from_config_path(config_path: str):
     return create_task_from_config(read_json(config_path))

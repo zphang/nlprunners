@@ -88,7 +88,7 @@ def main(args):
             tokenizer_path=args.model_tokenizer_path,
             task=task,
         )
-        model_setup.load_model(
+        model_setup.safe_load_model(
             model=model_wrapper.model,
             state_dict=torch.load(args.model_path)
         )
@@ -154,7 +154,10 @@ def main(args):
         runner.run_train(task_data=task_data)
 
     if args.do_save:
-        raise Exception()
+        torch.save(
+            model_wrapper.model.state_dict(),
+            os.path.join(args.output_dir, "model.p")
+        )
 
     if args.do_val:
         val_examples = task.get_val_examples()

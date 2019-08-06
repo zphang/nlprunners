@@ -5,7 +5,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from nlpr.shared.model_resolution import ModelArchitectures
-import pytorch_transformers as ptt
 
 
 def get_ptt_model_embedding_dim(ptt_model):
@@ -20,26 +19,30 @@ class _InputSet:
     input_mask: torch.Tensor
 
 
+@dataclass
+class _Output:
+    logits: torch.Tensor
+    embedding: torch.Tensor
+
+
 class LlpModel(nn.Module):
     def __init__(self, ptt_model, embedding_dim):
         super().__init__()
         self.ptt_model = ptt_model
         self.embedding_dim = embedding_dim
 
-        self.model_arch = ModelArchitectures.from_ptt_model(ptt)
+        self.model_arch = ModelArchitectures.from_ptt_model(ptt_model)
         self.embedding_layer = nn.Linear(
             get_ptt_model_embedding_dim(ptt_model),
             embedding_dim,
         )
 
-    def load_from_ptt_state_dict(self, state_dict):
-        self.ptt_model.load_state_dict(state_dict)
-
-    def forward_batch(self, batch):
+    def forward_batch(self, batch, normalize_embedding=True):
         return self(
             input_ids=batch.input_ids,
             token_type_ids=batch.segment_ids,
             input_mask=batch.input_mask,
+            normalize_embedding=normalize_embedding,
         )
 
     def forward(self, input_ids, token_type_ids, input_mask, normalize_embedding=True):
@@ -56,7 +59,7 @@ class LlpModel(nn.Module):
         else:
             returned_embedding = embedding
 
-        return logits, returned_embedding
+        return _Output(logits=logits, embedding=returned_embedding)
 
     def get_pooled(self, input_set: _InputSet):
         # Will probably need to refactor this out later
@@ -72,7 +75,6 @@ class LlpModel(nn.Module):
             input_ids=input_set.input_ids,
             token_type_ids=input_set.token_type_ids,
             attention_mask=input_set.input_mask,
-            output_all_encoded_layers=False,
         )
         _, pooled_output = bert_output
         pooled_output = self.ptt_model.dropout(pooled_output)
