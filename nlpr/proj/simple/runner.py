@@ -42,7 +42,6 @@ class SimpleTaskRunner:
 
         # Convenience
         self.model = self.model_wrapper.model
-        self.tokenizer = self.model_wrapper.tokenizer
 
     def run_train(self, train_examples):
         train_dataloader = self.get_train_dataloader(train_examples)
@@ -150,7 +149,7 @@ class SimpleTaskRunner:
         dataset_with_metadata = convert_examples_to_dataset(
             examples=train_examples,
             feat_spec=self.rparams.feat_spec,
-            tokenizer=self.tokenizer,
+            tokenizer=self.model_wrapper.tokenizer,
             task=self.task,
             verbose=verbose,
         )

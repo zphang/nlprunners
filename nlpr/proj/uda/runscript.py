@@ -10,13 +10,14 @@ import nlpr.shared.model_resolution as model_resolution
 import nlpr.shared.train_setup as train_setup
 import nlpr.tasks as tasks
 import nlpr.tasks.evaluate as evaluate
-import nlpr.proj.simple.runner as simple_runner
+import nlpr.proj.uda.runner as uda_runner
+import nlpr.proj.uda.load_data as load_data
 
 
 @zconf.run_config
 class RunConfiguration(zconf.RunConfig):
     # === Required parameters === #
-    task_config_path = zconf.attr(type=str, required=True)
+    uda_task_config_path = zconf.attr(type=str, required=True)
     output_dir = zconf.attr(type=str, required=True)
 
     # === Model parameters === #
@@ -62,13 +63,18 @@ class RunConfiguration(zconf.RunConfig):
     server_ip = zconf.attr(default='', type=str)
     server_port = zconf.attr(default='', type=str)
 
+    # === UDA === #
+    unsup_ratio = zconf.attr(type=int, default=3)
+    tsa = zconf.attr(action="store_true")
+    tsa_schedule = zconf.attr(type=str, default="linear_schedule")
+    uda_softmax_temp = zconf.attr(type=float, default=-1)
+    uda_confidence_thresh = zconf.attr(type=float, default=-1)
+    uda_coeff = zconf.attr(type=float, default=1.)
+
 
 def main(args):
     device, n_gpu = initialization.quick_init(args=args, verbose=True)
-    task = tasks.create_task_from_config_path(config_path=args.task_config_path)
-    for phase in ["train", "val", "test"]:
-        if phase in task.path_dict:
-            print(task.path_dict[phase])
+    task, task_data = load_data.load_task_data_from_path(args.uda_task_config_path)
 
     with distributed.only_first_process(local_rank=args.local_rank):
         # load the model
@@ -89,8 +95,7 @@ def main(args):
         )
         model_wrapper.model.to(device)
 
-    train_examples = task.get_train_examples()
-    num_train_examples = len(train_examples)
+    num_train_examples = len(task_data["sup"]["train"])
 
     train_schedule = train_setup.get_train_schedule(
         num_train_examples=num_train_examples,
@@ -114,7 +119,7 @@ def main(args):
         fp16=args.fp16, fp16_opt_level=args.fp16_opt_level,
         n_gpu=n_gpu, local_rank=args.local_rank,
     )
-    rparams = simple_runner.RunnerParameters(
+    rparams = uda_runner.RunnerParameters(
         feat_spec=model_resolution.build_featurization_spec(
             model_type=args.model_type,
             max_seq_length=args.max_seq_length,
@@ -126,18 +131,28 @@ def main(args):
         eval_batch_size=args.eval_batch_size,
         max_grad_norm=args.max_grad_norm,
     )
-    runner = simple_runner.SimpleTaskRunner(
+    uda_params = uda_runner.UDAParameters(
+        use_unsup=args.unsup_ratio != 0,
+        unsup_ratio=args.unsup_ratio,
+        tsa=args.tsa,
+        tsa_schedule=args.tsa_schedule,
+        uda_softmax_temp=args.uda_softmax_temp,
+        uda_confidence_thresh=args.uda_confidence_thresh,
+        uda_coeff=args.uda_coeff,
+    )
+    runner = uda_runner.UDARunner(
         task=task,
         model_wrapper=model_wrapper,
         optimizer_scheduler=optimizer_scheduler,
         loss_criterion=loss_criterion,
         device=device,
         rparams=rparams,
+        uda_params=uda_params,
         train_schedule=train_schedule,
     )
 
     if args.do_train:
-        runner.run_train(train_examples)
+        runner.run_train(task_data=task_data)
 
     if args.do_save:
         raise Exception()
