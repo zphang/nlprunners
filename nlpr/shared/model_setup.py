@@ -4,6 +4,12 @@ import torch.nn as nn
 import pytorch_transformers
 
 
+class ModelWrapper:
+    def __init__(self, model, tokenizer):
+        self.model = model
+        self.tokenizer = tokenizer
+
+
 def simple_model_setup(model_type, model_class_spec, config_path, tokenizer_path, task):
     config = model_class_spec.config_class.from_json_file(config_path)
     config.num_labels = len(task.LABELS)
@@ -60,19 +66,19 @@ class OptimizerScheduler:
         self.scheduler.load_state_dict(state_dict["scheduler"], strict=strict)
 
 
-class ModelWrapper:
-    def __init__(self, model, tokenizer):
-        self.model = model
-        self.tokenizer = tokenizer
-
-
-def create_optimizer(model, learning_rate, t_total, warmup_steps, adam_epsilon=1e-8):
+def create_optimizer(model, learning_rate, t_total, warmup_steps, adam_epsilon=1e-8, verbose=False):
     # Prepare optimizer
     optimized_params = list(model.named_parameters())
     no_decay = [
         'bias', 'LayerNorm.bias', 'LayerNorm.weight',
         'adapter.down_project.weight', 'adapter.up_project.weight',
     ]
+    if verbose:
+        print("No optimizer decay for:")
+        for n, p in optimized_params:
+            if any(nd in n for nd in no_decay):
+                print(f"  {n}")
+
     optimizer_grouped_parameters = [
         {
             'params': [p for n, p in optimized_params if not any(nd in n for nd in no_decay)],

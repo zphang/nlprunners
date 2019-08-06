@@ -107,6 +107,7 @@ def main(args):
         learning_rate=args.learning_rate,
         t_total=train_schedule.t_total,
         warmup_steps=args.warmup_steps,
+        verbose=True,
     )
     model_setup.special_model_setup(
         model_wrapper=model_wrapper,

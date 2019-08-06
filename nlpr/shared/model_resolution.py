@@ -1,9 +1,38 @@
 from dataclasses import dataclass
+from enum import Enum
 
-import pytorch_transformers
+import pytorch_transformers as ptt
 
 from nlpr.tasks.core import FeaturizationSpec
 from nlpr.tasks.lib.shared import TaskTypes
+
+
+class ModelArchitectures(Enum):
+    BERT = 1
+    XLNET = 2
+    XLM = 3
+
+    @classmethod
+    def from_model_type(cls, model_type):
+        if model_type.startswith("bert-"):
+            return cls.BERT
+        elif model_type.startswith("xlnet-"):
+            return cls.XLNET
+        elif model_type.startswith("xlm-"):
+            return cls.XLM
+        else:
+            raise KeyError(model_type)
+
+    @classmethod
+    def from_ptt_model(cls, ptt_model):
+        if isinstance(ptt_model, ptt.BertPreTrainedModel):
+            return cls.BERT
+        elif isinstance(ptt_model, ptt.XLNetPreTrainedModel):
+            return cls.XLNET
+        elif isinstance(ptt_model, ptt.XLMPreTrainedModel):
+            return cls.XLM
+        else:
+            raise KeyError(str(ptt_model))
 
 
 @dataclass
@@ -14,7 +43,8 @@ class ModelClassSpec:
 
 
 def build_featurization_spec(model_type, max_seq_length):
-    if model_type.startswith("bert-"):
+    model_arch = ModelArchitectures.from_model_type(model_type)
+    if model_arch == ModelArchitectures.BERT:
         return FeaturizationSpec(
             max_seq_length=max_seq_length,
             cls_token_at_end=False,
@@ -26,7 +56,7 @@ def build_featurization_spec(model_type, max_seq_length):
             sequence_a_segment_id=0,
             sequence_b_segment_id=1,
         )
-    elif model_type.startswith("xlnet-"):
+    elif model_arch == ModelArchitectures.XLNET:
         return FeaturizationSpec(
             max_seq_length=max_seq_length,
             cls_token_at_end=True,
@@ -38,7 +68,7 @@ def build_featurization_spec(model_type, max_seq_length):
             sequence_a_segment_id=0,
             sequence_b_segment_id=1,
         )
-    elif model_type.startswith("xlm-"):
+    elif model_arch == ModelArchitectures.XLM:
         return FeaturizationSpec(
             max_seq_length=max_seq_length,
             cls_token_at_end=False,
@@ -51,47 +81,48 @@ def build_featurization_spec(model_type, max_seq_length):
             sequence_b_segment_id=1,
         )
     else:
-        raise KeyError(model_type)
+        raise KeyError(model_arch)
 
 
 MODEL_CLASS_DICT = {
-    "bert": {
-        TaskTypes.CLASSIFICATION: pytorch_transformers.BertForSequenceClassification,
+    ModelArchitectures.BERT: {
+        TaskTypes.CLASSIFICATION: ptt.BertForSequenceClassification,
         TaskTypes.REGRESSION: None,  # todo, regression
     },
-    "xlnet": {
-        TaskTypes.CLASSIFICATION: pytorch_transformers.XLNetForSequenceClassification,
+    ModelArchitectures.XLNET: {
+        TaskTypes.CLASSIFICATION: ptt.XLNetForSequenceClassification,
         TaskTypes.REGRESSION: None,  # todo, regression
     },
-    "xlm": {
-        TaskTypes.CLASSIFICATION: pytorch_transformers.XLMForSequenceClassification,
+    ModelArchitectures.XLM: {
+        TaskTypes.CLASSIFICATION: ptt.XLMForSequenceClassification,
         TaskTypes.REGRESSION: None,  # todo, regression
     },
 }
 
 
 def resolve_model_setup_classes(model_type, task_type):
-    if model_type.startswith("bert-"):
+    model_arch = ModelArchitectures.from_model_type(model_type)
+    if model_arch == ModelArchitectures.BERT:
         model_class_spec = ModelClassSpec(
-            config_class=pytorch_transformers.BertConfig,
-            tokenizer_class=pytorch_transformers.BertTokenizer,
+            config_class=ptt.BertConfig,
+            tokenizer_class=ptt.BertTokenizer,
             # TODO: resolve correct model
-            model_class=MODEL_CLASS_DICT["bert"][task_type],
+            model_class=MODEL_CLASS_DICT[ModelArchitectures.BERT][task_type],
         )
-    elif model_type.startswith("xlnet-"):
+    elif model_arch == ModelArchitectures.XLNET:
         model_class_spec = ModelClassSpec(
-            config_class=pytorch_transformers.XLNetConfig,
-            tokenizer_class=pytorch_transformers.XLNetTokenizer,
+            config_class=ptt.XLNetConfig,
+            tokenizer_class=ptt.XLNetTokenizer,
             # TODO: resolve correct model
-            model_class=MODEL_CLASS_DICT["xlnet"][task_type],
+            model_class=MODEL_CLASS_DICT[ModelArchitectures.XLNET][task_type],
         )
-    elif model_type.startswith("xlm-"):
+    elif model_arch == ModelArchitectures.XLM:
         model_class_spec = ModelClassSpec(
-            config_class=pytorch_transformers.XLMConfig,
-            tokenizer_class=pytorch_transformers.XLMTokenizer,
+            config_class=ptt.XLMConfig,
+            tokenizer_class=ptt.XLMTokenizer,
             # TODO: resolve correct model
-            model_class=MODEL_CLASS_DICT["xlm"][task_type],
+            model_class=MODEL_CLASS_DICT[ModelArchitectures.XLM][task_type],
         )
     else:
-        raise KeyError(model_type)
+        raise KeyError(model_arch)
     return model_class_spec

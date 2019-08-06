@@ -58,7 +58,7 @@ class LlpState:
     all_label_confidence: torch.Tensor
 
 
-class LLPTaskRunner:
+class LLPRunner:
     def __init__(self, task, model_wrapper, optimizer_scheduler, loss_criterion,
                  device, rparams: RunnerParameters, llp_params: LlpParameters,
                  train_schedule: TrainSchedule):
@@ -95,7 +95,7 @@ class LLPTaskRunner:
             for batch, metadata in maybe_tqdm(train_dataloader, desc="Initializing big_m",
                                               verbose=verbose):
                 batch = batch.to(self.device)
-                embedding = self.model.forward_batch_embedding(batch)
+                embedding = self.model.ZZforward_batch_embedding(batch)
                 big_m_tensor[metadata["example_id"]] = embedding
         self.run_label_propagate()
         all_label_confidence[self.llp_params.num_labeled:] = 0
@@ -155,7 +155,7 @@ class LLPTaskRunner:
 
         # Update memory bank
         with torch.no_grad():
-            new_embedding = self.model.forward_batch_embedding(batch)
+            new_embedding = self.model.ZZforward_batch_embedding(batch)
         self.llp_state.big_m_tensor[batch_metadata["example_id"]] = (
                 (1 - self.llp_params.llp_mem_bank_t)
                 * self.llp_state.big_m_tensor[batch_metadata["example_id"]]
@@ -164,7 +164,7 @@ class LLPTaskRunner:
         return loss_details
 
     def compute_representation_loss(self, batch, batch_metadata):
-        logits, raw_embedding = self.model.forward_batch(batch, normalize_embedding=False)
+        logits, raw_embedding = self.model.ZZforward_batch(batch, normalize_embedding=False)
 
         weight = self.llp_state.all_label_confidence[batch_metadata["example_id"]]
         per_example_pred_loss = F.cross_entropy(logits, batch.label_ids, reduction="none")

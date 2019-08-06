@@ -5,12 +5,13 @@ import zconf
 
 import nlpr.shared.initialization as initialization
 import nlpr.shared.distributed as distributed
-import nlpr.shared.model_setup as model_setup
+import nlpr.shared.model_setup as shared_model_setup
 import nlpr.shared.model_resolution as model_resolution
 import nlpr.shared.train_setup as train_setup
 import nlpr.tasks.evaluate as evaluate
-import nlpr.proj.simple.runner as simple_runner
 
+import nlpr.proj.llp.runner as llp_runner
+import nlpr.proj.llp.model_setup as llp_model_setup
 import nlpr.proj.uda.load_data as load_data
 
 from pyutils.io import write_json
@@ -20,6 +21,7 @@ from pyutils.io import write_json
 class RunConfiguration(zconf.RunConfig):
     # === Required parameters === #
     task_config_path = zconf.attr(type=str, required=True)
+    full_task_config_path = zconf.attr(type=str, required=True)
     output_dir = zconf.attr(type=str, required=True)
 
     # === Model parameters === #
@@ -95,20 +97,21 @@ def main(args):
             model_type=args.model_type,
             task_type=task.TASK_TYPE,
         )
-        model_wrapper = model_setup.simple_model_setup(
+        model_wrapper = llp_model_setup.setup_model(
             model_type=args.model_type,
-            model_class_spec=model_class_spec,
+            task=task,
+            llp_embedding_dim=args.llp_embedding_dim,
             config_path=args.model_config_path,
             tokenizer_path=args.model_tokenizer_path,
-            task=task,
         )
-        model_setup.load_model(
+        llp_model_setup.load_model(
             model=model_wrapper.model,
-            state_dict=torch.load(args.model_path)
+            state_dict=torch.load(args.model_path),
+            load_mode=args.model_load_mode,
         )
         model_wrapper.model.to(device)
 
-    # ZZZ
+    # === Train Data Setup [START] === #
     labeled_examples = task_data["sup"]["train"]
     unlabeled_examples, indices = train_setup.maybe_subsample_train(
         train_examples=task.get_examples("train", "/home/zp489/scratch/data/bowman/glue/MNLI/train.jsonl"),
@@ -121,6 +124,7 @@ def main(args):
     if indices is not None:
         write_json(indices, os.path.join(args.output_dir, "sampled_indices.json"))
     num_train_examples = len(train_examples)
+    # === Train Data Setup [END] === #
 
     train_schedule = train_setup.get_train_schedule(
         num_train_examples=num_train_examples,
@@ -132,19 +136,20 @@ def main(args):
     )
     print("t_total", train_schedule.t_total)
     loss_criterion = train_setup.resolve_loss_function(task_type=task.TASK_TYPE)
-    optimizer_scheduler = model_setup.create_optimizer(
+    optimizer_scheduler = shared_model_setup.create_optimizer(
         model=model_wrapper.model,
         learning_rate=args.learning_rate,
         t_total=train_schedule.t_total,
         warmup_steps=args.warmup_steps,
+        verbose=True,
     )
-    model_setup.special_model_setup(
+    shared_model_setup.special_model_setup(
         model_wrapper=model_wrapper,
         optimizer_scheduler=optimizer_scheduler,
         fp16=args.fp16, fp16_opt_level=args.fp16_opt_level,
         n_gpu=n_gpu, local_rank=args.local_rank,
     )
-    rparams = simple_runner.RunnerParameters(
+    rparams = llp_runner.RunnerParameters(
         feat_spec=model_resolution.build_featurization_spec(
             model_type=args.model_type,
             max_seq_length=args.max_seq_length,
@@ -156,13 +161,26 @@ def main(args):
         eval_batch_size=args.eval_batch_size,
         max_grad_norm=args.max_grad_norm,
     )
-    runner = simple_runner.SimpleTaskRunner(
+    llp_params = llp_runner.LlpParameters(
+        num_labeled=len(labeled_examples),
+        llp_embedding_dim=args.llp_embedding_dim,
+        llp_const_k=args.llp_const_k,
+        llp_const_t=args.llp_const_t,
+        llp_const_tau=args.llp_const_tau,
+        llp_prop_chunk_size=args.llp_prop_chunk_size,
+        llp_mem_bank_t=args.llp_mem_bank_t,
+        llp_rep_global_agg_loss_lambda=args.llp_rep_global_agg_loss_lambda,
+        llp_embedding_norm_loss=args.llp_embedding_norm_loss,
+        llp_compute_global_agg_loss_mode=args.llp_compute_global_agg_loss_mode,
+    )
+    runner = llp_runner.LLPRunner(
         task=task,
         model_wrapper=model_wrapper,
         optimizer_scheduler=optimizer_scheduler,
         loss_criterion=loss_criterion,
         device=device,
         rparams=rparams,
+        llp_params=llp_params,
         train_schedule=train_schedule,
     )
 
@@ -170,7 +188,10 @@ def main(args):
         runner.run_train(train_examples)
 
     if args.do_save:
-        raise Exception()
+        torch.save(
+            model_wrapper.model.state_dict(),
+            os.path.join(args.output_dir, "model.p")
+        )
 
     if args.do_val:
         val_examples = task.get_val_examples()
