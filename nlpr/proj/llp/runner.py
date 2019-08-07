@@ -76,10 +76,10 @@ class LLPRunner:
         self.model = self.model_wrapper.model
 
     def init_llp_state(self, train_examples, verbose=True):
-        self.llp_state = self._create_empty_llp_state(train_examples=train_examples)
-        self._initialize_llp_state(train_examples=train_examples, verbose=verbose)
+        self.llp_state = self.create_empty_llp_state(train_examples=train_examples)
+        self.populate_llp_state(train_examples=train_examples, verbose=verbose)
 
-    def _create_empty_llp_state(self, train_examples):
+    def create_empty_llp_state(self, train_examples):
         big_m_tensor = torch.empty([
             len(train_examples), self.llp_params.llp_embedding_dim
         ]).to(self.device)
@@ -95,7 +95,7 @@ class LLPRunner:
             all_label_confidence=all_label_confidence,
         )
 
-    def _initialize_llp_state(self, train_examples, verbose=True):
+    def populate_llp_state(self, train_examples, verbose=True):
         train_dataloader = self.get_train_dataloader(train_examples, use_eval_batch_size=True,
                                                      do_override_labels=False)
         with torch.no_grad():

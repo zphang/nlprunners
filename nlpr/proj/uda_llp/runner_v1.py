@@ -1,46 +1,40 @@
 from nlpr.shared.train_setup import TrainSchedule
+import nlpr.proj.simple.runner as simple_runner
 import nlpr.proj.llp.runner as llp_runner
 import nlpr.proj.uda.runner as uda_runner
 
 
-class UdaLlpRunner(llp_runner.LLPRunner):
+class UDALLPRunner:
     def __init__(self, task, model_wrapper, optimizer_scheduler, loss_criterion,
                  device,
-                 rparams: llp_runner.RunnerParameters,
-                 llp_params: llp_runner.LlpParameters,
+                 rparams: simple_runner.RunnerParameters,
                  uda_params: uda_runner.UDAParameters,
+                 llp_params: llp_runner.LlpParameters,
                  train_schedule: TrainSchedule):
-        super().__init__(
-            task=task,
-            model_wrapper=model_wrapper,
-            optimizer_scheduler=optimizer_scheduler,
-            loss_criterion=loss_criterion,
-            device=device,
-            rparams=rparams,
-            llp_params=llp_params,
-            train_schedule=train_schedule,
-        )
+        self.task = task
+        self.model_wrapper = model_wrapper
+        self.optimizer_scheduler = optimizer_scheduler
+        self.loss_criterion = loss_criterion
+        self.device = device
+        self.rparams = rparams
         self.uda_params = uda_params
+        self.llp_params = llp_params
+        self.train_schedule = train_schedule
 
-    def run_train_step(self, step, batch, batch_metadata, train_epoch_state):
-        batch = batch.to(self.device)
-        loss, loss_details = self.compute_representation_loss(batch, batch_metadata)
-        loss = self.complex_backpropagate(loss)
+        self.llp_state = None
 
-        train_epoch_state.tr_loss += loss.item()
-        train_epoch_state.nb_tr_examples += len(batch)
-        train_epoch_state.nb_tr_steps += 1
-        if (step + 1) % self.train_schedule.gradient_accumulation_steps == 0:
-            self.optimizer_scheduler.step()
-            self.model.zero_grad()
-            train_epoch_state.global_step += 1
+        # Convenience
+        self.model = self.model_wrapper.model
 
-        # Update memory bank
-        with torch.no_grad():
-            new_embedding = self.model.forward_batch(batch).embedding
-        self.llp_state.big_m_tensor[batch_metadata["example_id"]] = (
-                (1 - self.llp_params.llp_mem_bank_t)
-                * self.llp_state.big_m_tensor[batch_metadata["example_id"]]
-                + self.llp_params.llp_mem_bank_t * new_embedding
-        )
-        return loss_details
+    # LLP
+    init_llp_state = llp_runner.LLPRunner.init_llp_state
+    create_empty_llp_state = llp_runner.LLPRunner.create_empty_llp_state
+    populate_llp_state = llp_runner.LLPRunner.populate_llp_state
+    compute_representation_loss = llp_runner.LLPRunner.compute_representation_loss
+    run_label_propagate = llp_runner.LLPRunner.run_label_propagate
+
+    # Eval
+    run_val = simple_runner.SimpleTaskRunner.run_val
+    run_test = simple_runner.SimpleTaskRunner.run_test
+    get_eval_dataloader = simple_runner.SimpleTaskRunner.get_eval_dataloader
+    complex_propagate = simple_runner.SimpleTaskRunner.complex_backpropagate
