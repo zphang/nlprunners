@@ -73,10 +73,8 @@ class UDARunner:
         self.model = self.model_wrapper.model
 
     def run_train(self, task_data, verbose=True):
-        sup_dataloader = self.get_dataloader(
-            examples=task_data["sup"]["train"],
-            batch_size=self.train_schedule.train_batch_size,
-            shuffle=False,
+        sup_dataloader = self.get_sup_dataloader(
+            task_data=task_data,
             verbose=verbose,
         )
         log_data = {
@@ -299,6 +297,14 @@ class UDARunner:
             dataloader=dataloader,
             metadata=dataset_with_metadata.metadata,
             task=self.task,
+        )
+
+    def get_sup_dataloader(self, task_data, verbose=True):
+        return self.get_dataloader(
+            examples=task_data["sup"]["train"],
+            batch_size=self.train_schedule.train_batch_size,
+            shuffle=True,   # ??????
+            verbose=verbose,
         )
 
     def get_unsup_dataloaders(self, sup_dataloader, task_data):
