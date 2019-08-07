@@ -96,40 +96,54 @@ class LLPRunner:
         )
 
     def populate_llp_state(self, train_examples, verbose=True):
-        train_dataloader = self.get_train_dataloader(train_examples, use_eval_batch_size=True,
-                                                     do_override_labels=False)
+        train_dataset_with_metadata = self.convert_examples_to_dataset(train_examples, verbose=True)
+        train_dataloader = self.get_train_dataloader(
+            train_dataset_with_metadata=train_dataset_with_metadata,
+            use_eval_batch_size=True, do_override_labels=False, verbose=verbose,
+        )
+
         with torch.no_grad():
             for batch, metadata in maybe_tqdm(train_dataloader, desc="Initializing big_m",
                                               verbose=verbose):
                 batch = batch.to(self.device)
                 embedding = self.model.forward_batch(batch).embedding
                 self.llp_state.big_m_tensor[metadata["example_id"]] = embedding
-        self.run_label_propagate()
+        self.propagate_labels(verbose=verbose)
         self.llp_state.all_label_confidence[self.llp_params.num_labeled:] = 0
 
     def run_train(self, train_examples, verbose=True):
-        train_dataloader = self.get_train_dataloader(train_examples)
+        train_dataset_with_metadata = self.convert_examples_to_dataset(
+            examples=train_examples,
+            verbose=verbose,
+        )
         for _ in maybe_trange(int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
-            self.run_train_epoch(train_dataloader, verbose=verbose)
+            self.run_train_epoch(train_dataset_with_metadata, verbose=verbose)
 
     def run_train_val(self, train_examples, val_examples, verbose=True):
-        train_dataloader = self.get_train_dataloader(train_examples)
+        train_dataset_with_metadata = self.convert_examples_to_dataset(
+            examples=train_examples,
+            verbose=verbose,
+        )
         epoch_result_dict = OrderedDict()
         for i in maybe_trange(int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
-            self.run_train_epoch(train_dataloader, verbose=verbose)
+            self.run_train_epoch(train_dataset_with_metadata, verbose=verbose)
             epoch_result = self.run_val(val_examples)
             del epoch_result["logits"]
             epoch_result["metrics"] = epoch_result["metrics"].asdict()
             epoch_result_dict[i] = epoch_result
         return epoch_result_dict
 
-    def run_train_epoch(self, train_dataloader, verbose=True):
-        for _ in self.run_train_epoch_context(train_dataloader, verbose=verbose):
+    def run_train_epoch(self, train_dataset_with_metadata, verbose=True):
+        for _ in self.run_train_epoch_context(train_dataset_with_metadata, verbose=verbose):
             pass
 
-    def run_train_epoch_context(self, train_dataloader, verbose=True):
+    def run_train_epoch_context(self, train_dataset_with_metadata, verbose=True):
         self.model.train()
         train_epoch_state = TrainEpochState()
+        train_dataloader = self.get_train_dataloader(
+            train_dataset_with_metadata=train_dataset_with_metadata,
+            do_override_labels=True, verbose=verbose,
+        )
         for step, (batch, batch_metadata) in enumerate(
                 maybe_tqdm(train_dataloader, desc="Training", verbose=verbose)):
             self.run_train_step(
@@ -139,7 +153,6 @@ class LLPRunner:
                 train_epoch_state=train_epoch_state,
             )
             yield step, batch, train_epoch_state
-        self.run_label_propagate()
 
     def run_train_step(self, step, batch, batch_metadata, train_epoch_state):
         batch = batch.to(self.device)
@@ -158,9 +171,9 @@ class LLPRunner:
         with torch.no_grad():
             new_embedding = self.model.forward_batch(batch).embedding
         self.llp_state.big_m_tensor[batch_metadata["example_id"]] = (
-                (1 - self.llp_params.llp_mem_bank_t)
-                * self.llp_state.big_m_tensor[batch_metadata["example_id"]]
-                + self.llp_params.llp_mem_bank_t * new_embedding
+            (1 - self.llp_params.llp_mem_bank_t)
+            * self.llp_state.big_m_tensor[batch_metadata["example_id"]]
+            + self.llp_params.llp_mem_bank_t * new_embedding
         )
         return loss_details
 
@@ -204,31 +217,14 @@ class LLPRunner:
         }
         return representation_loss, loss_details
 
-    def run_label_propagate(self, verbose=True):
-        if verbose:
-            print("Propagating labels")
-        vote_weights, capital_i = llp_propagate.local_label_propagation_gpu(
-            big_m=self.llp_state.big_m_tensor,
-            num_labeled=self.llp_params.num_labeled,
-            dim_size=self.llp_params.llp_embedding_dim,
-            const_k=self.llp_params.llp_const_k,
-            const_t=self.llp_params.llp_const_t,
-            const_tau=self.llp_params.llp_const_tau,
-            chunk_size=self.llp_params.llp_prop_chunk_size,
+    def propagate_labels(self, verbose=True):
+        propagate_labels(
+            llp_state=self.llp_state,
+            llp_params=self.llp_params,
+            num_classes=len(self.task.LABELS),
             device=self.device,
             verbose=verbose,
         )
-        true_labels = self.llp_state.all_labels_tensor[:self.llp_params.num_labeled].cpu().numpy()
-        pseudolabels, confidence = llp_propagate.compute_pseudolabels(
-            true_labels=true_labels,
-            vote_weights=vote_weights,
-            capital_i=capital_i,
-            num_classes=len(self.task.LABELS),
-        )
-        self.llp_state.all_labels_tensor[self.llp_params.num_labeled:] = \
-            torch.from_numpy(pseudolabels).to(self.device)
-        self.llp_state.all_label_confidence[self.llp_params.num_labeled:] = \
-            torch.from_numpy(confidence).to(self.device)
 
     def run_val(self, val_examples, verbose=True):
         if not self.rparams.local_rank == -1:
@@ -276,38 +272,32 @@ class LLPRunner:
         all_logits = np.concatenate(all_logits, axis=0)
         return all_logits
 
-    def get_train_dataloader(self, train_examples, do_override_labels=True,
-                             use_eval_batch_size=False, force_sequential=False,
-                             verbose=True):
-        dataset_with_metadata = convert_examples_to_dataset(
-            examples=train_examples,
-            feat_spec=self.rparams.feat_spec,
-            tokenizer=self.model_wrapper.tokenizer,
-            task=self.task,
-            verbose=verbose,
-        )
+    def get_train_dataloader(self, train_dataset_with_metadata, do_override_labels=True,
+                             use_eval_batch_size=False, force_sequential=False, verbose=True):
 
         # Override with pseudolabels
         if do_override_labels:
+            if verbose:
+                print("Using Pseudolabels")
             override_labels(
-                dataset_with_metadata=dataset_with_metadata,
+                dataset_with_metadata=train_dataset_with_metadata,
                 labels_tensor=self.llp_state.all_labels_tensor.cpu(),
             )
 
         train_sampler = get_sampler(
-            dataset=dataset_with_metadata.dataset,
+            dataset=train_dataset_with_metadata.dataset,
             local_rank=self.rparams.local_rank,
             force_sequential=force_sequential,
         )
         train_dataloader = DataLoader(
-            dataset=dataset_with_metadata.dataset,
+            dataset=train_dataset_with_metadata.dataset,
             sampler=train_sampler,
             batch_size=self.train_schedule.train_batch_size
             if not use_eval_batch_size else self.rparams.eval_batch_size,
         )
         return HybridLoader(
             dataloader=train_dataloader,
-            metadata=dataset_with_metadata.metadata,
+            metadata=train_dataset_with_metadata.metadata,
             task=self.task,
         )
 
@@ -330,6 +320,15 @@ class LLPRunner:
             task=self.task,
         )
 
+    def convert_examples_to_dataset(self, examples, verbose):
+        return convert_examples_to_dataset(
+            examples=examples,
+            feat_spec=self.rparams.feat_spec,
+            tokenizer=self.model_wrapper.tokenizer,
+            task=self.task,
+            verbose=verbose,
+        )
+
     def complex_backpropagate(self, loss):
         return complex_backpropagate(
             loss=loss,
@@ -347,3 +346,30 @@ def override_labels(dataset_with_metadata, labels_tensor):
     tensors = list(dataset_with_metadata.dataset.tensors)
     tensors[label_column] = labels_tensor.cpu()
     dataset_with_metadata.dataset.tensors = tensors
+
+
+def propagate_labels(llp_state, llp_params, num_classes, device, verbose=True):
+    if verbose:
+        print("Propagating labels")
+    vote_weights, capital_i = llp_propagate.local_label_propagation_gpu(
+        big_m=llp_state.big_m_tensor,
+        num_labeled=llp_params.num_labeled,
+        dim_size=llp_params.llp_embedding_dim,
+        const_k=llp_params.llp_const_k,
+        const_t=llp_params.llp_const_t,
+        const_tau=llp_params.llp_const_tau,
+        chunk_size=llp_params.llp_prop_chunk_size,
+        device=device,
+        verbose=verbose,
+    )
+    true_labels = llp_state.all_labels_tensor[:llp_params.num_labeled].cpu().numpy()
+    pseudolabels, confidence = llp_propagate.compute_pseudolabels(
+        true_labels=true_labels,
+        vote_weights=vote_weights,
+        capital_i=capital_i,
+        num_classes=num_classes,
+    )
+    llp_state.all_labels_tensor[llp_params.num_labeled:] = \
+        torch.from_numpy(pseudolabels).to(device)
+    llp_state.all_label_confidence[llp_params.num_labeled:] = \
+        torch.from_numpy(confidence).to(device)

@@ -95,6 +95,13 @@ class HybridLoader:
         self.metadata = metadata
         self.task = task
 
+    @property
+    def dataset_with_metadata(self):
+        return DatasetWithMetadata(
+            dataset=self.dataloader.dataset,
+            metadata=self.metadata,
+        )
+
     def __iter__(self):
         for batch in self.dataloader:
             example_ids = batch[-1]
