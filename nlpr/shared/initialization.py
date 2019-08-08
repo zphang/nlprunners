@@ -8,7 +8,8 @@ import nlpr.shared.log_info as log_info
 
 
 def quick_init(args, verbose=True):
-    log_info.print_args(args)
+    if verbose:
+        log_info.print_args(args)
     init_server_logging(server_ip=args.server_ip, server_port=args.server_port, verbose=verbose)
     device, n_gpu = init_cuda_from_args(
         no_cuda=args.no_cuda,
@@ -16,7 +17,7 @@ def quick_init(args, verbose=True):
         fp16=args.fp16,
         verbose=verbose,
     )
-    args.seed = init_seed(given_seed=args.seed, n_gpu=n_gpu)
+    args.seed = init_seed(given_seed=args.seed, n_gpu=n_gpu, verbose=verbose)
     init_output_dir(output_dir=args.output_dir, force_overwrite=args.force_overwrite)
     save_args(args=args, verbose=verbose)
     return device, n_gpu
@@ -26,7 +27,8 @@ def init_server_logging(server_ip, server_port, verbose=True):
     if server_ip and server_port:
         # Distant debugging - see https://code.visualstudio.com/docs/python/debugging#_attach-to-a-local-script
         import ptvsd
-        if verbose: print("Waiting for debugger attach")
+        if verbose:
+            print("Waiting for debugger attach")
         ptvsd.enable_attach(address=(server_ip, server_port), redirect_output=True)
         ptvsd.wait_for_attach()
 
@@ -49,12 +51,13 @@ def init_cuda_from_args(no_cuda, local_rank, fp16, verbose=True):
     return device, n_gpu
 
 
-def init_seed(given_seed, n_gpu):
+def init_seed(given_seed, n_gpu, verbose=True):
     used_seed = get_seed(given_seed)
     random.seed(used_seed)
     np.random.seed(used_seed)
     torch.manual_seed(used_seed)
-    print("Using seed: {}".format(used_seed))
+    if verbose:
+        print("Using seed: {}".format(used_seed))
 
     if n_gpu > 0:
         torch.cuda.manual_seed_all(used_seed)

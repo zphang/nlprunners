@@ -88,6 +88,12 @@ class BatchTuple(NamedTuple):
     batch: BatchMixin
     metadata: dict
 
+    def to(self, device):
+        return BatchTuple(
+            batch=self.batch.to(device),
+            metadata=self.metadata,
+        )
+
 
 class HybridLoader:
     def __init__(self, dataloader, metadata, task):

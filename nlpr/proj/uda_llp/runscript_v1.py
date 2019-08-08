@@ -5,18 +5,25 @@ import zconf
 
 import nlpr.shared.initialization as initialization
 import nlpr.shared.distributed as distributed
-import nlpr.shared.model_setup as model_setup
+import nlpr.shared.model_setup as shared_model_setup
 import nlpr.shared.model_resolution as model_resolution
 import nlpr.shared.train_setup as train_setup
 import nlpr.tasks.evaluate as evaluate
-import nlpr.proj.uda.runner as uda_runner
-import nlpr.proj.uda.load_data as load_data
+import nlpr.tasks as tasks
+
+import nlpr.proj.llp.runner as llp_runner
+import nlpr.proj.uda_llp.runner_v1 as uda_llp_runner
+import nlpr.proj.llp.model_setup as llp_model_setup
+import nlpr.proj.uda.load_data as uda_load_data
+
+from pyutils.io import write_json
 
 
 @zconf.run_config
 class RunConfiguration(zconf.RunConfig):
     # === Required parameters === #
     uda_task_config_path = zconf.attr(type=str, required=True)
+    full_task_config_path = zconf.attr(type=str, required=True)
     output_dir = zconf.attr(type=str, required=True)
 
     # === Model parameters === #
@@ -24,7 +31,7 @@ class RunConfiguration(zconf.RunConfig):
     model_path = zconf.attr(type=str, required=True)
     model_config_path = zconf.attr(default=None, type=str)
     model_tokenizer_path = zconf.attr(default=None, type=str)
-    #model_load_mode = zconf.attr(type=str, required=True)
+    model_load_mode = zconf.attr(type=str, required=True)
     model_save_mode = zconf.attr(default="all", type=str)
     max_seq_length = zconf.attr(default=128, type=int)
 
@@ -63,39 +70,63 @@ class RunConfiguration(zconf.RunConfig):
     server_ip = zconf.attr(default='', type=str)
     server_port = zconf.attr(default='', type=str)
 
-    # === UDA === #
-    unsup_ratio = zconf.attr(type=int, default=3)
-    no_tsa = zconf.attr(action="store_true")
-    tsa_schedule = zconf.attr(type=str, default="linear_schedule")
-    uda_softmax_temp = zconf.attr(type=float, default=-1)
-    uda_confidence_thresh = zconf.attr(type=float, default=-1)
-    uda_coeff = zconf.attr(type=float, default=1.)
+    # LLP hyperparams
+    llp_embedding_dim = zconf.attr(type=int, default=128)
+    llp_const_k = zconf.attr(type=int, default=10)
+    llp_const_t = zconf.attr(type=int, default=25)
+    llp_const_tau = zconf.attr(type=float, default=0.07)
+    llp_prop_chunk_size = zconf.attr(type=int, default=500)
+    llp_mem_bank_t = zconf.attr(type=float, default=0.5)
+    llp_rep_global_agg_loss_lambda = zconf.attr(type=float, default=1.)
+    llp_embedding_norm_loss = zconf.attr(type=float, default=0.01)
+    llp_compute_global_agg_loss_mode = zconf.attr(type=str, default="v1")
+    llp_load_override = zconf.attr(type=str, default=None)
+
+    unlabeled_train_examples_number = zconf.attr(type=int, default=None)
+    unlabeled_train_examples_fraction = zconf.attr(type=float, default=None)
+
+    # UDA LLP
+    uda_coeff = zconf.attr(type=float, default=1.0)
+    unsup_ratio = zconf.attr(type=int, default=1)
 
 
 def main(args):
     device, n_gpu = initialization.quick_init(args=args, verbose=True)
-    task, task_data = load_data.load_task_data_from_path(args.uda_task_config_path)
+    task, task_data = uda_load_data.load_task_data_from_path(args.uda_task_config_path)
 
     with distributed.only_first_process(local_rank=args.local_rank):
         # load the model
-        model_class_spec = model_resolution.resolve_model_setup_classes(
+        model_wrapper = llp_model_setup.setup_model(
             model_type=args.model_type,
-            task_type=task.TASK_TYPE,
-        )
-        model_wrapper = model_setup.simple_model_setup(
-            model_type=args.model_type,
-            model_class_spec=model_class_spec,
+            task=task,
+            llp_embedding_dim=args.llp_embedding_dim,
             config_path=args.model_config_path,
             tokenizer_path=args.model_tokenizer_path,
-            task=task,
         )
-        model_setup.safe_load_model(
+        llp_model_setup.load_model(
             model=model_wrapper.model,
-            state_dict=torch.load(args.model_path)
+            state_dict=torch.load(args.model_path),
+            load_mode=args.model_load_mode,
         )
         model_wrapper.model.to(device)
 
-    num_train_examples = len(task_data["sup"]["train"])
+    # === Train Data Setup [START] === #
+    labeled_examples = task_data["sup"]["train"]
+    # VERY hacky
+    unlabeled_task = tasks.create_task_from_config_path(args.full_task_config_path)
+    unlabeled_examples, indices = train_setup.maybe_subsample_train(
+        train_examples=unlabeled_task.get_train_examples(),
+        train_examples_number=args.unlabeled_train_examples_number,
+        train_examples_fraction=args.unlabeled_train_examples_fraction,
+    )
+    for example in unlabeled_examples:
+        example.label = task.LABELS[-1]
+    train_examples = labeled_examples + unlabeled_examples
+    if indices is not None:
+        write_json(indices, os.path.join(args.output_dir, "sampled_indices.json"))
+    num_train_examples = len(train_examples)
+    task_data["sup"]["train"] = train_examples
+    # === Train Data Setup [END] === #
 
     train_schedule = train_setup.get_train_schedule(
         num_train_examples=num_train_examples,
@@ -107,7 +138,7 @@ def main(args):
     )
     print("t_total", train_schedule.t_total)
     loss_criterion = train_setup.resolve_loss_function(task_type=task.TASK_TYPE)
-    optimizer_scheduler = model_setup.create_optimizer(
+    optimizer_scheduler = shared_model_setup.create_optimizer(
         model=model_wrapper.model,
         learning_rate=args.learning_rate,
         t_total=train_schedule.t_total,
@@ -115,13 +146,15 @@ def main(args):
         warmup_proportion=args.warmup_proportion,
         verbose=True,
     )
-    model_setup.special_model_setup(
+
+    # I don't think this works for LLP...
+    shared_model_setup.special_model_setup(
         model_wrapper=model_wrapper,
         optimizer_scheduler=optimizer_scheduler,
         fp16=args.fp16, fp16_opt_level=args.fp16_opt_level,
         n_gpu=n_gpu, local_rank=args.local_rank,
     )
-    rparams = uda_runner.RunnerParameters(
+    rparams = llp_runner.RunnerParameters(
         feat_spec=model_resolution.build_featurization_spec(
             model_type=args.model_type,
             max_seq_length=args.max_seq_length,
@@ -133,28 +166,38 @@ def main(args):
         eval_batch_size=args.eval_batch_size,
         max_grad_norm=args.max_grad_norm,
     )
-    uda_params = uda_runner.UDAParameters(
+    llp_params = llp_runner.LlpParameters(
+        num_labeled=len(labeled_examples),
+        llp_embedding_dim=args.llp_embedding_dim,
+        llp_const_k=args.llp_const_k,
+        llp_const_t=args.llp_const_t,
+        llp_const_tau=args.llp_const_tau,
+        llp_prop_chunk_size=args.llp_prop_chunk_size,
+        llp_mem_bank_t=args.llp_mem_bank_t,
+        llp_rep_global_agg_loss_lambda=args.llp_rep_global_agg_loss_lambda,
+        llp_embedding_norm_loss=args.llp_embedding_norm_loss,
+        llp_compute_global_agg_loss_mode=args.llp_compute_global_agg_loss_mode,
+    )
+    llpuda_params = uda_llp_runner.LLPUDAParameters(
+        uda_coeff=args.uda_coeff,
         use_unsup=args.unsup_ratio != 0,
         unsup_ratio=args.unsup_ratio,
-        tsa=not args.no_tsa,
-        tsa_schedule=args.tsa_schedule,
-        uda_softmax_temp=args.uda_softmax_temp,
-        uda_confidence_thresh=args.uda_confidence_thresh,
-        uda_coeff=args.uda_coeff,
     )
-    runner = uda_runner.UDARunner(
+    runner = uda_llp_runner.UDALLPRunner(
         task=task,
         model_wrapper=model_wrapper,
         optimizer_scheduler=optimizer_scheduler,
         loss_criterion=loss_criterion,
         device=device,
         rparams=rparams,
-        uda_params=uda_params,
+        llp_params=llp_params,
+        llpuda_params=llpuda_params,
         train_schedule=train_schedule,
     )
 
     if args.do_train:
-        runner.run_train(task_data=task_data)
+        runner.init_llp_state(train_examples)
+        runner.run_train(task_data)
 
     if args.do_save:
         torch.save(

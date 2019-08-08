@@ -95,13 +95,13 @@ class LLPRunner:
             all_label_confidence=all_label_confidence,
         )
 
-    def populate_llp_state(self, train_examples, verbose=True):
+    def populate_llp_state(self, train_examples, verbose=True, zero_out_unlabeled=True):
         train_dataset_with_metadata = self.convert_examples_to_dataset(train_examples, verbose=True)
         train_dataloader = self.get_train_dataloader(
             train_dataset_with_metadata=train_dataset_with_metadata,
             use_eval_batch_size=True, do_override_labels=False, verbose=verbose,
         )
-
+        self.model.eval()
         with torch.no_grad():
             for batch, metadata in maybe_tqdm(train_dataloader, desc="Initializing big_m",
                                               verbose=verbose):

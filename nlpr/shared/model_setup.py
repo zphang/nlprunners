@@ -66,7 +66,8 @@ class OptimizerScheduler:
         self.scheduler.load_state_dict(state_dict["scheduler"], strict=strict)
 
 
-def create_optimizer(model, learning_rate, t_total, warmup_steps, adam_epsilon=1e-8, verbose=False):
+def create_optimizer(model, learning_rate, t_total, warmup_steps, warmup_proportion,
+                     adam_epsilon=1e-8, verbose=False):
     # Prepare optimizer
     optimized_params = list(model.named_parameters())
     no_decay = [
@@ -92,6 +93,10 @@ def create_optimizer(model, learning_rate, t_total, warmup_steps, adam_epsilon=1
     optimizer = pytorch_transformers.AdamW(
         optimizer_grouped_parameters, lr=learning_rate, eps=adam_epsilon
     )
+    warmup_steps = resolve_warmup_steps(
+        t_total=t_total, warmup_steps=warmup_steps,
+        warmup_proportion=warmup_proportion,
+    )
     scheduler = pytorch_transformers.WarmupLinearSchedule(
         optimizer, warmup_steps=warmup_steps, t_total=t_total
     )
@@ -100,6 +105,19 @@ def create_optimizer(model, learning_rate, t_total, warmup_steps, adam_epsilon=1
         scheduler=scheduler,
     )
     return optimizer_scheduler
+
+
+def resolve_warmup_steps(t_total, warmup_steps, warmup_proportion):
+    if warmup_steps is None and warmup_proportion is None:
+        raise RuntimeError()
+    elif warmup_steps is not None and warmup_proportion is not None:
+        raise RuntimeError()
+    elif warmup_steps is None and warmup_proportion is not None:
+        return warmup_proportion * t_total
+    elif warmup_steps is not None and warmup_proportion is Nne:
+        return warmup_steps
+    else:
+        raise RuntimeError()
 
 
 def fp16ize(model_wrapper, optimizer_scheduler, fp16_opt_level):

@@ -51,7 +51,8 @@ class RunConfiguration(zconf.RunConfig):
     max_steps = zconf.attr(default=-1, type=int)  ## Change to None
     adam_epsilon = zconf.attr(default=1e-8, type=float)
     max_grad_norm = zconf.attr(default=1.0, type=float)
-    warmup_steps = zconf.attr(default=0, type=int)   ## warmup proportion?
+    warmup_steps = zconf.attr(default=None, type=int)
+    warmup_proportion = zconf.attr(default=0.1, type=float)
 
     # Specialized config
     gradient_accumulation_steps = zconf.attr(default=1, type=int)
@@ -107,6 +108,7 @@ def main(args):
         learning_rate=args.learning_rate,
         t_total=train_schedule.t_total,
         warmup_steps=args.warmup_steps,
+        warmup_proportion=args.warmup_proportion,
         verbose=True,
     )
     model_setup.special_model_setup(

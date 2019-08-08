@@ -96,7 +96,7 @@ class ColaTask(Task):
         for (i, line) in enumerate(lines):
             examples.append(Example(
                 guid="%s-%s" % (set_type, i),
-                text=line["text"],
+                text=line["text_a"],
                 label=line["label"] if set_type != "test" else cls.LABELS[-1],
             ))
         return examples

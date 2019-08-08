@@ -9,6 +9,7 @@ from nlpr.tasks.lib.amazon import AmazonPolarityTask
 from nlpr.tasks.lib.mnli import MnliTask
 from nlpr.tasks.lib.imdb import IMDBTask
 from nlpr.tasks.lib.mrpc import MrpcTask
+from nlpr.tasks.lib.cola import ColaTask
 from nlpr.tasks.lib.shared import Task
 
 from pyutils.io import read_json
@@ -26,6 +27,7 @@ TASK_DICT = {
     "mnli": MnliTask,
     "imdb": IMDBTask,
     "mrpc": MrpcTask,
+    "cola": ColaTask,
 }
 
 

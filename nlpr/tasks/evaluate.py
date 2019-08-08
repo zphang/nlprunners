@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 import numpy as np
 import pandas as pd
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, matthews_corrcoef
 from typing import Dict
 
 import nlpr.tasks as tasks
@@ -63,6 +63,8 @@ def compute_task_metrics(task, logits, examples):
         return acc_and_f1(task, logits, examples)
     elif isinstance(task, tasks.IMDBTask):
         return simple_accuracy(task, logits, examples)
+    elif isinstance(task, tasks.ColaTask):
+        return compute_mcc(task, logits, examples)
     else:
         raise KeyError(task)
 
@@ -90,6 +92,16 @@ def acc_and_f1(task, logits, examples):
     return Metrics(
         major=minor["acc_and_f1"],
         minor=minor,
+    )
+
+
+def compute_mcc(task, logits, examples):
+    preds = get_preds(logits)
+    labels = get_label_ids(examples, task)
+    mcc = matthews_corrcoef(labels, preds)
+    return Metrics(
+        major=mcc,
+        minor={"mcc": mcc},
     )
 
 
