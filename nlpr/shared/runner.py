@@ -25,6 +25,11 @@ class TrainEpochState:
 
 
 @dataclass
+class TrainGlobalState:
+    global_step: int = 0
+
+
+@dataclass
 class DatasetWithMetadata:
     dataset: TensorDataset
     metadata: Dict

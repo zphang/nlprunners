@@ -9,3 +9,10 @@ def normalize_embedding_tensor(embedding):
 def embedding_norm_loss(raw_embedding):
     norms = raw_embedding.norm(dim=1)
     return F.mse_loss(norms, torch.ones_like(norms), reduction='none')
+
+
+def get_val(x):
+    if isinstance(x, torch.Tensor):
+        return x.item()
+    else:
+        return x

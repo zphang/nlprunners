@@ -8,6 +8,7 @@ import nlpr.shared.distributed as distributed
 import nlpr.shared.model_setup as model_setup
 import nlpr.shared.model_resolution as model_resolution
 import nlpr.shared.train_setup as train_setup
+import nlpr.shared.log_info as log_info
 import nlpr.tasks as tasks
 import nlpr.tasks.evaluate as evaluate
 import nlpr.proj.simple.runner as simple_runner
@@ -44,6 +45,7 @@ class RunConfiguration(zconf.RunConfig):
     force_overwrite = zconf.attr(action="store_true")
     # overwrite_cache = zconf.attr(action="store_true")
     seed = zconf.attr(type=int, default=-1)
+    use_tensorboard = zconf.attr(action="store_true")
 
     # === Training Learning Parameters === #
     learning_rate = zconf.attr(default=1e-5, type=float)
@@ -117,6 +119,10 @@ def main(args):
         fp16=args.fp16, fp16_opt_level=args.fp16_opt_level,
         n_gpu=n_gpu, local_rank=args.local_rank,
     )
+    tb_writer = log_info.simple_setup_tensorboard(
+        use_tensorboard=args.use_tensorboard,
+        output_dir=args.output_dir,
+    )
     rparams = simple_runner.RunnerParameters(
         feat_spec=model_resolution.build_featurization_spec(
             model_type=args.model_type,
@@ -137,6 +143,7 @@ def main(args):
         device=device,
         rparams=rparams,
         train_schedule=train_schedule,
+        tb_writer=tb_writer,
     )
 
     if args.do_train:

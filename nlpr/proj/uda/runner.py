@@ -14,10 +14,12 @@ from nlpr.shared.runner import (
     complex_backpropagate,
     get_sampler,
     TrainEpochState,
+    TrainGlobalState,
 )
 from nlpr.shared.modeling import forward_batch_basic
 import nlpr.tasks.evaluate as evaluate
 from nlpr.proj.uda import uda_ops
+from nlpr.shared.torch_utils import get_val
 
 
 @dataclass
@@ -59,7 +61,7 @@ class UDAParameters:
 class UDARunner:
     def __init__(self, task, model_wrapper, optimizer_scheduler, loss_criterion,
                  device, rparams: RunnerParameters, uda_params: UDAParameters,
-                 train_schedule: TrainSchedule):
+                 train_schedule: TrainSchedule, tb_writer):
         self.task = task
         self.model_wrapper = model_wrapper
         self.optimizer_scheduler = optimizer_scheduler
@@ -68,11 +70,13 @@ class UDARunner:
         self.rparams = rparams
         self.uda_params = uda_params
         self.train_schedule = train_schedule
+        self.tb_writer = tb_writer
 
         # Convenience
         self.model = self.model_wrapper.model
 
     def run_train(self, task_data, verbose=True):
+        train_global_state = TrainGlobalState()
         sup_dataloader = self.get_sup_dataloader(
             task_data=task_data,
             verbose=verbose,
@@ -92,7 +96,7 @@ class UDARunner:
                 unsup_orig_loader=unsup_dataloaders.unsup_orig,
                 unsup_aug_loader=unsup_dataloaders.unsup_aug,
             )
-            self.run_train_epoch(dataloader_triplet, verbose=verbose)
+            self.run_train_epoch(dataloader_triplet, train_global_state, verbose=verbose)
             log_data["unsup_indices"].append(unsup_dataloaders.metadata["unsup_indices"])
             log_data["unsup_aug_set"].append(unsup_dataloaders.metadata["unsup_aug_set"])
         # Todo: log the log data!
@@ -100,6 +104,8 @@ class UDARunner:
     def run_train_fixed_step(self, task_data, num_steps, verbose=True):
         assert self.train_schedule.t_total == num_steps
         assert self.train_schedule.num_train_epochs == 1
+
+        train_global_state = TrainGlobalState()
         sup_dataloader = self.get_fixed_step_dataloader(
             examples=task_data["sup"]["train"],
             batch_size=self.train_schedule.train_batch_size,
@@ -115,18 +121,18 @@ class UDARunner:
             unsup_orig_loader=unsup_dataloaders.unsup_orig,
             unsup_aug_loader=unsup_dataloaders.unsup_aug,
         )
-        self.run_train_epoch(dataloader_triplet, verbose=verbose)
+        self.run_train_epoch(dataloader_triplet, train_global_state, verbose=verbose)
         # Todo: log the log data!
         log_data = {
             "unsup_indices": unsup_dataloaders.metadata["unsup_indices"],
             "unsup_aug_set": unsup_dataloaders.metadata["unsup_aug_set"],
         }
 
-    def run_train_epoch(self, dataloader_triplet, verbose=True):
-        for _ in self.run_train_epoch_context(dataloader_triplet, verbose=verbose):
+    def run_train_epoch(self, dataloader_triplet, train_global_state, verbose=True):
+        for _ in self.run_train_epoch_context(dataloader_triplet, train_global_state, verbose=verbose):
             pass
 
-    def run_train_epoch_context(self, dataloader_triplet, verbose=True):
+    def run_train_epoch_context(self, dataloader_triplet, train_global_state, verbose=True):
         self.model.train()
         train_epoch_state = TrainEpochState()
         train_iterator = enumerate(maybe_tqdm(zip(
@@ -145,17 +151,18 @@ class UDARunner:
                 step=step,
                 batch_triplet=batch_triplet,
                 train_epoch_state=train_epoch_state,
+                train_global_state=train_global_state,
             )
             yield step, batch_triplet, train_epoch_state
 
-    def run_train_step(self, step, batch_triplet, train_epoch_state):
+    def run_train_step(self, step, batch_triplet, train_epoch_state, train_global_state):
         example_count = len(batch_triplet.sup)
         sup_loss = uda_ops.sup_train_step(
             model=self.model,
             sup_batch=batch_triplet.sup[0].to(self.device),
             task=self.task,
             global_step=train_epoch_state.global_step,
-            rparams=self.rparams,
+            train_schedule=self.train_schedule,
             uda_params=self.uda_params,
         )
         if self.uda_params.use_unsup:
@@ -166,8 +173,10 @@ class UDARunner:
                 unsup_aug_batch=batch_triplet.unsup_aug[0].to(self.device),
                 uda_params=self.uda_params,
             )
-            loss = sup_loss + self.uda_params.uda_coeff * unsup_loss
+            weighted_unsup_loss = self.uda_params.uda_coeff * unsup_loss
+            loss = sup_loss + weighted_unsup_loss
         else:
+            weighted_unsup_loss = 0
             loss = sup_loss
         loss = self.complex_backpropagate(loss)
 
@@ -178,6 +187,16 @@ class UDARunner:
             self.optimizer_scheduler.step()
             self.model.zero_grad()
             train_epoch_state.global_step += 1
+            train_global_state.global_step += 1
+
+        self.tb_writer.add_scalars(
+            main_tag="Loss/train", tag_scalar_dict={
+                "sup": get_val(sup_loss),
+                "unsup": get_val(weighted_unsup_loss),
+                "total": get_val(loss),
+            }, global_step=train_global_state.global_step,
+        )
+        self.tb_writer.flush()
 
     def run_val(self, val_examples, verbose=True):
         if not self.rparams.local_rank == -1:

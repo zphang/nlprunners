@@ -13,6 +13,7 @@ from nlpr.shared.runner import (
     complex_backpropagate,
     get_sampler,
     TrainEpochState,
+    TrainGlobalState,
 )
 from nlpr.shared.modeling import forward_batch_basic
 from nlpr.shared.train_setup import TrainSchedule
@@ -32,7 +33,8 @@ class RunnerParameters:
 
 class SimpleTaskRunner:
     def __init__(self, task, model_wrapper, optimizer_scheduler, loss_criterion,
-                 device, rparams: RunnerParameters, train_schedule: TrainSchedule):
+                 device, rparams: RunnerParameters, train_schedule: TrainSchedule,
+                 tb_writer):
         self.task = task
         self.model_wrapper = model_wrapper
         self.optimizer_scheduler = optimizer_scheduler
@@ -40,32 +42,39 @@ class SimpleTaskRunner:
         self.device = device
         self.rparams = rparams
         self.train_schedule = train_schedule
+        self.tb_writer = tb_writer
 
         # Convenience
         self.model = self.model_wrapper.model
 
     def run_train(self, train_examples, verbose=True):
+
         train_dataloader = self.get_train_dataloader(train_examples)
+        train_global_state = TrainGlobalState()
 
         for _ in maybe_trange(int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
-            self.run_train_epoch(train_dataloader)
+            self.run_train_epoch(train_dataloader, train_global_state)
 
     def run_train_val(self, train_examples, val_examples, verbose=True):
         epoch_result_dict = col.OrderedDict()
         for i in maybe_trange(int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
             train_dataloader = self.get_train_dataloader(train_examples)
-            self.run_train_epoch(train_dataloader)
+            train_global_state = TrainGlobalState()
+            self.run_train_epoch(train_dataloader, train_global_state)
             epoch_result = self.run_val(val_examples)
             del epoch_result["logits"]
             epoch_result["metrics"] = epoch_result["metrics"].asdict()
             epoch_result_dict[i] = epoch_result
         return epoch_result_dict
 
-    def run_train_epoch(self, train_dataloader, verbose=True):
-        for _ in self.run_train_epoch_context(train_dataloader, verbose=verbose):
+    def run_train_epoch(self, train_dataloader, train_global_state, verbose=True):
+        for _ in self.run_train_epoch_context(
+                train_dataloader=train_dataloader,
+                train_global_state=train_global_state,
+                verbose=verbose):
             pass
 
-    def run_train_epoch_context(self, train_dataloader, verbose=True):
+    def run_train_epoch_context(self, train_dataloader, train_global_state, verbose=True):
         train_epoch_state = TrainEpochState()
         for step, (batch, batch_metadata) in enumerate(
                 maybe_tqdm(train_dataloader, desc="Training", verbose=verbose)):
@@ -73,10 +82,11 @@ class SimpleTaskRunner:
                 step=step,
                 batch=batch,
                 train_epoch_state=train_epoch_state,
+                train_global_state=train_global_state,
             )
             yield step, batch, train_epoch_state
 
-    def run_train_step(self, step, batch, train_epoch_state):
+    def run_train_step(self, step, batch, train_epoch_state, train_global_state):
         self.model.train()
         batch = batch.to(self.device)
         logits = forward_batch_basic(
@@ -86,14 +96,19 @@ class SimpleTaskRunner:
         )[0]
         loss = self.loss_criterion(logits, batch.label_ids)
         loss = self.complex_backpropagate(loss)
+        loss_val = loss.item()
+        self.tb_writer.add_scalar("Loss/train", loss_val, train_global_state.global_step)
 
-        train_epoch_state.tr_loss += loss.item()
+        train_epoch_state.tr_loss += loss_val
         train_epoch_state.nb_tr_examples += len(batch)
         train_epoch_state.nb_tr_steps += 1
         if (step + 1) % self.train_schedule.gradient_accumulation_steps == 0:
             self.optimizer_scheduler.step()
             self.model.zero_grad()
             train_epoch_state.global_step += 1
+            train_global_state.global_step += 1
+
+        self.tb_writer.flush()
 
     def run_val(self, val_examples, verbose=True):
         if not self.rparams.local_rank == -1:

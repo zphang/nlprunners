@@ -6,19 +6,20 @@ from nlpr.shared.modeling import forward_batch_basic
 
 
 def sup_train_step(model, sup_batch,
-                   task, global_step, rparams, uda_params):
+                   task, global_step, train_schedule, uda_params):
     # Compute logits, logprobs
     sup_logits = forward_batch_basic(model=model, batch=sup_batch, omit_label_ids=True)[0]
 
     return compute_sup_loss(
         sup_logits=sup_logits,
         label_ids=sup_batch.label_ids,
-        task=task, global_step=global_step, rparams=rparams, uda_params=uda_params,
+        task=task, global_step=global_step,
+        train_schedule=train_schedule, uda_params=uda_params,
     )
 
 
 def compute_sup_loss(sup_logits, label_ids,
-                     task, global_step, rparams, uda_params):
+                     task, global_step, train_schedule, uda_params):
     # Compute cross entropy (why manually? to get the mask I guess)
     per_example_loss = F.cross_entropy(sup_logits, label_ids, reduction="none")
     # Create mask-template
@@ -38,7 +39,7 @@ def compute_sup_loss(sup_logits, label_ids,
         tsa_threshold = get_tsa_threshold(
             schedule=uda_params.tsa_schedule,
             global_step=global_step,
-            num_train_steps=rparams.t_total,
+            num_train_steps=train_schedule.t_total,
             start=1 / len(task.LABELS),
             end=1.,
         )
