@@ -26,6 +26,7 @@ class TrainEpochState:
 
 @dataclass
 class TrainGlobalState:
+    epoch: int = 0
     global_step: int = 0
 
 

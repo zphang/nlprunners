@@ -85,15 +85,11 @@ class RunConfiguration(zconf.RunConfig):
 
 
 def main(args):
-    device, n_gpu = initialization.quick_init(args=args, verbose=True)
+    quick_init_out = initialization.quick_init(args=args, verbose=True)
     task = tasks.create_task_from_config_path(config_path=args.task_config_path)
 
     with distributed.only_first_process(local_rank=args.local_rank):
         # load the model
-        model_class_spec = model_resolution.resolve_model_setup_classes(
-            model_type=args.model_type,
-            task_type=task.TASK_TYPE,
-        )
         model_wrapper = llp_model_setup.setup_model(
             model_type=args.model_type,
             task=task,
@@ -106,7 +102,7 @@ def main(args):
             state_dict=torch.load(args.model_path),
             load_mode=args.model_load_mode,
         )
-        model_wrapper.model.to(device)
+        model_wrapper.model.to(quick_init_out.device)
 
     # === Train Data Setup [START] === #
     labeled_examples = task.get_train_examples()
@@ -131,7 +127,7 @@ def main(args):
         num_train_epochs=args.num_train_epochs,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         per_gpu_train_batch_size=args.train_batch_size,
-        n_gpu=n_gpu,
+        n_gpu=quick_init_out.n_gpu,
     )
     print("t_total", train_schedule.t_total)
     loss_criterion = train_setup.resolve_loss_function(task_type=task.TASK_TYPE)
@@ -149,7 +145,7 @@ def main(args):
         model_wrapper=model_wrapper,
         optimizer_scheduler=optimizer_scheduler,
         fp16=args.fp16, fp16_opt_level=args.fp16_opt_level,
-        n_gpu=n_gpu, local_rank=args.local_rank,
+        n_gpu=quick_init_out.n_gpu, local_rank=args.local_rank,
     )
     rparams = llp_runner.RunnerParameters(
         feat_spec=model_resolution.build_featurization_spec(
@@ -157,7 +153,7 @@ def main(args):
             max_seq_length=args.max_seq_length,
         ),
         local_rank=args.local_rank,
-        n_gpu=n_gpu,
+        n_gpu=quick_init_out.n_gpu,
         fp16=args.fp16,
         learning_rate=args.learning_rate,
         eval_batch_size=args.eval_batch_size,
@@ -180,38 +176,40 @@ def main(args):
         model_wrapper=model_wrapper,
         optimizer_scheduler=optimizer_scheduler,
         loss_criterion=loss_criterion,
-        device=device,
+        device=quick_init_out.device,
         rparams=rparams,
         llp_params=llp_params,
         train_schedule=train_schedule,
+        log_writer=quick_init_out.log_writer,
     )
 
-    if args.do_train:
-        runner.init_llp_state(train_examples)
-        runner.run_train(train_examples)
+    with quick_init_out.log_writer.log_context():
+        if args.do_train:
+            runner.init_llp_state(train_examples)
+            runner.run_train(train_examples)
 
-    if args.do_save:
-        torch.save(
-            model_wrapper.model.state_dict(),
-            os.path.join(args.output_dir, "model.p")
-        )
+        if args.do_save:
+            torch.save(
+                model_wrapper.model.state_dict(),
+                os.path.join(args.output_dir, "model.p")
+            )
 
-    if args.do_val:
-        val_examples = task.get_val_examples()
-        results = runner.run_val(val_examples)
-        evaluate.write_val_results(
-            results=results,
-            output_dir=args.output_dir,
-            verbose=True,
-        )
+        if args.do_val:
+            val_examples = task.get_val_examples()
+            results = runner.run_val(val_examples)
+            evaluate.write_val_results(
+                results=results,
+                output_dir=args.output_dir,
+                verbose=True,
+            )
 
-    if args.do_test:
-        test_examples = task.get_test_examples()
-        logits = runner.run_test(test_examples)
-        evaluate.write_preds(
-            logits=logits,
-            output_path=os.path.join(args.output_dir, "test_preds.csv"),
-        )
+        if args.do_test:
+            test_examples = task.get_test_examples()
+            logits = runner.run_test(test_examples)
+            evaluate.write_preds(
+                logits=logits,
+                output_path=os.path.join(args.output_dir, "test_preds.csv"),
+            )
 
 
 if __name__ == "__main__":

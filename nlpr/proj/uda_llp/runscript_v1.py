@@ -91,7 +91,7 @@ class RunConfiguration(zconf.RunConfig):
 
 
 def main(args):
-    device, n_gpu = initialization.quick_init(args=args, verbose=True)
+    quick_init_out = initialization.quick_init(args=args, verbose=True)
     task, task_data = uda_load_data.load_task_data_from_path(args.uda_task_config_path)
 
     with distributed.only_first_process(local_rank=args.local_rank):
@@ -108,7 +108,7 @@ def main(args):
             state_dict=torch.load(args.model_path),
             load_mode=args.model_load_mode,
         )
-        model_wrapper.model.to(device)
+        model_wrapper.model.to(quick_init_out.device)
 
     # === Train Data Setup [START] === #
     labeled_examples = task_data["sup"]["train"]
@@ -134,7 +134,7 @@ def main(args):
         num_train_epochs=args.num_train_epochs,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         per_gpu_train_batch_size=args.train_batch_size,
-        n_gpu=n_gpu,
+        n_gpu=quick_init_out.n_gpu,
     )
     print("t_total", train_schedule.t_total)
     loss_criterion = train_setup.resolve_loss_function(task_type=task.TASK_TYPE)
@@ -152,7 +152,7 @@ def main(args):
         model_wrapper=model_wrapper,
         optimizer_scheduler=optimizer_scheduler,
         fp16=args.fp16, fp16_opt_level=args.fp16_opt_level,
-        n_gpu=n_gpu, local_rank=args.local_rank,
+        n_gpu=quick_init_out.n_gpu, local_rank=args.local_rank,
     )
     rparams = llp_runner.RunnerParameters(
         feat_spec=model_resolution.build_featurization_spec(
@@ -160,7 +160,7 @@ def main(args):
             max_seq_length=args.max_seq_length,
         ),
         local_rank=args.local_rank,
-        n_gpu=n_gpu,
+        n_gpu=quick_init_out.n_gpu,
         fp16=args.fp16,
         learning_rate=args.learning_rate,
         eval_batch_size=args.eval_batch_size,
@@ -188,7 +188,7 @@ def main(args):
         model_wrapper=model_wrapper,
         optimizer_scheduler=optimizer_scheduler,
         loss_criterion=loss_criterion,
-        device=device,
+        device=quick_init_out.device,
         rparams=rparams,
         llp_params=llp_params,
         llpuda_params=llpuda_params,

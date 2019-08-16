@@ -65,6 +65,8 @@ def compute_task_metrics(task, logits, examples):
         return simple_accuracy(task, logits, examples)
     elif isinstance(task, tasks.ColaTask):
         return compute_mcc(task, logits, examples)
+    elif isinstance(task, tasks.BoolQTask):
+        return simple_accuracy(task, logits, examples)
     else:
         raise KeyError(task)
 

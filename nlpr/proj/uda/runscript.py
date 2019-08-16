@@ -8,7 +8,6 @@ import nlpr.shared.distributed as distributed
 import nlpr.shared.model_setup as model_setup
 import nlpr.shared.model_resolution as model_resolution
 import nlpr.shared.train_setup as train_setup
-import nlpr.shared.log_info as log_info
 import nlpr.tasks.evaluate as evaluate
 import nlpr.proj.uda.runner as uda_runner
 import nlpr.proj.uda.load_data as load_data
@@ -45,7 +44,6 @@ class RunConfiguration(zconf.RunConfig):
     force_overwrite = zconf.attr(action="store_true")
     # overwrite_cache = zconf.attr(action="store_true")
     seed = zconf.attr(type=int, default=-1)
-    use_tensorboard = zconf.attr(action="store_true")
 
     # === Training Learning Parameters === #
     learning_rate = zconf.attr(default=1e-5, type=float)
@@ -75,7 +73,7 @@ class RunConfiguration(zconf.RunConfig):
 
 
 def main(args):
-    device, n_gpu = initialization.quick_init(args=args, verbose=True)
+    quick_init_out = initialization.quick_init(args=args, verbose=True)
     task, task_data = load_data.load_task_data_from_path(args.uda_task_config_path)
 
     with distributed.only_first_process(local_rank=args.local_rank):
@@ -95,7 +93,7 @@ def main(args):
             model=model_wrapper.model,
             state_dict=torch.load(args.model_path)
         )
-        model_wrapper.model.to(device)
+        model_wrapper.model.to(quick_init_out.device)
 
     num_train_examples = len(task_data["sup"]["train"])
 
@@ -105,7 +103,7 @@ def main(args):
         num_train_epochs=args.num_train_epochs,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         per_gpu_train_batch_size=args.train_batch_size,
-        n_gpu=n_gpu,
+        n_gpu=quick_init_out.n_gpu,
     )
     print("t_total", train_schedule.t_total)
     loss_criterion = train_setup.resolve_loss_function(task_type=task.TASK_TYPE)
@@ -121,11 +119,7 @@ def main(args):
         model_wrapper=model_wrapper,
         optimizer_scheduler=optimizer_scheduler,
         fp16=args.fp16, fp16_opt_level=args.fp16_opt_level,
-        n_gpu=n_gpu, local_rank=args.local_rank,
-    )
-    tb_writer = log_info.simple_setup_tensorboard(
-        use_tensorboard=args.use_tensorboard,
-        output_dir=args.output_dir,
+        n_gpu=quick_init_out.n_gpu, local_rank=args.local_rank,
     )
     rparams = uda_runner.RunnerParameters(
         feat_spec=model_resolution.build_featurization_spec(
@@ -133,7 +127,7 @@ def main(args):
             max_seq_length=args.max_seq_length,
         ),
         local_rank=args.local_rank,
-        n_gpu=n_gpu,
+        n_gpu=quick_init_out.n_gpu,
         fp16=args.fp16,
         learning_rate=args.learning_rate,
         eval_batch_size=args.eval_batch_size,
@@ -153,38 +147,39 @@ def main(args):
         model_wrapper=model_wrapper,
         optimizer_scheduler=optimizer_scheduler,
         loss_criterion=loss_criterion,
-        device=device,
+        device=quick_init_out.device,
         rparams=rparams,
         uda_params=uda_params,
         train_schedule=train_schedule,
-        tb_writer=tb_writer,
+        log_writer=quick_init_out.log_writer,
     )
 
-    if args.do_train:
-        runner.run_train(task_data=task_data)
+    with quick_init_out.log_writer.log_context():
+        if args.do_train:
+            runner.run_train(task_data=task_data)
 
-    if args.do_save:
-        torch.save(
-            model_wrapper.model.state_dict(),
-            os.path.join(args.output_dir, "model.p")
-        )
+        if args.do_save:
+            torch.save(
+                model_wrapper.model.state_dict(),
+                os.path.join(args.output_dir, "model.p")
+            )
 
-    if args.do_val:
-        val_examples = task.get_val_examples()
-        results = runner.run_val(val_examples)
-        evaluate.write_val_results(
-            results=results,
-            output_dir=args.output_dir,
-            verbose=True,
-        )
+        if args.do_val:
+            val_examples = task.get_val_examples()
+            results = runner.run_val(val_examples)
+            evaluate.write_val_results(
+                results=results,
+                output_dir=args.output_dir,
+                verbose=True,
+            )
 
-    if args.do_test:
-        test_examples = task.get_test_examples()
-        logits = runner.run_test(test_examples)
-        evaluate.write_preds(
-            logits=logits,
-            output_path=os.path.join(args.output_dir, "test_preds.csv"),
-        )
+        if args.do_test:
+            test_examples = task.get_test_examples()
+            logits = runner.run_test(test_examples)
+            evaluate.write_preds(
+                logits=logits,
+                output_path=os.path.join(args.output_dir, "test_preds.csv"),
+            )
 
 
 if __name__ == "__main__":

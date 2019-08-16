@@ -2,9 +2,22 @@ import json
 import numpy as np
 import os
 import random
+import time
 import torch
 
+from dataclasses import dataclass
+from typing import Any
+
 import nlpr.shared.log_info as log_info
+
+import zproto.zlogv1 as zlog
+
+
+@dataclass
+class QuickInitContainer:
+    device: Any
+    n_gpu: int
+    log_writer: Any
 
 
 def quick_init(args, verbose=True):
@@ -19,8 +32,9 @@ def quick_init(args, verbose=True):
     )
     args.seed = init_seed(given_seed=args.seed, n_gpu=n_gpu, verbose=verbose)
     init_output_dir(output_dir=args.output_dir, force_overwrite=args.force_overwrite)
+    log_writer = init_log_writer(output_dir=args.output_dir)
     save_args(args=args, verbose=verbose)
-    return device, n_gpu
+    return QuickInitContainer(device=device, n_gpu=n_gpu, log_writer=log_writer)
 
 
 def init_server_logging(server_ip, server_port, verbose=True):
@@ -71,6 +85,10 @@ def init_output_dir(output_dir, force_overwrite):
             and (os.path.exists(output_dir) and os.listdir(output_dir)):
         raise ValueError("Output directory ({}) already exists and is not empty.".format(output_dir))
     os.makedirs(output_dir, exist_ok=True)
+
+
+def init_log_writer(output_dir):
+    return zlog.ZLogger(os.path.join(output_dir, str(int(time.time()))), overwrite=True)
 
 
 def save_args(args, verbose=True):

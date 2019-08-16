@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -8,6 +9,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, SequentialSampler
 
 from pyutils.display import maybe_tqdm, maybe_trange
+from pyutils.datastructures import combine_dicts
 
 import nlpr.proj.llp.propagate as llp_propagate
 import nlpr.proj.llp.representation as llp_representation
@@ -17,6 +19,7 @@ from nlpr.shared.runner import (
     complex_backpropagate,
     get_sampler,
     TrainEpochState,
+    TrainGlobalState,
 )
 from nlpr.shared.train_setup import TrainSchedule
 import nlpr.tasks.evaluate as evaluate
@@ -60,7 +63,7 @@ class LlpState:
 class LLPRunner:
     def __init__(self, task, model_wrapper, optimizer_scheduler, loss_criterion,
                  device, rparams: RunnerParameters, llp_params: LlpParameters,
-                 train_schedule: TrainSchedule):
+                 train_schedule: TrainSchedule, log_writer):
         self.task = task
         self.model_wrapper = model_wrapper
         self.optimizer_scheduler = optimizer_scheduler
@@ -69,15 +72,33 @@ class LLPRunner:
         self.rparams = rparams
         self.llp_params = llp_params
         self.train_schedule = train_schedule
+        self.log_writer = log_writer
 
         self.llp_state = None
 
         # Convenience
         self.model = self.model_wrapper.model
 
-    def init_llp_state(self, train_examples, verbose=True):
+    def init_llp_state(self, train_examples, verbose=True, zero_out_unlabeled_confidence=True):
         self.llp_state = self.create_empty_llp_state(train_examples=train_examples)
-        self.populate_llp_state(train_examples=train_examples, verbose=verbose)
+        train_dataset_with_metadata = self.convert_examples_to_dataset(train_examples, verbose=True)
+        train_dataloader = self.get_train_dataloader(
+            train_dataset_with_metadata=train_dataset_with_metadata,
+            use_eval_batch_size=True, do_override_labels=False, verbose=verbose,
+        )
+        self.populate_llp_state(
+            train_dataloader=train_dataloader,
+            verbose=verbose
+        )
+        if zero_out_unlabeled_confidence:
+            self.zero_out_unlabeled_confidence()
+        self.log_writer.write_entry("populate_logs", combine_dicts([
+            populate_logs(llp_state=self.llp_state, llp_params=self.llp_params),
+            {
+                "epoch": -1,
+            },
+        ]))
+        self.log_writer.flush()
 
     def create_empty_llp_state(self, train_examples):
         big_m_tensor = torch.empty([
@@ -95,20 +116,17 @@ class LLPRunner:
             all_label_confidence=all_label_confidence,
         )
 
-    def populate_llp_state(self, train_examples, verbose=True, zero_out_unlabeled=True):
-        train_dataset_with_metadata = self.convert_examples_to_dataset(train_examples, verbose=True)
-        train_dataloader = self.get_train_dataloader(
-            train_dataset_with_metadata=train_dataset_with_metadata,
-            use_eval_batch_size=True, do_override_labels=False, verbose=verbose,
-        )
+    def populate_llp_state(self, train_dataloader, verbose=True):
         self.model.eval()
         with torch.no_grad():
-            for batch, metadata in maybe_tqdm(train_dataloader, desc="Initializing big_m",
+            for batch, metadata in maybe_tqdm(train_dataloader, desc="Populating big_m",
                                               verbose=verbose):
                 batch = batch.to(self.device)
                 embedding = self.model.forward_batch(batch).embedding
                 self.llp_state.big_m_tensor[metadata["example_id"]] = embedding
         self.propagate_labels(verbose=verbose)
+
+    def zero_out_unlabeled_confidence(self):
         self.llp_state.all_label_confidence[self.llp_params.num_labeled:] = 0
 
     def run_train(self, train_examples, verbose=True):
@@ -116,28 +134,38 @@ class LLPRunner:
             examples=train_examples,
             verbose=verbose,
         )
+        train_global_state = TrainGlobalState()
         for _ in maybe_trange(int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
-            self.run_train_epoch(train_dataset_with_metadata, verbose=verbose)
+            self.run_train_epoch(
+                train_dataset_with_metadata=train_dataset_with_metadata,
+                train_global_state=train_global_state,
+                verbose=verbose,
+            )
 
     def run_train_val(self, train_examples, val_examples, verbose=True):
         train_dataset_with_metadata = self.convert_examples_to_dataset(
             examples=train_examples,
             verbose=verbose,
         )
+        train_global_state = TrainGlobalState()
         epoch_result_dict = OrderedDict()
         for i in maybe_trange(int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
-            self.run_train_epoch(train_dataset_with_metadata, verbose=verbose)
+            self.run_train_epoch(train_dataset_with_metadata, train_global_state, verbose=verbose)
             epoch_result = self.run_val(val_examples)
             del epoch_result["logits"]
             epoch_result["metrics"] = epoch_result["metrics"].asdict()
             epoch_result_dict[i] = epoch_result
         return epoch_result_dict
 
-    def run_train_epoch(self, train_dataset_with_metadata, verbose=True):
-        for _ in self.run_train_epoch_context(train_dataset_with_metadata, verbose=verbose):
+    def run_train_epoch(self, train_dataset_with_metadata, train_global_state, verbose=True):
+        for _ in self.run_train_epoch_context(
+                train_dataset_with_metadata=train_dataset_with_metadata,
+                train_global_state=train_global_state,
+                verbose=verbose):
             pass
 
-    def run_train_epoch_context(self, train_dataset_with_metadata, verbose=True):
+    def run_train_epoch_context(self, train_dataset_with_metadata, train_global_state,
+                                populate_after=True, verbose=True):
         self.model.train()
         train_epoch_state = TrainEpochState()
         train_dataloader = self.get_train_dataloader(
@@ -151,21 +179,35 @@ class LLPRunner:
                 batch=batch,
                 batch_metadata=batch_metadata,
                 train_epoch_state=train_epoch_state,
+                train_global_state=train_global_state,
             )
             yield step, batch, train_epoch_state
+        if populate_after:
+            self.populate_llp_state(
+                train_dataloader=train_dataloader,
+                verbose=verbose,
+            )
+            self.log_writer.write_entry("populate_logs", combine_dicts([
+                populate_logs(llp_state=self.llp_state, llp_params=self.llp_params),
+                {
+                    "epoch": train_global_state.epoch,
+                },
+            ]))
 
-    def run_train_step(self, step, batch, batch_metadata, train_epoch_state):
+    def run_train_step(self, step, batch, batch_metadata, train_epoch_state, train_global_state):
         batch = batch.to(self.device)
         loss, loss_details = self.compute_representation_loss(batch, batch_metadata)
         loss = self.complex_backpropagate(loss)
+        loss_val = loss.item()
 
-        train_epoch_state.tr_loss += loss.item()
+        train_epoch_state.tr_loss += loss_val
         train_epoch_state.nb_tr_examples += len(batch)
         train_epoch_state.nb_tr_steps += 1
         if (step + 1) % self.train_schedule.gradient_accumulation_steps == 0:
             self.optimizer_scheduler.step()
             self.model.zero_grad()
             train_epoch_state.global_step += 1
+            train_global_state.global_step += 1
 
         # Update memory bank
         with torch.no_grad():
@@ -175,6 +217,19 @@ class LLPRunner:
             * self.llp_state.big_m_tensor[batch_metadata["example_id"]]
             + self.llp_params.llp_mem_bank_t * new_embedding
         )
+
+        loss_details_logged = {
+            k: v.mean().item()
+            for k, v in loss_details.items()
+        }
+        self.log_writer.write_entry("loss_train", combine_dicts([{
+            "epoch": train_global_state.epoch,
+            "epoch_step": train_epoch_state.global_step,
+            "global_step": train_global_state.global_step,
+            "loss_val": loss_val,
+        }, loss_details_logged]))
+        self.log_writer.flush()
+
         return loss_details
 
     def compute_representation_loss(self, batch, batch_metadata):
@@ -373,3 +428,16 @@ def propagate_labels(llp_state, llp_params, num_classes, device, verbose=True):
         torch.from_numpy(pseudolabels).to(device)
     llp_state.all_label_confidence[llp_params.num_labeled:] = \
         torch.from_numpy(confidence).to(device)
+
+
+def populate_logs(llp_state, llp_params):
+    value_counts = pd.Series(
+        llp_state.all_labels_tensor.cpu().numpy()[llp_params.num_labeled:]
+    ).value_counts()
+    return {
+        "label_counts": {
+            k: int(v)
+            for k, v in value_counts.items()
+        },
+        "avg_confidence": float(llp_state.all_label_confidence[llp_params.num_labeled:].mean()),
+    }

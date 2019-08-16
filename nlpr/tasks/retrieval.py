@@ -10,6 +10,7 @@ from nlpr.tasks.lib.mnli import MnliTask
 from nlpr.tasks.lib.imdb import IMDBTask
 from nlpr.tasks.lib.mrpc import MrpcTask
 from nlpr.tasks.lib.cola import ColaTask
+from nlpr.tasks.lib.boolq import BoolQTask
 from nlpr.tasks.lib.shared import Task
 
 from pyutils.io import read_json
@@ -28,6 +29,7 @@ TASK_DICT = {
     "imdb": IMDBTask,
     "mrpc": MrpcTask,
     "cola": ColaTask,
+    "boolq": BoolQTask,
 }
 
 

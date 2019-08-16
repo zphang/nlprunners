@@ -61,7 +61,7 @@ class UDAParameters:
 class UDARunner:
     def __init__(self, task, model_wrapper, optimizer_scheduler, loss_criterion,
                  device, rparams: RunnerParameters, uda_params: UDAParameters,
-                 train_schedule: TrainSchedule, tb_writer):
+                 train_schedule: TrainSchedule, log_writer):
         self.task = task
         self.model_wrapper = model_wrapper
         self.optimizer_scheduler = optimizer_scheduler
@@ -70,7 +70,7 @@ class UDARunner:
         self.rparams = rparams
         self.uda_params = uda_params
         self.train_schedule = train_schedule
-        self.tb_writer = tb_writer
+        self.log_writer = log_writer
 
         # Convenience
         self.model = self.model_wrapper.model
@@ -91,15 +91,18 @@ class UDARunner:
                 sup_dataloader=sup_dataloader,
                 task_data=task_data,
             )
+            if self.uda_params.use_unsup:
+                log_data["unsup_indices"].append(
+                    [int(x) for x in unsup_dataloaders.metadata["unsup_indices"]])
+                log_data["unsup_aug_set"].append(
+                    [int(x) for x in unsup_dataloaders.metadata["unsup_aug_set"]])
+            self.log_writer.write_entry("misc", log_data)
             dataloader_triplet = self.form_dataloader_triplet(
                 sup_dataloader=sup_dataloader,
                 unsup_orig_loader=unsup_dataloaders.unsup_orig,
                 unsup_aug_loader=unsup_dataloaders.unsup_aug,
             )
             self.run_train_epoch(dataloader_triplet, train_global_state, verbose=verbose)
-            log_data["unsup_indices"].append(unsup_dataloaders.metadata["unsup_indices"])
-            log_data["unsup_aug_set"].append(unsup_dataloaders.metadata["unsup_aug_set"])
-        # Todo: log the log data!
 
     def run_train_fixed_step(self, task_data, num_steps, verbose=True):
         assert self.train_schedule.t_total == num_steps
@@ -116,17 +119,18 @@ class UDARunner:
             sup_dataloader=sup_dataloader,
             task_data=task_data,
         )
+        # Todo: log the log data!
+        if self.uda_params.use_unsup:
+            self.log_writer.write_entry("misc", {
+                "unsup_indices": [int(x) for x in unsup_dataloaders.metadata["unsup_indices"]],
+                "unsup_aug_set": [int(x) for x in unsup_dataloaders.metadata["unsup_aug_set"]],
+            })
         dataloader_triplet = self.form_dataloader_triplet(
             sup_dataloader=sup_dataloader,
             unsup_orig_loader=unsup_dataloaders.unsup_orig,
             unsup_aug_loader=unsup_dataloaders.unsup_aug,
         )
         self.run_train_epoch(dataloader_triplet, train_global_state, verbose=verbose)
-        # Todo: log the log data!
-        log_data = {
-            "unsup_indices": unsup_dataloaders.metadata["unsup_indices"],
-            "unsup_aug_set": unsup_dataloaders.metadata["unsup_aug_set"],
-        }
 
     def run_train_epoch(self, dataloader_triplet, train_global_state, verbose=True):
         for _ in self.run_train_epoch_context(dataloader_triplet, train_global_state, verbose=verbose):
@@ -189,14 +193,14 @@ class UDARunner:
             train_epoch_state.global_step += 1
             train_global_state.global_step += 1
 
-        self.tb_writer.add_scalars(
-            main_tag="Loss/train", tag_scalar_dict={
-                "sup": get_val(sup_loss),
-                "unsup": get_val(weighted_unsup_loss),
-                "total": get_val(loss),
-            }, global_step=train_global_state.global_step,
-        )
-        self.tb_writer.flush()
+        self.log_writer.write_entry("loss_train", {
+            "epoch": train_global_state.epoch,
+            "epoch_step": train_epoch_state.global_step,
+            "global_step": train_global_state.global_step,
+            "sup": get_val(sup_loss),
+            "unsup": get_val(weighted_unsup_loss),
+            "total": get_val(loss),
+        })
 
     def run_val(self, val_examples, verbose=True):
         if not self.rparams.local_rank == -1:

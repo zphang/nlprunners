@@ -1,9 +1,6 @@
 import os
 import time
 
-from torch.utils.tensorboard import SummaryWriter
-# Todo: optionally use logger
-
 
 def print_args(args):
     for k, v in vars(args).items():
@@ -49,6 +46,10 @@ class SilentTensorboardWriter:
         pass
 
 
+"""
+# from torch.utils.tensorboard import SummaryWriter
+# Todo: optionally use logger
+
 def get_tb_writer_with_unix_time(log_dir):
     return SummaryWriter(os.path.join(log_dir, f"{int(time.time())}"))
 
@@ -58,3 +59,4 @@ def simple_setup_tensorboard(use_tensorboard, output_dir):
         return get_tb_writer_with_unix_time(output_dir)
     else:
         return SilentTensorboardWriter
+"""

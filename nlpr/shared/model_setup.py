@@ -114,7 +114,7 @@ def resolve_warmup_steps(t_total, warmup_steps, warmup_proportion):
         raise RuntimeError()
     elif warmup_steps is None and warmup_proportion is not None:
         return warmup_proportion * t_total
-    elif warmup_steps is not None and warmup_proportion is Nne:
+    elif warmup_steps is not None and warmup_proportion is None:
         return warmup_steps
     else:
         raise RuntimeError()

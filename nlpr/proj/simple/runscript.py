@@ -8,7 +8,6 @@ import nlpr.shared.distributed as distributed
 import nlpr.shared.model_setup as model_setup
 import nlpr.shared.model_resolution as model_resolution
 import nlpr.shared.train_setup as train_setup
-import nlpr.shared.log_info as log_info
 import nlpr.tasks as tasks
 import nlpr.tasks.evaluate as evaluate
 import nlpr.proj.simple.runner as simple_runner
@@ -67,7 +66,7 @@ class RunConfiguration(zconf.RunConfig):
 
 
 def main(args):
-    device, n_gpu = initialization.quick_init(args=args, verbose=True)
+    quick_init_out = initialization.quick_init(args=args, verbose=True)
     task = tasks.create_task_from_config_path(config_path=args.task_config_path)
     for phase in ["train", "val", "test"]:
         if phase in task.path_dict:
@@ -90,7 +89,7 @@ def main(args):
             model=model_wrapper.model,
             state_dict=torch.load(args.model_path)
         )
-        model_wrapper.model.to(device)
+        model_wrapper.model.to(quick_init_out.device)
 
     train_examples = task.get_train_examples()
     num_train_examples = len(train_examples)
@@ -101,7 +100,7 @@ def main(args):
         num_train_epochs=args.num_train_epochs,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         per_gpu_train_batch_size=args.train_batch_size,
-        n_gpu=n_gpu,
+        n_gpu=quick_init_out.n_gpu,
     )
     print("t_total", train_schedule.t_total)
     loss_criterion = train_setup.resolve_loss_function(task_type=task.TASK_TYPE)
@@ -117,11 +116,7 @@ def main(args):
         model_wrapper=model_wrapper,
         optimizer_scheduler=optimizer_scheduler,
         fp16=args.fp16, fp16_opt_level=args.fp16_opt_level,
-        n_gpu=n_gpu, local_rank=args.local_rank,
-    )
-    tb_writer = log_info.simple_setup_tensorboard(
-        use_tensorboard=args.use_tensorboard,
-        output_dir=args.output_dir,
+        n_gpu=quick_init_out.n_gpu, local_rank=args.local_rank,
     )
     rparams = simple_runner.RunnerParameters(
         feat_spec=model_resolution.build_featurization_spec(
@@ -129,7 +124,7 @@ def main(args):
             max_seq_length=args.max_seq_length,
         ),
         local_rank=args.local_rank,
-        n_gpu=n_gpu,
+        n_gpu=quick_init_out.n_gpu,
         fp16=args.fp16,
         learning_rate=args.learning_rate,
         eval_batch_size=args.eval_batch_size,
@@ -140,37 +135,38 @@ def main(args):
         model_wrapper=model_wrapper,
         optimizer_scheduler=optimizer_scheduler,
         loss_criterion=loss_criterion,
-        device=device,
+        device=quick_init_out.device,
         rparams=rparams,
         train_schedule=train_schedule,
-        tb_writer=tb_writer,
+        log_writer=quick_init_out.log_writer,
     )
 
-    if args.do_train:
-        runner.run_train(train_examples)
+    with quick_init_out.log_writer.log_context():
+        if args.do_train:
+            runner.run_train(train_examples)
 
-    if args.do_save:
-        torch.save(
-            model_wrapper.model.state_dict(),
-            os.path.join(args.output_dir, "model.p")
-        )
+        if args.do_save:
+            torch.save(
+                model_wrapper.model.state_dict(),
+                os.path.join(args.output_dir, "model.p")
+            )
 
-    if args.do_val:
-        val_examples = task.get_val_examples()
-        results = runner.run_val(val_examples)
-        evaluate.write_val_results(
-            results=results,
-            output_dir=args.output_dir,
-            verbose=True,
-        )
+        if args.do_val:
+            val_examples = task.get_val_examples()
+            results = runner.run_val(val_examples)
+            evaluate.write_val_results(
+                results=results,
+                output_dir=args.output_dir,
+                verbose=True,
+            )
 
-    if args.do_test:
-        test_examples = task.get_test_examples()
-        logits = runner.run_test(test_examples)
-        evaluate.write_preds(
-            logits=logits,
-            output_path=os.path.join(args.output_dir, "test_preds.csv"),
-        )
+        if args.do_test:
+            test_examples = task.get_test_examples()
+            logits = runner.run_test(test_examples)
+            evaluate.write_preds(
+                logits=logits,
+                output_path=os.path.join(args.output_dir, "test_preds.csv"),
+            )
 
 
 if __name__ == "__main__":
