@@ -21,6 +21,7 @@ class FeaturizationSpec:
     pad_token_mask_id: int
     sequence_a_segment_id: int
     sequence_b_segment_id: int
+    sep_token_extra: bool
 
 
 class ExtendedDataClassMixin:

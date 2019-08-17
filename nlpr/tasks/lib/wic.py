@@ -56,21 +56,32 @@ class TokenizedExample(BaseTokenizedExample):
     label_id: int
 
     def featurize(self, tokenizer, feat_spec):
+        if feat_spec.sep_token_extra:
+            maybe_extra_sep = [tokenizer.sep_token]
+            maybe_extra_sep_segment_id = [feat_spec.sequence_a_segment_id]
+            special_tokens_count = 6  # CLS, SEP-SEP, SEP-SEP, SEP
+        else:
+            maybe_extra_sep = []
+            maybe_extra_sep_segment_id = []
+            special_tokens_count = 4  # CLS, SEP, SEP, SEP
+
         sent1_tokens, sent2_tokens = truncate_sequences(
             tokens_ls=[self.sent1_tokens, self.sent2_tokens],
-            max_length=feat_spec.max_seq_length - len(self.word) - 4,
+            max_length=feat_spec.max_seq_length - len(self.word) - special_tokens_count,
         )
 
         unpadded_tokens = (
-            self.word + [tokenizer.sep_token]
-            + sent1_tokens + [tokenizer.sep_token]
+            self.word + [tokenizer.sep_token] + maybe_extra_sep
+            + sent1_tokens + [tokenizer.sep_token] + maybe_extra_sep
             + sent2_tokens + [tokenizer.sep_token]
         )
         # Don't have a choice here -- just leave words as part of sent1
         unpadded_segment_ids = (
-                [0] * (len(self.word) + 1)
-                + [0] * (len(sent1_tokens) + 2)
-                + [1] * (len(sent2_tokens) + 1)
+                [feat_spec.sequence_a_segment_id] * (len(self.word) + 1)
+                + maybe_extra_sep_segment_id
+                + [feat_spec.sequence_a_segment_id] * (len(sent1_tokens) + 2)
+                + maybe_extra_sep_segment_id
+                + [feat_spec.sequence_b_segment_id] * (len(sent2_tokens) + 1)
         )
 
         unpadded_inputs = add_cls_token(

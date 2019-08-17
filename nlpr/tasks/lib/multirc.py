@@ -40,20 +40,35 @@ class TokenizedExample(BaseTokenizedExample):
     label_id: int
 
     def featurize(self, tokenizer, feat_spec):
+
+        if feat_spec.sep_token_extra:
+            maybe_extra_sep = [tokenizer.sep_token]
+            maybe_extra_sep_segment_id = [feat_spec.sequence_a_segment_id]
+            special_tokens_count = 4
+        else:
+            maybe_extra_sep = []
+            maybe_extra_sep_segment_id = []
+            special_tokens_count = 3
+
         paragraph = truncate_sequences(
             tokens_ls=[self.paragraph],
-            max_length=feat_spec.max_seq_length - 4 - len(self.question) - len(self.answer),
+            max_length=(
+                feat_spec.max_seq_length
+                - special_tokens_count
+                - len(self.question) - len(self.answer))
+            ,
         )[0]
         unpadded_inputs = add_cls_token(
             unpadded_tokens=(
                 paragraph
-                + self.question + [tokenizer.sep_token]
+                + self.question + [tokenizer.sep_token] + maybe_extra_sep
                 + self.answer + [tokenizer.sep_token],
             ),
             unpadded_segment_ids=(
-                [0] * len(paragraph)
-                + [1] * len(self.question) + [1]
-                + [1] * len(self.answer) + [1]
+                [feat_spec.sequence_a_segment_id] * len(paragraph)
+                + [feat_spec.sequence_a_segment_id] * (len(self.question) + 1)
+                + maybe_extra_sep_segment_id
+                + [feat_spec.sequence_b_segment_id] * (len(self.answer) + 1)
             ),
             tokenizer=tokenizer,
             feat_spec=feat_spec

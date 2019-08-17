@@ -51,7 +51,7 @@ class InputSet:
 
 
 def single_sentence_featurize(guid, input_tokens, label_id,
-                              tokenizer, feat_spec, data_row_class):
+                              tokenizer, feat_spec: FeaturizationSpec, data_row_class):
     unpadded_inputs = construct_single_input_tokens_and_segment_ids(
         input_tokens=input_tokens,
         tokenizer=tokenizer,
@@ -69,7 +69,7 @@ def single_sentence_featurize(guid, input_tokens, label_id,
 
 
 def double_sentence_featurize(guid, input_tokens_a, input_tokens_b, label_id,
-                              tokenizer, feat_spec, data_row_class):
+                              tokenizer, feat_spec: FeaturizationSpec, data_row_class):
     unpadded_inputs = construct_double_input_tokens_and_segment_ids(
         input_tokens_a=input_tokens_a,
         input_tokens_b=input_tokens_b,
@@ -88,36 +88,60 @@ def double_sentence_featurize(guid, input_tokens_a, input_tokens_b, label_id,
     )
 
 
-def construct_single_input_tokens_and_segment_ids(input_tokens, tokenizer, feat_spec):
+def construct_single_input_tokens_and_segment_ids(input_tokens, tokenizer,
+                                                  feat_spec: FeaturizationSpec):
+    if feat_spec.sep_token_extra:
+        maybe_extra_sep = [tokenizer.sep_token]
+        maybe_extra_sep_segment_id = [feat_spec.sequence_a_segment_id]
+        special_tokens_count = 3  # CLS, SEP-SEP  (ok this is a little weird, let's leave it for now)
+    else:
+        maybe_extra_sep = []
+        maybe_extra_sep_segment_id = []
+        special_tokens_count = 2  # CLS, SEP
+
     input_tokens, = truncate_sequences(
         tokens_ls=[input_tokens],
-        max_length=feat_spec.max_seq_length - 3,
+        max_length=feat_spec.max_seq_length - special_tokens_count,
     )
 
     return add_cls_token(
-        unpadded_tokens=input_tokens + [tokenizer.sep_token],
+        unpadded_tokens=input_tokens + [tokenizer.sep_token] + maybe_extra_sep,
         unpadded_segment_ids=(
             [feat_spec.sequence_a_segment_id]
             + [feat_spec.sequence_a_segment_id] * (len(input_tokens))
+            + maybe_extra_sep_segment_id
         ),
         tokenizer=tokenizer,
         feat_spec=feat_spec,
     )
 
 
-def construct_double_input_tokens_and_segment_ids(input_tokens_a, input_tokens_b,
-                                                  tokenizer, feat_spec):
+def construct_double_input_tokens_and_segment_ids(input_tokens_a, input_tokens_b, tokenizer,
+                                                  feat_spec: FeaturizationSpec):
+
+    if feat_spec.sep_token_extra:
+        maybe_extra_sep = [tokenizer.sep_token]
+        maybe_extra_sep_segment_id = [feat_spec.sequence_a_segment_id]
+        special_tokens_count = 4  # CLS, SEP-SEP, SEP
+    else:
+        maybe_extra_sep = []
+        maybe_extra_sep_segment_id = []
+        special_tokens_count = 3  # CLS, SEP, SEP
+
     input_tokens_a, input_tokens_b = truncate_sequences(
         tokens_ls=[input_tokens_a, input_tokens_b],
-        max_length=feat_spec.max_seq_length - 3,
+        max_length=feat_spec.max_seq_length - special_tokens_count,
     )
+
     unpadded_tokens = (
         input_tokens_a + [tokenizer.sep_token]
+        + maybe_extra_sep
         + input_tokens_b + [tokenizer.sep_token]
     )
     unpadded_segment_ids = (
         [feat_spec.sequence_a_segment_id] * len(input_tokens_a)
         + [feat_spec.sequence_a_segment_id]
+        + maybe_extra_sep_segment_id
         + [feat_spec.sequence_b_segment_id] * len(input_tokens_b)
         + [feat_spec.sequence_b_segment_id]
     )
@@ -129,7 +153,8 @@ def construct_double_input_tokens_and_segment_ids(input_tokens_a, input_tokens_b
     )
 
 
-def add_cls_token(unpadded_tokens, unpadded_segment_ids, tokenizer, feat_spec):
+def add_cls_token(unpadded_tokens, unpadded_segment_ids, tokenizer,
+                  feat_spec: FeaturizationSpec):
     if feat_spec.cls_token_at_end:
         return UnpaddedInputs(
             unpadded_tokens=unpadded_tokens + [tokenizer.cls_token],
@@ -146,7 +171,7 @@ def add_cls_token(unpadded_tokens, unpadded_segment_ids, tokenizer, feat_spec):
 
 def create_generic_data_row_from_tokens_and_segments(
         guid, unpadded_tokens, unpadded_segment_ids, label_id,
-        tokenizer, feat_spec, data_row_class):
+        tokenizer, feat_spec: FeaturizationSpec, data_row_class):
     input_set = create_input_set_from_tokens_and_segments(
         unpadded_tokens=unpadded_tokens,
         unpadded_segment_ids=unpadded_segment_ids,
@@ -164,7 +189,7 @@ def create_generic_data_row_from_tokens_and_segments(
 
 
 def create_input_set_from_tokens_and_segments(unpadded_tokens, unpadded_segment_ids,
-                                              tokenizer, feat_spec):
+                                              tokenizer, feat_spec: FeaturizationSpec):
     assert len(unpadded_tokens) == len(unpadded_segment_ids)
     input_ids = tokenizer.convert_tokens_to_ids(unpadded_tokens)
     input_mask = [1] * len(input_ids)
@@ -177,7 +202,8 @@ def create_input_set_from_tokens_and_segments(unpadded_tokens, unpadded_segment_
     return input_set
 
 
-def pad_features_with_feat_spec(input_ids, input_mask, unpadded_segment_ids, feat_spec):
+def pad_features_with_feat_spec(input_ids, input_mask, unpadded_segment_ids,
+                                feat_spec: FeaturizationSpec):
     return InputSet(
         input_ids=pad_single_with_feat_spec(
             ls=input_ids, feat_spec=feat_spec, pad_idx=feat_spec.pad_token_id,
@@ -191,7 +217,7 @@ def pad_features_with_feat_spec(input_ids, input_mask, unpadded_segment_ids, fea
     )
 
 
-def pad_single_with_feat_spec(ls, feat_spec, pad_idx, check=True):
+def pad_single_with_feat_spec(ls, feat_spec: FeaturizationSpec, pad_idx: int, check=True):
     return pad_to_max_seq_length(
         ls=ls,
         max_seq_length=feat_spec.max_seq_length,

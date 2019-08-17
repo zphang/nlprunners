@@ -24,6 +24,7 @@ class Example(BaseExample):
 
     def to_feature_list(self, tokenizer, feat_spec: FeaturizationSpec,
                         max_query_length, doc_stride, set_type, mask_padding_with_zero=True):
+        # I think we're not even doing truncation ??
         features_list = []
         is_training = set_type == "train"
         query_tokens = tokenizer.tokenize(self.question_text)
@@ -102,6 +103,10 @@ class Example(BaseExample):
             tokens.append(tokenizer.sep_token)
             segment_ids.append(feat_spec.sequence_a_segment_id)
             p_mask.append(1)
+            if feat_spec.sep_token_extra:
+                tokens.append(tokenizer.sep_token)
+                segment_ids.append(feat_spec.sequence_a_segment_id)
+                p_mask.append(1)
 
             # Paragraph
             for i in range(doc_span.length):

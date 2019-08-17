@@ -33,6 +33,7 @@ class TokenizedExample(BaseTokenizedExample):
     label: float
 
     def featurize(self, tokenizer, feat_spec):
+        # Label not label_id, otherwise can use double_sentence_featurize
         unpadded_inputs = construct_double_input_tokens_and_segment_ids(
             input_tokens_a=self.text_a,
             input_tokens_b=self.text_b,
@@ -53,6 +54,7 @@ class TokenizedExample(BaseTokenizedExample):
             label=self.label,
             tokens=unpadded_inputs.unpadded_tokens,
         )
+
 
 
 @dataclass

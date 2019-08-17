@@ -40,24 +40,42 @@ class TokenizedExample(BaseTokenizedExample):
     label_id: int
 
     def featurize(self, tokenizer, feat_spec):
+
+        if feat_spec.sep_token_extra:
+            maybe_extra_sep = [tokenizer.sep_token]
+            maybe_extra_sep_segment_id = [feat_spec.sequence_a_segment_id]
+            special_tokens_count = 6  # CLS, SEP-SEP, SEP-SEP, SEP
+        else:
+            maybe_extra_sep = []
+            maybe_extra_sep_segment_id = []
+            special_tokens_count = 4  # CLS, SEP, SEP, SEP
+
         input_premise, input_choice1 = truncate_sequences(
             tokens_ls=[self.input_premise, self.input_choice1],
-            max_length=feat_spec.max_seq_length - 5,
+            max_length=feat_spec.max_seq_length - special_tokens_count - 1,
+            # -1 for self.question
         )
         input_premise, input_choice2 = truncate_sequences(
             tokens_ls=[self.input_premise, self.input_choice2],
-            max_length=feat_spec.max_seq_length - 5,
+            max_length=feat_spec.max_seq_length - special_tokens_count - 1,
+            # -1 for self.question
         )
 
         unpadded_inputs_1 = add_cls_token(
             unpadded_tokens=(
-                [self.question] + [tokenizer.sep_token]
-                + input_premise + [tokenizer.sep_token]
+                [self.question] + [tokenizer.sep_token] + maybe_extra_sep
+                + input_premise + [tokenizer.sep_token] + maybe_extra_sep
                 + input_choice1 + [tokenizer.sep_token]
             ),
             unpadded_segment_ids=(
-                [0] * (len(input_premise) + 3)  # includes question and 2 SEPs
-                + [1] * (len(input_choice1) + 1)  # includes SEP
+                # question + sep(s)
+                [feat_spec.sequence_a_segment_id] * 2
+                + maybe_extra_sep_segment_id
+                # premise + sep(s)
+                + [feat_spec.sequence_a_segment_id] * (len(input_premise) + 1)
+                + maybe_extra_sep_segment_id
+                # choice + sep
+                + [feat_spec.sequence_b_segment_id] * (len(input_choice1) + 1)
             ),
             tokenizer=tokenizer,
             feat_spec=feat_spec,
@@ -65,13 +83,19 @@ class TokenizedExample(BaseTokenizedExample):
 
         unpadded_inputs_2 = add_cls_token(
             unpadded_tokens=(
-                [self.question] + [tokenizer.sep_token]
-                + input_premise + [tokenizer.sep_token]
+                [self.question] + [tokenizer.sep_token] + maybe_extra_sep
+                + input_premise + [tokenizer.sep_token] + maybe_extra_sep
                 + input_choice2 + [tokenizer.sep_token]
             ),
             unpadded_segment_ids=(
-                [0] * (len(input_premise) + 3)  # includes question and 2 SEPs
-                + [1] * (len(input_choice2) + 1)  # includes SEP
+                # question + sep(s)
+                [feat_spec.sequence_a_segment_id] * 2
+                + maybe_extra_sep_segment_id
+                # premise + sep(s)
+                + [feat_spec.sequence_a_segment_id] * (len(input_premise) + 1)
+                + maybe_extra_sep_segment_id
+                # choice + sep
+                + [feat_spec.sequence_b_segment_id] * (len(input_choice2) + 1)
             ),
             tokenizer=tokenizer,
             feat_spec=feat_spec,
