@@ -1,4 +1,4 @@
-from nlpr.tasks import MnliTask, BoolQTask
+from nlpr.tasks import MnliTask, BoolQTask, IMDBTask
 
 from pyutils.io import read_file_lines, read_json
 
@@ -6,8 +6,10 @@ from pyutils.io import read_file_lines, read_json
 def load_task_data(uda_config):
     if uda_config["task"] == "mnli":
         return load_mnli_data(uda_config)
-    if uda_config["task"] == "boolq":
+    elif uda_config["task"] == "boolq":
         return load_boolq_data(uda_config)
+    elif uda_config["task"] == "imdb":
+        return load_imdb_data(uda_config)
     else:
         raise KeyError(uda_config["task"])
 
@@ -119,6 +121,57 @@ def load_mnli_data(uda_config, verbose=True):
             prefix=f"aug-{i}",
         )
         assert len(aug_data) == len(task_data["unsup"]["orig"])
+        task_data["unsup"]["aug"].append(aug_data)
+
+    return task, task_data
+
+
+def load_imdb_data(uda_config, length_check=True):
+    task = IMDBTask("imdb", path_dict=uda_config["sup"])
+    task_data = {
+        "sup": {
+            "train": task.get_train_examples(),
+            "val": task.get_val_examples(),
+            "test": [],
+        },
+        "unsup": {
+            "orig": {},
+            "aug": [],
+        },
+    }
+
+    def _load_imdb_from_files(input_text_path, prefix="unsup-"):
+        unsup_examples = []
+        input_text_lines = read_file_lines(input_text_path)
+        for j, line in enumerate(input_text_lines):
+            unsup_examples.append(IMDBTask.Example(
+                guid=f"{prefix}-{j}",
+                input_text=line.strip(),
+                label=IMDBTask.LABELS[-1],
+            ))
+        return unsup_examples
+
+    task_data["unsup"]["orig"] = _load_imdb_from_files(
+        input_text_path=uda_config["unsup"]["orig"]["input_text"],
+    )
+    for i, unsup_config in enumerate(uda_config["unsup"]["aug"]):
+        aug_data = _load_imdb_from_files(
+            input_text_path=unsup_config["input_text"],
+            prefix=f"aug-{i}",
+        )
+        assert len(aug_data) == len(task_data["unsup"]["orig"])
+        if length_check:
+            reverted = 0
+            for j in range(len(aug_data)):
+                length_ratio = (
+                    len(aug_data[j].input_text)
+                    / len(task_data["unsup"]["orig"][j].input_text)
+                )
+                if length_ratio < 0.5 or length_ratio > 1.5:
+                    aug_data[j] = task_data["unsup"]["orig"][j]
+                    reverted += 1
+            print(f"[{i}]Reverted: {reverted}, Augmented: [{1 - (reverted / len(aug_data))}]")
+
         task_data["unsup"]["aug"].append(aug_data)
 
     return task, task_data

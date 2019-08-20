@@ -87,7 +87,7 @@ def build_featurization_spec(model_type, max_seq_length):
             pad_token_id=0,
             pad_token_mask_id=0,
             sequence_a_segment_id=0,
-            sequence_b_segment_id=1,
+            sequence_b_segment_id=0,  # RoBERTa has no token_type_ids
             sep_token_extra=False,
         )
     elif model_arch == ModelArchitectures.ROBERTA:
@@ -104,7 +104,7 @@ def build_featurization_spec(model_type, max_seq_length):
             pad_token_id=1,  # Roberta uses pad_token_id = 1
             pad_token_mask_id=0,
             sequence_a_segment_id=0,
-            sequence_b_segment_id=1,
+            sequence_b_segment_id=0,  # RoBERTa has no token_type_ids
             sep_token_extra=True,
         )
     else:

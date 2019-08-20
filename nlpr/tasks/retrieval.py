@@ -11,6 +11,13 @@ from nlpr.tasks.lib.imdb import IMDBTask
 from nlpr.tasks.lib.mrpc import MrpcTask
 from nlpr.tasks.lib.cola import ColaTask
 from nlpr.tasks.lib.boolq import BoolQTask
+from nlpr.tasks.lib.qqp import QqpTask
+from nlpr.tasks.lib.qnli import QnliTask
+from nlpr.tasks.lib.snli import SnliTask
+from nlpr.tasks.lib.squad import SquadTask
+from nlpr.tasks.lib.sst import SstTask
+from nlpr.tasks.lib.stsb import StsbTask
+from nlpr.tasks.lib.wnli import WnliTask
 from nlpr.tasks.lib.shared import Task
 
 from pyutils.io import read_json
@@ -30,6 +37,13 @@ TASK_DICT = {
     "mrpc": MrpcTask,
     "cola": ColaTask,
     "boolq": BoolQTask,
+    "qqp": QqpTask,
+    "qnli": QnliTask,
+    "snli": SnliTask,
+    "squad": SquadTask,
+    "sst": SstTask,
+    "stsb": StsbTask,
+    "wnli": WnliTask,
 }
 
 

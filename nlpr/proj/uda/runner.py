@@ -19,7 +19,7 @@ from nlpr.shared.runner import (
 from nlpr.shared.modeling import forward_batch_basic
 import nlpr.tasks.evaluate as evaluate
 from nlpr.proj.uda import uda_ops
-from nlpr.shared.torch_utils import get_val
+from nlpr.shared.torch_utils import get_val, compute_pred_entropy_clean
 
 
 @dataclass
@@ -81,28 +81,31 @@ class UDARunner:
             task_data=task_data,
             verbose=verbose,
         )
-        log_data = {
-            "unsup_indices": [],
-            "unsup_aug_set": [],
-        }
 
-        for _ in maybe_trange(int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
+        for epoch_i in maybe_trange(int(self.train_schedule.num_train_epochs),
+                                    desc="Epoch", verbose=verbose):
+            train_global_state.epoch = epoch_i
             unsup_dataloaders = self.get_unsup_dataloaders(
                 sup_dataloader=sup_dataloader,
                 task_data=task_data,
             )
             if self.uda_params.use_unsup:
-                log_data["unsup_indices"].append(
-                    [int(x) for x in unsup_dataloaders.metadata["unsup_indices"]])
-                log_data["unsup_aug_set"].append(
-                    [int(x) for x in unsup_dataloaders.metadata["unsup_aug_set"]])
-            self.log_writer.write_entry("misc", log_data)
+                self.log_writer.write_entry("misc", {
+                    "unsup_indices": [int(x) for x in unsup_dataloaders.metadata["unsup_indices"]],
+                    "unsup_aug_set": [int(x) for x in unsup_dataloaders.metadata["unsup_aug_set"]],
+                })
+                self.log_writer.flush()
             dataloader_triplet = self.form_dataloader_triplet(
                 sup_dataloader=sup_dataloader,
                 unsup_orig_loader=unsup_dataloaders.unsup_orig,
                 unsup_aug_loader=unsup_dataloaders.unsup_aug,
             )
             self.run_train_epoch(dataloader_triplet, train_global_state, verbose=verbose)
+            results = self.run_val(val_examples=self.task.get_val_examples())
+            self.log_writer.write_entry("val_metric", {
+                "epoch": train_global_state.epoch,
+                "metric": results["metrics"].asdict(),
+            })
 
     def run_train_fixed_step(self, task_data, num_steps, verbose=True):
         assert self.train_schedule.t_total == num_steps
@@ -125,6 +128,7 @@ class UDARunner:
                 "unsup_indices": [int(x) for x in unsup_dataloaders.metadata["unsup_indices"]],
                 "unsup_aug_set": [int(x) for x in unsup_dataloaders.metadata["unsup_aug_set"]],
             })
+            self.log_writer.flush()
         dataloader_triplet = self.form_dataloader_triplet(
             sup_dataloader=sup_dataloader,
             unsup_orig_loader=unsup_dataloaders.unsup_orig,
@@ -161,7 +165,7 @@ class UDARunner:
 
     def run_train_step(self, step, batch_triplet, train_epoch_state, train_global_state):
         example_count = len(batch_triplet.sup)
-        sup_loss = uda_ops.sup_train_step(
+        sup_loss, sup_logits = uda_ops.sup_train_step(
             model=self.model,
             sup_batch=batch_triplet.sup[0].to(self.device),
             task=self.task,
@@ -171,7 +175,7 @@ class UDARunner:
         )
         if self.uda_params.use_unsup:
             example_count += len(batch_triplet.unsup_orig[0])
-            unsup_loss = uda_ops.unsup_train_step(
+            unsup_loss, unsup_orig_logits, unsup_aug_logits = uda_ops.unsup_train_step(
                 model=self.model,
                 unsup_orig_batch=batch_triplet.unsup_orig[0].to(self.device),
                 unsup_aug_batch=batch_triplet.unsup_aug[0].to(self.device),
@@ -180,6 +184,7 @@ class UDARunner:
             weighted_unsup_loss = self.uda_params.uda_coeff * unsup_loss
             loss = sup_loss + weighted_unsup_loss
         else:
+            unsup_orig_logits, unsup_aug_logits = None, None
             weighted_unsup_loss = 0
             loss = sup_loss
         loss = self.complex_backpropagate(loss)
@@ -193,14 +198,20 @@ class UDARunner:
             train_epoch_state.global_step += 1
             train_global_state.global_step += 1
 
-        self.log_writer.write_entry("loss_train", {
+        log_data = {
             "epoch": train_global_state.epoch,
             "epoch_step": train_epoch_state.global_step,
             "global_step": train_global_state.global_step,
             "sup": get_val(sup_loss),
             "unsup": get_val(weighted_unsup_loss),
             "total": get_val(loss),
-        })
+            "sup_pred_entropy": compute_pred_entropy_clean(sup_logits),
+        }
+        if self.uda_params.use_unsup:
+            log_data["unsup_orig_pred_entropy"] = compute_pred_entropy_clean(unsup_orig_logits)
+            log_data["unsup_aug_pred_entropy"] = compute_pred_entropy_clean(unsup_aug_logits)
+        self.log_writer.write_entry("loss_train", log_data)
+        self.log_writer.flush()
 
     def run_val(self, val_examples, verbose=True):
         if not self.rparams.local_rank == -1:

@@ -196,7 +196,7 @@ class LLPRunner:
 
     def run_train_step(self, step, batch, batch_metadata, train_epoch_state, train_global_state):
         batch = batch.to(self.device)
-        loss, loss_details = self.compute_representation_loss(batch, batch_metadata)
+        loss, loss_details, model_output = self.compute_representation_loss(batch, batch_metadata)
         loss = self.complex_backpropagate(loss)
         loss_val = loss.item()
 
@@ -227,19 +227,20 @@ class LLPRunner:
             "epoch_step": train_epoch_state.global_step,
             "global_step": train_global_state.global_step,
             "loss_val": loss_val,
+            "pred_entropy": torch_utils.compute_pred_entropy_clean(model_output.logits)
         }, loss_details_logged]))
         self.log_writer.flush()
 
         return loss_details
 
     def compute_representation_loss(self, batch, batch_metadata):
-        output = self.model.forward_batch(batch, normalize_embedding=False)
+        model_output = self.model.forward_batch(batch, normalize_embedding=False)
 
         weight = self.llp_state.all_label_confidence[batch_metadata["example_id"]]
-        per_example_pred_loss = F.cross_entropy(output.logits, batch.label_ids, reduction="none")
+        per_example_pred_loss = F.cross_entropy(model_output.logits, batch.label_ids, reduction="none")
         if self.llp_params.llp_compute_global_agg_loss_mode == "v1":
             per_example_global_agg_loss = llp_representation.compute_global_agg_loss(
-                embedding=torch_utils.normalize_embedding_tensor(output.embedding),
+                embedding=torch_utils.normalize_embedding_tensor(model_output.embedding),
                 label_ids=batch.label_ids,
                 big_m_tensor=self.llp_state.big_m_tensor,
                 all_labels_tensor=self.llp_state.all_labels_tensor,
@@ -247,7 +248,7 @@ class LLPRunner:
             )
         elif self.llp_params.llp_compute_global_agg_loss_mode == "v2":
             per_example_global_agg_loss = llp_representation.compute_global_agg_loss_v2(
-                embedding=torch_utils.normalize_embedding_tensor(output.embedding),
+                embedding=torch_utils.normalize_embedding_tensor(model_output.embedding),
                 label_ids=batch.label_ids,
                 big_m_tensor=self.llp_state.big_m_tensor,
                 all_labels_tensor=self.llp_state.all_labels_tensor,
@@ -256,7 +257,7 @@ class LLPRunner:
             )
         else:
             raise KeyError(self.llp_params.llp_compute_global_agg_loss_mode)
-        per_example_embedding_norm_loss = torch_utils.embedding_norm_loss(output.embedding)
+        per_example_embedding_norm_loss = torch_utils.embedding_norm_loss(model_output.embedding)
 
         per_example_representation_loss = (
             per_example_pred_loss
@@ -270,7 +271,7 @@ class LLPRunner:
             "per_example_global_agg_loss": per_example_global_agg_loss,
             "per_example_embedding_norm_loss": per_example_embedding_norm_loss,
         }
-        return representation_loss, loss_details
+        return representation_loss, loss_details, model_output
 
     def propagate_labels(self, verbose=True):
         propagate_labels(

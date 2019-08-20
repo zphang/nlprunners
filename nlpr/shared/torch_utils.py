@@ -16,3 +16,14 @@ def get_val(x):
         return x.item()
     else:
         return x
+
+
+def compute_pred_entropy(logits):
+    # logits are pre softmax
+    p = F.softmax(logits, dim=-1)
+    log_p = F.log_softmax(logits, dim=-1)
+    return -(p * log_p).sum(dim=-1).mean()
+
+
+def compute_pred_entropy_clean(logits):
+    return float(compute_pred_entropy(logits).item())

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import List
 
 from .shared import (
-    read_json_lines, Task, single_sentence_featurize, TaskTypes,
+    read_json_lines, Task, double_sentence_featurize, TaskTypes
 )
 from ..core import BaseExample, BaseTokenizedExample, BaseDataRow, BatchMixin, labels_to_bimap
 
@@ -11,27 +11,31 @@ from ..core import BaseExample, BaseTokenizedExample, BaseDataRow, BatchMixin, l
 @dataclass
 class Example(BaseExample):
     guid: str
-    text: str
+    input_premise: str
+    input_hypothesis: str
     label: str
 
     def tokenize(self, tokenizer):
         return TokenizedExample(
             guid=self.guid,
-            text=tokenizer.tokenize(self.text),
-            label_id=SstTask.LABEL_BIMAP.a[self.label],
+            input_premise=tokenizer.tokenize(self.input_premise),
+            input_hypothesis=tokenizer.tokenize(self.input_hypothesis),
+            label_id=QnliTask.LABEL_BIMAP.a[self.label],
         )
 
 
 @dataclass
 class TokenizedExample(BaseTokenizedExample):
     guid: str
-    text: List
+    input_premise: List
+    input_hypothesis: List
     label_id: int
 
     def featurize(self, tokenizer, feat_spec):
-        return single_sentence_featurize(
+        return double_sentence_featurize(
             guid=self.guid,
-            input_tokens=self.text,
+            input_tokens_a=self.input_premise,
+            input_tokens_b=self.input_hypothesis,
             label_id=self.label_id,
             tokenizer=tokenizer,
             feat_spec=feat_spec,
@@ -71,14 +75,14 @@ class Batch(BatchMixin):
         )
 
 
-class SstTask(Task):
+class QnliTask(Task):
     Example = Example
     TokenizedExample = Example
     DataRow = DataRow
     Batch = Batch
 
     TASK_TYPE = TaskTypes.CLASSIFICATION
-    LABELS = ["0", "1"]
+    LABELS = ["entailment", "not_entailment"]
     LABEL_BIMAP = labels_to_bimap(LABELS)
 
     def get_train_examples(self):
@@ -96,7 +100,8 @@ class SstTask(Task):
         for (i, line) in enumerate(lines):
             examples.append(Example(
                 guid="%s-%s" % (set_type, i),
-                text=line["text_a"],
+                input_premise=line["text_a"],
+                input_hypothesis=line["text_b"],
                 label=line["label"] if set_type != "test" else cls.LABELS[-1],
             ))
         return examples

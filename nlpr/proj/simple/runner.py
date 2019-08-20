@@ -18,6 +18,7 @@ from nlpr.shared.runner import (
 from nlpr.shared.modeling import forward_batch_basic
 from nlpr.shared.train_setup import TrainSchedule
 import nlpr.tasks.evaluate as evaluate
+from nlpr.shared.torch_utils import compute_pred_entropy_clean
 
 
 @dataclass
@@ -56,6 +57,11 @@ class SimpleTaskRunner:
                 maybe_trange(int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
             train_global_state.epoch = epoch_i
             self.run_train_epoch(train_dataloader, train_global_state)
+            results = self.run_val(val_examples=self.task.get_val_examples())
+            self.log_writer.write_entry("val_metric", {
+                "epoch": train_global_state.epoch,
+                "metric": results["metrics"].asdict(),
+            })
 
     def run_train_val(self, train_examples, val_examples, verbose=True):
         epoch_result_dict = col.OrderedDict()
@@ -116,6 +122,7 @@ class SimpleTaskRunner:
             "epoch_step": train_epoch_state.global_step,
             "global_step": train_global_state.global_step,
             "loss_val": loss_val,
+            "pred_entropy": compute_pred_entropy_clean(logits)
         })
 
     def run_val(self, val_examples, verbose=True):

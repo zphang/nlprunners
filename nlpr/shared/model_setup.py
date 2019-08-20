@@ -3,6 +3,8 @@ import torch.nn as nn
 
 import pytorch_transformers
 
+from nlpr.shared.model_resolution import ModelArchitectures
+
 
 class ModelWrapper:
     def __init__(self, model, tokenizer):
@@ -14,9 +16,16 @@ def simple_model_setup(model_type, model_class_spec, config_path, tokenizer_path
     config = model_class_spec.config_class.from_json_file(config_path)
     config.num_labels = len(task.LABELS)
     model = model_class_spec.model_class(config)
-    if "-cased" in model_type:
-        do_lower_case = False
-    elif "-uncased" in model_type:
+    model_arch = ModelArchitectures.from_model_type(model_type)
+    if model_arch in [ModelArchitectures.BERT]:
+        if "-cased" in model_type:
+            do_lower_case = False
+        elif "-uncased" in model_type:
+            do_lower_case = True
+        else:
+            raise RuntimeError(model_type)
+    elif "-uncased" in model_type or model_arch in [
+            ModelArchitectures.XLNET, ModelArchitectures.XLM, ModelArchitectures.ROBERTA]:
         do_lower_case = True
     else:
         raise RuntimeError(model_type)

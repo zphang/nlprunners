@@ -4,22 +4,26 @@ import torch
 import torch.nn.functional as F
 from nlpr.shared.modeling import forward_batch_basic
 
+from zproto.zlogv1 import void_logger
+
 
 def sup_train_step(model, sup_batch,
                    task, global_step, train_schedule, uda_params):
     # Compute logits, logprobs
     sup_logits = forward_batch_basic(model=model, batch=sup_batch, omit_label_ids=True)[0]
 
-    return compute_sup_loss(
+    sup_loss = compute_sup_loss(
         sup_logits=sup_logits,
         label_ids=sup_batch.label_ids,
         task=task, global_step=global_step,
         train_schedule=train_schedule, uda_params=uda_params,
     )
+    return sup_loss, sup_logits
 
 
 def compute_sup_loss(sup_logits, label_ids,
-                     task, global_step, train_schedule, uda_params):
+                     task, global_step, train_schedule, uda_params,
+                     zlogger=void_logger):
     # Compute cross entropy (why manually? to get the mask I guess)
     per_example_loss = F.cross_entropy(sup_logits, label_ids, reduction="none")
     # Create mask-template
@@ -47,6 +51,9 @@ def compute_sup_loss(sup_logits, label_ids,
         larger_than_threshold = correct_label_probs > tsa_threshold
         loss_mask = loss_mask * (1 - larger_than_threshold.float())
 
+        zlogger.write_entry("tsa", {"threshold": float(tsa_threshold)})
+        zlogger.write_entry("tsa", {"loss_mask": float(loss_mask.mean().item())})
+
     # IMPORTANT: Don't backprop through the mask
     loss_mask = loss_mask.detach()
     per_example_loss = per_example_loss * loss_mask
@@ -61,11 +68,12 @@ def unsup_train_step(model, unsup_orig_batch, unsup_aug_batch, uda_params):
     unsup_orig_logits = forward_batch_basic(model=model, batch=unsup_orig_batch, omit_label_ids=True)[0]
     unsup_aug_logits = forward_batch_basic(model=model, batch=unsup_aug_batch, omit_label_ids=True)[0]
 
-    return compute_unsup_loss(
+    unsup_loss = compute_unsup_loss(
         unsup_orig_logits=unsup_orig_logits,
         unsup_aug_logits=unsup_aug_logits,
         uda_params=uda_params,
     )
+    return unsup_loss, unsup_orig_logits, unsup_aug_logits
 
 
 def compute_unsup_loss(unsup_orig_logits, unsup_aug_logits, uda_params):
