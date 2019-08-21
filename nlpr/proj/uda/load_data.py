@@ -1,3 +1,4 @@
+import nlpr.tasks as tasks
 from nlpr.tasks import MnliTask, BoolQTask, IMDBTask
 
 from pyutils.io import read_file_lines, read_json
@@ -16,6 +17,66 @@ def load_task_data(uda_config):
 
 def load_task_data_from_path(uda_config_path):
     return load_task_data(read_json(uda_config_path))
+
+
+def create_examples_from_paths(path_dict, task_class, prefix="unsup-"):
+    lines_dict = {
+        field: read_file_lines(path)
+        for field, path in path_dict
+    }
+    length = len(list(lines_dict.values())[0])
+    unsup_examples = []
+    for i in range(length):
+        examples_fields_dict = {
+            "guid": f"{prefix}-{j}",
+            "label": task_class.LABELS[-1],
+        }
+        for key, lines in lines_dict.items():
+            examples_fields_dict[key] = lines.strip()
+        unsup_examples.append(task_class.Example(**examples_fields_dict))
+    return unsup_examples
+
+
+def load_single_task_data(uda_config, verbose=True):
+    task_class = tasks.get_task_class(uda_config["task_name"])
+    task = task_class(name=uda_config["task_name"], path_dict=uda_config["sup"])
+    if verbose:
+        print("SUP:")
+        for k, v in task.path_dict.items():
+            print(f"  [{k}]: {v}")
+
+    task_data = {
+        "sup": {
+            "train": task.get_train_examples(),
+            "val": task.get_val_examples(),
+            "test": task.get_test_examples(),
+        },
+        "unsup": {
+            "orig": {},
+            "aug": [],
+        },
+    }
+
+    task_data["unsup"]["orig"] = create_examples_from_paths(
+        path_dict=uda_config["unsup"]["orig"],
+        task_class=task_class,
+        prefix="orig",
+    )
+    if verbose:
+        print("UNSUP:")
+    for i, unsup_config in enumerate(uda_config["unsup"]["aug"]):
+        if verbose:
+            for k, v in unsup_config.items():
+                print(f"  [{k}]: {v}")
+        aug_data = create_examples_from_paths(
+            path_dict=unsup_config,
+            task_class=task_class,
+            prefix="aug",
+        )
+        assert len(aug_data) == len(task_data["unsup"]["orig"])
+        task_data["unsup"]["aug"].append(aug_data)
+
+    return task, task_data
 
 
 def load_boolq_data(uda_config, verbose=True):

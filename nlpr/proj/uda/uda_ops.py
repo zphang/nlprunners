@@ -4,11 +4,12 @@ import torch
 import torch.nn.functional as F
 from nlpr.shared.modeling import forward_batch_basic
 
-from zproto.zlogv1 import void_logger
+import zproto.zlogv1 as zlogv1
 
 
 def sup_train_step(model, sup_batch,
-                   task, global_step, train_schedule, uda_params):
+                   task, global_step, train_schedule, uda_params,
+                   zlogger=zlogv1.VOID_LOGGER):
     # Compute logits, logprobs
     sup_logits = forward_batch_basic(model=model, batch=sup_batch, omit_label_ids=True)[0]
 
@@ -17,13 +18,14 @@ def sup_train_step(model, sup_batch,
         label_ids=sup_batch.label_ids,
         task=task, global_step=global_step,
         train_schedule=train_schedule, uda_params=uda_params,
+        zlogger=zlogger,
     )
     return sup_loss, sup_logits
 
 
 def compute_sup_loss(sup_logits, label_ids,
                      task, global_step, train_schedule, uda_params,
-                     zlogger=void_logger):
+                     zlogger=zlogv1.VOID_LOGGER):
     # Compute cross entropy (why manually? to get the mask I guess)
     per_example_loss = F.cross_entropy(sup_logits, label_ids, reduction="none")
     # Create mask-template
@@ -51,8 +53,8 @@ def compute_sup_loss(sup_logits, label_ids,
         larger_than_threshold = correct_label_probs > tsa_threshold
         loss_mask = loss_mask * (1 - larger_than_threshold.float())
 
-        zlogger.write_entry("tsa", {"threshold": float(tsa_threshold)})
-        zlogger.write_entry("tsa", {"loss_mask": float(loss_mask.mean().item())})
+        zlogger.write_entry("uda_metrics", {"tsa_threshold": float(tsa_threshold)})
+        zlogger.write_entry("uda_metrics", {"sup_loss_mask": float(loss_mask.mean().item())})
 
     # IMPORTANT: Don't backprop through the mask
     loss_mask = loss_mask.detach()
@@ -63,7 +65,8 @@ def compute_sup_loss(sup_logits, label_ids,
     return sup_loss
 
 
-def unsup_train_step(model, unsup_orig_batch, unsup_aug_batch, uda_params):
+def unsup_train_step(model, unsup_orig_batch, unsup_aug_batch, uda_params,
+                     zlogger=zlogv1.VOID_LOGGER):
     # Compute Logits
     unsup_orig_logits = forward_batch_basic(model=model, batch=unsup_orig_batch, omit_label_ids=True)[0]
     unsup_aug_logits = forward_batch_basic(model=model, batch=unsup_aug_batch, omit_label_ids=True)[0]
@@ -72,11 +75,13 @@ def unsup_train_step(model, unsup_orig_batch, unsup_aug_batch, uda_params):
         unsup_orig_logits=unsup_orig_logits,
         unsup_aug_logits=unsup_aug_logits,
         uda_params=uda_params,
+        zlogger=zlogger,
     )
     return unsup_loss, unsup_orig_logits, unsup_aug_logits
 
 
-def compute_unsup_loss(unsup_orig_logits, unsup_aug_logits, uda_params):
+def compute_unsup_loss(unsup_orig_logits, unsup_aug_logits, uda_params,
+                       zlogger=zlogv1.VOID_LOGGER):
     # Compute logprobs
     #   Use regular softmax (-1) or use temperature for softmax (not used for NLP)
     if uda_params.uda_softmax_temp != -1:
@@ -93,6 +98,7 @@ def compute_unsup_loss(unsup_orig_logits, unsup_aug_logits, uda_params):
     if uda_params.uda_confidence_thresh != -1:
         largest_prob = unsup_orig_logprobs.max(dim=-1)[0]
         unsup_loss_mask = (largest_prob > uda_params.uda_confidence_thresh).float().detach()
+        zlogger.write_entry("uda_metrics", {"unsup_loss_mask": float(unsup_loss_mask.mean().item())})
     else:
         unsup_loss_mask = 1
 
@@ -109,6 +115,7 @@ def compute_unsup_loss(unsup_orig_logits, unsup_aug_logits, uda_params):
 
 def get_tsa_threshold(schedule, global_step, num_train_steps, start, end):
     training_progress = float(global_step) / float(num_train_steps)
+    assert 0 <= training_progress <= 1
     if schedule == "no_schedule":
         threshold = 1.
     elif schedule == "linear_schedule":

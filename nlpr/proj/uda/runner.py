@@ -169,9 +169,10 @@ class UDARunner:
             model=self.model,
             sup_batch=batch_triplet.sup[0].to(self.device),
             task=self.task,
-            global_step=train_epoch_state.global_step,
+            global_step=train_global_state.global_step,
             train_schedule=self.train_schedule,
             uda_params=self.uda_params,
+            zlogger=self.log_writer,
         )
         if self.uda_params.use_unsup:
             example_count += len(batch_triplet.unsup_orig[0])
@@ -180,6 +181,7 @@ class UDARunner:
                 unsup_orig_batch=batch_triplet.unsup_orig[0].to(self.device),
                 unsup_aug_batch=batch_triplet.unsup_aug[0].to(self.device),
                 uda_params=self.uda_params,
+                zlogger=self.log_writer,
             )
             weighted_unsup_loss = self.uda_params.uda_coeff * unsup_loss
             loss = sup_loss + weighted_unsup_loss

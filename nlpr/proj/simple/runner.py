@@ -62,6 +62,7 @@ class SimpleTaskRunner:
                 "epoch": train_global_state.epoch,
                 "metric": results["metrics"].asdict(),
             })
+            self.log_writer.flush()
 
     def run_train_val(self, train_examples, val_examples, verbose=True):
         epoch_result_dict = col.OrderedDict()
