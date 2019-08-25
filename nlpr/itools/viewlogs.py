@@ -20,23 +20,24 @@ def quick_subplots(n_axes, n_cols, figsize=None):
     return fig, flatten_axes(axes)
 
 
-def qplot_single(datum, ax=None, title=None):
+def qplot_single(datum, ax=None, title=None, smooth=None):
     if ax is None:
         fig = plt.figure()
         ax = fig.gca()
     else:
         fig = None
     datum.plot(alpha=0.3, ax=ax)
-    datum.rolling(50).mean().plot(ax=ax)
+    if smooth:
+        datum.rolling(smooth).mean().plot(ax=ax)
     ax.grid()
     ax.set_title(title)
     return fig
 
 
-def qplot_multi(data_df, n_cols, figsize=None, return_plots=False):
+def qplot_multi(data_df, n_cols, figsize=None, return_plots=False, smooth=None):
     fig, flat_axes = quick_subplots(len(data_df.columns), n_cols, figsize=figsize)
     for i, (column, ax) in enumerate(zip(data_df, flat_axes)):
-        qplot_single(data_df[column], ax=ax, title=f"[{i}] {column}")
+        qplot_single(data_df[column], ax=ax, title=f"[{i}] {column}", smooth=smooth)
     if return_plots:
         return fig, flat_axes
 

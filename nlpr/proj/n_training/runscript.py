@@ -11,12 +11,14 @@ import nlpr.shared.train_setup as train_setup
 import nlpr.tasks as tasks
 import nlpr.tasks.evaluate as evaluate
 import nlpr.proj.simple.runner as simple_runner
+import nlpr.proj.uda.load_data as load_data
 
 
 @zconf.run_config
 class RunConfiguration(zconf.RunConfig):
     # === Required parameters === #
     task_config_path = zconf.attr(type=str, required=True)
+    uda_task_config_path = zconf.attr(type=str, required=True)
     output_dir = zconf.attr(type=str, required=True)
 
     # === Model parameters === #
@@ -30,7 +32,6 @@ class RunConfiguration(zconf.RunConfig):
 
     # === Running Setup === #
     # cache_dir
-    do_train = zconf.attr(action='store_true')
     do_val = zconf.attr(action='store_true')
     do_test = zconf.attr(action='store_true')
     do_save = zconf.attr(action="store_true")
@@ -64,6 +65,9 @@ class RunConfiguration(zconf.RunConfig):
     server_ip = zconf.attr(default='', type=str)
     server_port = zconf.attr(default='', type=str)
 
+    # N-Training config
+    num_models = zconf.attr(default=3, type=int)
+
 
 def main(args):
     quick_init_out = initialization.quick_init(args=args, verbose=True)
@@ -71,26 +75,8 @@ def main(args):
         config_path=args.task_config_path,
         verbose=True,
     )
-
-    with distributed.only_first_process(local_rank=args.local_rank):
-        # load the model
-        model_class_spec = model_resolution.resolve_model_setup_classes(
-            model_type=args.model_type,
-            task_type=task.TASK_TYPE,
-        )
-        model_wrapper = model_setup.simple_model_setup(
-            model_type=args.model_type,
-            model_class_spec=model_class_spec,
-            config_path=args.model_config_path,
-            tokenizer_path=args.model_tokenizer_path,
-            task=task,
-        )
-        model_setup.simple_load_model(
-            model=model_wrapper.model,
-            model_load_mode=args.model_load_mode,
-            state_dict=torch.load(args.model_path)
-        )
-        model_wrapper.model.to(quick_init_out.device)
+    unlabeled_task, unlabeled_task_data = \
+        load_data.load_task_data_from_path(args.uda_task_config_path)
 
     train_examples = task.get_train_examples()
     num_train_examples = len(train_examples)
@@ -104,48 +90,70 @@ def main(args):
         n_gpu=quick_init_out.n_gpu,
     )
     print("t_total", train_schedule.t_total)
-    loss_criterion = train_setup.resolve_loss_function(task_type=task.TASK_TYPE)
-    optimizer_scheduler = model_setup.create_optimizer(
-        model=model_wrapper.model,
-        learning_rate=args.learning_rate,
-        t_total=train_schedule.t_total,
-        warmup_steps=args.warmup_steps,
-        warmup_proportion=args.warmup_proportion,
-        verbose=True,
-    )
-    model_setup.special_model_setup(
-        model_wrapper=model_wrapper,
-        optimizer_scheduler=optimizer_scheduler,
-        fp16=args.fp16, fp16_opt_level=args.fp16_opt_level,
-        n_gpu=quick_init_out.n_gpu, local_rank=args.local_rank,
-    )
-    rparams = simple_runner.RunnerParameters(
-        feat_spec=model_resolution.build_featurization_spec(
-            model_type=args.model_type,
-            max_seq_length=args.max_seq_length,
-        ),
-        local_rank=args.local_rank,
-        n_gpu=quick_init_out.n_gpu,
-        fp16=args.fp16,
-        learning_rate=args.learning_rate,
-        eval_batch_size=args.eval_batch_size,
-        max_grad_norm=args.max_grad_norm,
-    )
-    runner = simple_runner.SimpleTaskRunner(
-        task=task,
-        model_wrapper=model_wrapper,
-        optimizer_scheduler=optimizer_scheduler,
-        loss_criterion=loss_criterion,
-        device=quick_init_out.device,
-        rparams=rparams,
-        train_schedule=train_schedule,
-        log_writer=quick_init_out.log_writer,
-    )
+
+    runners_ls = []
+    for i in range(args.num_models):
+        with distributed.only_first_process(local_rank=args.local_rank):
+            # load the model
+            model_class_spec = model_resolution.resolve_model_setup_classes(
+                model_type=args.model_type,
+                task_type=task.TASK_TYPE,
+            )
+            model_wrapper = model_setup.simple_model_setup(
+                model_type=args.model_type,
+                model_class_spec=model_class_spec,
+                config_path=args.model_config_path,
+                tokenizer_path=args.model_tokenizer_path,
+                task=task,
+            )
+            model_setup.simple_load_model(
+                model=model_wrapper.model,
+                model_load_mode=args.model_load_mode,
+                state_dict=torch.load(args.model_path)
+            )
+            model_wrapper.model.to(quick_init_out.device)
+        loss_criterion = train_setup.resolve_loss_function(task_type=task.TASK_TYPE)
+        optimizer_scheduler = model_setup.create_optimizer(
+            model=model_wrapper.model,
+            learning_rate=args.learning_rate,
+            t_total=train_schedule.t_total,
+            warmup_steps=args.warmup_steps,
+            warmup_proportion=args.warmup_proportion,
+            verbose=True,
+        )
+        model_setup.special_model_setup(
+            model_wrapper=model_wrapper,
+            optimizer_scheduler=optimizer_scheduler,
+            fp16=args.fp16, fp16_opt_level=args.fp16_opt_level,
+            n_gpu=quick_init_out.n_gpu, local_rank=args.local_rank,
+        )
+        rparams = simple_runner.RunnerParameters(
+            feat_spec=model_resolution.build_featurization_spec(
+                model_type=args.model_type,
+                max_seq_length=args.max_seq_length,
+            ),
+            local_rank=args.local_rank,
+            n_gpu=quick_init_out.n_gpu,
+            fp16=args.fp16,
+            learning_rate=args.learning_rate,
+            eval_batch_size=args.eval_batch_size,
+            max_grad_norm=args.max_grad_norm,
+        )
+        runner = simple_runner.SimpleTaskRunner(
+            task=task,
+            model_wrapper=model_wrapper,
+            optimizer_scheduler=optimizer_scheduler,
+            loss_criterion=loss_criterion,
+            device=quick_init_out.device,
+            rparams=rparams,
+            train_schedule=train_schedule,
+            log_writer=quick_init_out.log_writer,
+        )
+        runners_ls.append(runner)
+
+
 
     with quick_init_out.log_writer.log_context():
-        if args.do_train:
-            runner.run_train(train_examples)
-
         if args.do_save:
             torch.save(
                 model_wrapper.model.state_dict(),

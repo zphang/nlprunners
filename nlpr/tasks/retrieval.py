@@ -59,10 +59,14 @@ def get_task_class(task_name):
     return task_class
 
 
-def create_task_from_config(config: dict):
+def create_task_from_config(config: dict, verbose=False):
     task_class = get_task_class(config["task"])
+    if verbose:
+        print(task_class.__name__)
+        for k, v in config["paths"].items():
+            print(f"  [{k}]: {v}")
     return task_class(name=config["task"], path_dict=config["paths"])
 
 
-def create_task_from_config_path(config_path: str):
-    return create_task_from_config(read_json(config_path))
+def create_task_from_config_path(config_path: str, verbose=False):
+    return create_task_from_config(read_json(config_path), verb=verbose)

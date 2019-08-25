@@ -127,10 +127,10 @@ class MultiRCTask(Task):
     LABELS = [False, True]
     LABEL_BIMAP = labels_to_bimap(LABELS)
 
-    def __init__(self, name, data_dir, filter_sentences=True):
-        super().__init__(name=name, data_dir=data_dir)
+    def __init__(self, name, path_dict, filter_sentences=True):
+        super().__init__(name=name, path_dict=path_dict)
         self.name = name
-        self.data_dir = data_dir
+        self.path_dict = path_dict
         self.filter_sentences = filter_sentences
 
     def get_train_examples(self):

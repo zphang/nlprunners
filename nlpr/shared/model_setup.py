@@ -53,6 +53,19 @@ def safe_load_model(model, state_dict, max_miss_fraction=0.9, verbose=True):
         raise RuntimeError(f"Mismatched {total_mismatched} out of {total_params} parameters")
 
 
+def simple_load_model(model, state_dict, model_load_mode, verbose=True):
+    if model_load_mode == "strict":
+        model.load_state_dict(state_dict)
+    elif model_load_mode == "safe":
+        safe_load_model(
+            model=model,
+            state_dict=state_dict,
+            verbose=verbose,
+        )
+    else:
+        raise KeyError(model_load_mode)
+
+
 class OptimizerScheduler:
     def __init__(self, optimizer, scheduler):
         super().__init__()

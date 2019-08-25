@@ -20,7 +20,7 @@ class QuickInitContainer:
     log_writer: Any
 
 
-def quick_init(args, verbose=True):
+def quick_init(args, verbose=True) -> QuickInitContainer:
     if verbose:
         log_info.print_args(args)
     init_server_logging(server_ip=args.server_ip, server_port=args.server_port, verbose=verbose)
