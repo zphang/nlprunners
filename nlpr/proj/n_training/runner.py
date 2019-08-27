@@ -265,7 +265,7 @@ def get_n_training_pseudolabels(all_preds, with_disagreement=False, null_value=-
         others_agreement = np.all((others_preds[:, 0][:, np.newaxis] == others_preds), axis=1)
 
         if with_disagreement:
-            chosen_idx = others_agreement & (others_preds[:, 0] != all_preds[:, i]),
+            chosen_idx = others_agreement & (others_preds[:, 0] != all_preds[:, i])
         else:
             chosen_idx = others_agreement
 
