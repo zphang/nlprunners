@@ -262,16 +262,12 @@ def get_n_training_pseudolabels(all_preds, with_disagreement=False, null_value=-
     for i in range(num_models):
         others_selector = np.arange(num_models) != i
         others_preds = all_preds[:, others_selector]
-        others_agreement = (others_preds[:, 0][:, np.newaxis] == others_preds)
+        others_agreement = np.all((others_preds[:, 0][:, np.newaxis] == others_preds), axis=1)
 
         if with_disagreement:
-            chosen_idx = np.all(
-                others_agreement
-                & (others_preds[:, 0] != all_preds[:, i]),
-                axis=1
-            )
+            chosen_idx = others_agreement & (others_preds[:, 0] != all_preds[:, i]),
         else:
-            chosen_idx = np.all(others_agreement, axis=1)
+            chosen_idx = others_agreement
 
         chosen_examples_ls.append(chosen_idx)
         chosen_preds = np.array(others_preds)[:, 0]

@@ -1,4 +1,5 @@
 import os
+import random
 import torch
 
 import zconf
@@ -66,6 +67,7 @@ class RunConfiguration(zconf.RunConfig):
     num_models = zconf.attr(default=3, type=int)
     num_iter = zconf.attr(default=10, type=int)
     with_disagreement = zconf.attr(action='store_true')
+    num_unlabeled = zconf.attr(default=-1, type=int)
 
 
 def main(args):
@@ -79,6 +81,9 @@ def main(args):
 
     labeled_train_examples = task.get_train_examples()
     unlabeled_train_examples = unlabeled_task_data["unsup"]["orig"]
+    if args.num_unlabeled != -1:
+        random.shuffle(unlabeled_train_examples)
+        unlabeled_train_examples = unlabeled_train_examples[:args.num_unlabeled]
 
     n_training_rparams = n_training_runner.NTrainingRunnerParameters(
         num_models=args.num_models,
