@@ -24,11 +24,12 @@ def simple_model_setup(model_type, model_class_spec, config_path, tokenizer_path
             do_lower_case = True
         else:
             raise RuntimeError(model_type)
-    elif "-uncased" in model_type or model_arch in [
+    elif model_arch in [
             ModelArchitectures.XLNET, ModelArchitectures.XLM, ModelArchitectures.ROBERTA]:
-        do_lower_case = True
+        do_lower_case = False
     else:
         raise RuntimeError(model_type)
+    print(do_lower_case)
     tokenizer = model_class_spec.tokenizer_class.from_pretrained(
         tokenizer_path, do_lower_case=do_lower_case,
     )

@@ -69,4 +69,4 @@ def create_task_from_config(config: dict, verbose=False):
 
 
 def create_task_from_config_path(config_path: str, verbose=False):
-    return create_task_from_config(read_json(config_path), verb=verbose)
+    return create_task_from_config(read_json(config_path), verbose=verbose)

@@ -4,14 +4,11 @@ import torch
 import zconf
 
 import nlpr.shared.initialization as initialization
-import nlpr.shared.distributed as distributed
-import nlpr.shared.model_setup as model_setup
-import nlpr.shared.model_resolution as model_resolution
-import nlpr.shared.train_setup as train_setup
+
 import nlpr.tasks as tasks
 import nlpr.tasks.evaluate as evaluate
-import nlpr.proj.simple.runner as simple_runner
 import nlpr.proj.uda.load_data as load_data
+import nlpr.proj.n_training.runner as n_training_runner
 
 
 @zconf.run_config
@@ -67,6 +64,7 @@ class RunConfiguration(zconf.RunConfig):
 
     # N-Training config
     num_models = zconf.attr(default=3, type=int)
+    num_iter = zconf.attr(default=10, type=int)
 
 
 def main(args):
@@ -78,104 +76,60 @@ def main(args):
     unlabeled_task, unlabeled_task_data = \
         load_data.load_task_data_from_path(args.uda_task_config_path)
 
-    train_examples = task.get_train_examples()
-    num_train_examples = len(train_examples)
+    labeled_train_examples = task.get_train_examples()
+    unlabeled_train_examples = unlabeled_task_data["unsup"]["orig"]
 
-    train_schedule = train_setup.get_train_schedule(
-        num_train_examples=num_train_examples,
-        max_steps=args.max_steps,
-        num_train_epochs=args.num_train_epochs,
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
-        per_gpu_train_batch_size=args.train_batch_size,
-        n_gpu=quick_init_out.n_gpu,
+    n_training_rparams = n_training_runner.NTrainingRunnerParameters(
+        num_models=args.num_models,
+        num_iter=args.num_iter,
     )
-    print("t_total", train_schedule.t_total)
 
-    runners_ls = []
-    for i in range(args.num_models):
-        with distributed.only_first_process(local_rank=args.local_rank):
-            # load the model
-            model_class_spec = model_resolution.resolve_model_setup_classes(
-                model_type=args.model_type,
-                task_type=task.TASK_TYPE,
-            )
-            model_wrapper = model_setup.simple_model_setup(
-                model_type=args.model_type,
-                model_class_spec=model_class_spec,
-                config_path=args.model_config_path,
-                tokenizer_path=args.model_tokenizer_path,
-                task=task,
-            )
-            model_setup.simple_load_model(
-                model=model_wrapper.model,
-                model_load_mode=args.model_load_mode,
-                state_dict=torch.load(args.model_path)
-            )
-            model_wrapper.model.to(quick_init_out.device)
-        loss_criterion = train_setup.resolve_loss_function(task_type=task.TASK_TYPE)
-        optimizer_scheduler = model_setup.create_optimizer(
-            model=model_wrapper.model,
-            learning_rate=args.learning_rate,
-            t_total=train_schedule.t_total,
-            warmup_steps=args.warmup_steps,
-            warmup_proportion=args.warmup_proportion,
-            verbose=True,
-        )
-        model_setup.special_model_setup(
-            model_wrapper=model_wrapper,
-            optimizer_scheduler=optimizer_scheduler,
-            fp16=args.fp16, fp16_opt_level=args.fp16_opt_level,
-            n_gpu=quick_init_out.n_gpu, local_rank=args.local_rank,
-        )
-        rparams = simple_runner.RunnerParameters(
-            feat_spec=model_resolution.build_featurization_spec(
-                model_type=args.model_type,
-                max_seq_length=args.max_seq_length,
-            ),
-            local_rank=args.local_rank,
-            n_gpu=quick_init_out.n_gpu,
-            fp16=args.fp16,
-            learning_rate=args.learning_rate,
-            eval_batch_size=args.eval_batch_size,
-            max_grad_norm=args.max_grad_norm,
-        )
-        runner = simple_runner.SimpleTaskRunner(
-            task=task,
-            model_wrapper=model_wrapper,
-            optimizer_scheduler=optimizer_scheduler,
-            loss_criterion=loss_criterion,
-            device=quick_init_out.device,
-            rparams=rparams,
-            train_schedule=train_schedule,
-            log_writer=quick_init_out.log_writer,
-        )
-        runners_ls.append(runner)
-
-
+    runner_creator = n_training_runner.RunnerCreator(
+        task=task,
+        model_type=args.model_type,  model_path=args.model_path,
+        model_config_path=args.model_config_path, model_tokenizer_path=args.model_tokenizer_path,
+        model_load_mode=args.model_load_mode,
+        learning_rate=args.learning_rate, warmup_steps=args.warmup_steps,
+        warmup_proportion=args.warmup_proportion,
+        train_batch_size=args.train_batch_size, eval_batch_size=args.max_seq_length,
+        num_train_epochs=args.num_train_epochs,
+        max_steps=args.max_steps, gradient_accumulation_steps=args.gradient_accumulation_steps,
+        max_grad_norm=args.max_grad_norm, max_seq_length=args.max_seq_length,
+        local_rank=args.local_rank, fp16=args.fp16, fp16_opt_level=args.fp16_opt_level,
+        device=quick_init_out.device, n_gpu=quick_init_out.n_gpu,
+        verbose=False,
+    )
+    runner = n_training_runner.NTrainingRunner(
+        runner_creator=runner_creator,
+        labeled_examples=labeled_train_examples,
+        unlabeled_examples=unlabeled_train_examples,
+        rparams=n_training_rparams,
+        log_writer=quick_init_out.log_writer,
+    )
 
     with quick_init_out.log_writer.log_context():
+        sub_runner_ls = runner.train()
+
         if args.do_save:
-            torch.save(
-                model_wrapper.model.state_dict(),
-                os.path.join(args.output_dir, "model.p")
-            )
+            for i, sub_runner in enumerate(sub_runner_ls):
+                torch.save(
+                    sub_runner.model_wrapper.model.state_dict(),
+                    os.path.join(args.output_dir, f"model__{i}.p")
+                )
 
         if args.do_val:
             val_examples = task.get_val_examples()
-            results = runner.run_val(val_examples)
-            evaluate.write_val_results(
-                results=results,
-                output_dir=args.output_dir,
-                verbose=True,
-            )
+            for i, sub_runner in enumerate(sub_runner_ls):
+                results = sub_runner.run_val(val_examples)
+                sub_output_dir = os.path.join(args.output_dir)
+                evaluate.write_val_results(
+                    results=results,
+                    output_dir=sub_output_dir,
+                    verbose=True,
+                )
 
         if args.do_test:
-            test_examples = task.get_test_examples()
-            logits = runner.run_test(test_examples)
-            evaluate.write_preds(
-                logits=logits,
-                output_path=os.path.join(args.output_dir, "test_preds.csv"),
-            )
+            raise NotImplementedError()
 
 
 if __name__ == "__main__":
