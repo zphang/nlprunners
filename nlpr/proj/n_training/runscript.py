@@ -65,6 +65,7 @@ class RunConfiguration(zconf.RunConfig):
     # N-Training config
     num_models = zconf.attr(default=3, type=int)
     num_iter = zconf.attr(default=10, type=int)
+    with_disagreement = zconf.attr(action='store_true')
 
 
 def main(args):
@@ -82,6 +83,7 @@ def main(args):
     n_training_rparams = n_training_runner.NTrainingRunnerParameters(
         num_models=args.num_models,
         num_iter=args.num_iter,
+        with_disagreement=args.with_disagreement,
     )
 
     runner_creator = n_training_runner.RunnerCreator(

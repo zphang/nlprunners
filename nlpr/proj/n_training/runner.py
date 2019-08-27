@@ -124,6 +124,7 @@ class RunnerCreator:
 class NTrainingRunnerParameters:
     num_models: int
     num_iter: int
+    with_disagreement: bool
 
 
 @dataclass
@@ -131,6 +132,7 @@ class TrainingSet:
     task: typing.Any
     labeled_examples: list
     unlabeled_examples: list
+    labeled_indices: np.ndarray
     chosen_examples: np.ndarray
     chosen_preds: np.ndarray
 
@@ -143,6 +145,25 @@ class TrainingSet:
             if self.chosen_examples[train_idx, i]
         ]
         return self.labeled_examples + pseudolabeled_examples
+
+    @classmethod
+    def create_initial_training_set(cls, task, labeled_examples, unlabeled_examples, num_models,
+                                    do_bootstrap=False):
+        base_labeled_indices = np.arange(len(labeled_examples))
+        if do_bootstrap:
+            labeled_indices = np.random.choice(
+                base_labeled_indices, size=(len(labeled_examples), num_models),
+            )
+        else:
+            labeled_indices = np.stack([base_labeled_indices] * num_models, axis=1)
+        return cls(
+            task=task,
+            labeled_examples=labeled_examples,
+            unlabeled_examples=unlabeled_examples,
+            labeled_indices=labeled_indices,
+            chosen_examples=np.zeros([len(unlabeled_examples), num_models]),
+            chosen_preds=np.zeros([len(unlabeled_examples), num_models]),
+        )
 
 
 class NTrainingRunner:
@@ -160,12 +181,17 @@ class NTrainingRunner:
         self.task = self.runner_creator.task
 
     def train(self):
-        training_set = create_initial_training_set(
+        training_set = TrainingSet.create_initial_training_set(
             task=self.task,
             labeled_examples=self.labeled_examples,
             unlabeled_examples=self.unlabeled_examples,
             num_models=self.rparams.num_models,
+            do_bootstrap=True,
         )
+        self.log_writer.write_entry("misc", {
+            "key": "labeled_indices",
+            "data": pd.DataFrame(training_set.labeled_indices).to_dict(),
+        })
         runner_ls = None
         for i in range(self.rparams.num_iter):
             print(f"\n\nITER {i}:\n\n")
@@ -207,21 +233,16 @@ class NTrainingRunner:
         })
         self.log_writer.flush()
 
-        chosen_examples_ls = []
-        chosen_preds_ls = []
-        for i in range(self.rparams.num_models):
-            others_selector = np.arange(self.rparams.num_models) != i
-            others_preds = all_preds[:, others_selector]
-            others_agreement = np.all((others_preds[:, 0][:, np.newaxis] == others_preds), axis=1)
-            chosen_examples_ls.append(others_agreement)
-            chosen_preds = np.array(others_preds)[:, 0]
-            chosen_preds[~others_agreement] = -1
-            chosen_preds_ls.append(chosen_preds)
+        chosen_examples_ls, chosen_preds_ls = get_n_training_pseudolabels(
+            all_preds=all_preds,
+            with_disagreement=self.rparams.with_disagreement,
+        )
 
         new_training_set = TrainingSet(
             task=training_set.task,
             labeled_examples=training_set.labeled_examples,
             unlabeled_examples=training_set.unlabeled_examples,
+            labeled_indices=training_set.labeled_indices,
             chosen_examples=np.stack(chosen_examples_ls, axis=1),
             chosen_preds=np.stack(chosen_preds_ls, axis=1),
         )
@@ -229,20 +250,34 @@ class NTrainingRunner:
 
     def get_sub_log_writer(self, key):
         if isinstance(self.log_writer, zlogv1.ZLogger):
-            return zlogv1.ZLogger(fol_path=os.path.join(self.log_writer.fol_path, key))
+            return zlogv1.ZLogger(fol_path=os.path.join(self.log_writer.fol_path, "sub", key))
         else:
             return self.log_writer
 
 
-def create_initial_training_set(task, labeled_examples, unlabeled_examples, num_models):
-    return TrainingSet(
-        task=task,
-        labeled_examples=labeled_examples,
-        unlabeled_examples=unlabeled_examples,
-        chosen_examples=np.zeros([len(unlabeled_examples), num_models]),
-        chosen_preds=np.zeros([len(unlabeled_examples), num_models]),
-    )
+def get_n_training_pseudolabels(all_preds, with_disagreement=False, null_value=-1):
+    num_models = all_preds.shape[-1]
+    chosen_examples_ls = []
+    chosen_preds_ls = []
+    for i in range(num_models):
+        others_selector = np.arange(num_models) != i
+        others_preds = all_preds[:, others_selector]
+        others_agreement = (others_preds[:, 0][:, np.newaxis] == others_preds)
 
+        if with_disagreement:
+            chosen_idx = np.all(
+                others_agreement
+                & (others_preds[:, 0] != all_preds[:, i]),
+                axis=1
+            )
+        else:
+            chosen_idx = np.all(others_agreement, axis=1)
+
+        chosen_examples_ls.append(chosen_idx)
+        chosen_preds = np.array(others_preds)[:, 0]
+        chosen_preds[~chosen_idx] = null_value  # For safety
+        chosen_preds_ls.append(chosen_preds)
+    return chosen_examples_ls, chosen_preds_ls
 
 """
 def run_val_write(runner_ls, val_examples):
