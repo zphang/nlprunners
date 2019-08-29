@@ -9,7 +9,6 @@ import nlpr.shared.model_setup as shared_model_setup
 import nlpr.shared.model_resolution as model_resolution
 import nlpr.shared.train_setup as train_setup
 import nlpr.tasks.evaluate as evaluate
-import nlpr.tasks as tasks
 
 import nlpr.proj.llp.runner as llp_runner
 import nlpr.proj.uda_llp.runner_v1 as uda_llp_runner
@@ -23,7 +22,6 @@ from pyutils.io import write_json
 class RunConfiguration(zconf.RunConfig):
     # === Required parameters === #
     uda_task_config_path = zconf.attr(type=str, required=True)
-    full_task_config_path = zconf.attr(type=str, required=True)
     output_dir = zconf.attr(type=str, required=True)
 
     # === Model parameters === #
@@ -92,7 +90,7 @@ class RunConfiguration(zconf.RunConfig):
 
 def main(args):
     quick_init_out = initialization.quick_init(args=args, verbose=True)
-    task, task_data = uda_load_data.load_task_data_from_path(args.uda_task_config_path)
+    task, uda_task_data = uda_load_data.load_task_data_from_path(args.uda_task_config_path)
 
     with distributed.only_first_process(local_rank=args.local_rank):
         # load the model
@@ -111,21 +109,16 @@ def main(args):
         model_wrapper.model.to(quick_init_out.device)
 
     # === Train Data Setup [START] === #
-    labeled_examples = task_data["sup"]["train"]
-    # VERY hacky
-    unlabeled_task = tasks.create_task_from_config_path(args.full_task_config_path)
+    labeled_examples = uda_task_data["sup"]["train"]
     unlabeled_examples, indices = train_setup.maybe_subsample_train(
-        train_examples=unlabeled_task.get_train_examples(),
+        train_examples=uda_task_data["unsup"]["orig"],
         train_examples_number=args.unlabeled_train_examples_number,
         train_examples_fraction=args.unlabeled_train_examples_fraction,
     )
-    for example in unlabeled_examples:
-        example.label = task.LABELS[-1]
-    train_examples = labeled_examples + unlabeled_examples
     if indices is not None:
         write_json(indices, os.path.join(args.output_dir, "sampled_indices.json"))
+    train_examples = labeled_examples + unlabeled_examples
     num_train_examples = len(train_examples)
-    task_data["sup"]["train"] = train_examples
     # === Train Data Setup [END] === #
 
     train_schedule = train_setup.get_train_schedule(
@@ -183,21 +176,23 @@ def main(args):
         use_unsup=args.unsup_ratio != 0,
         unsup_ratio=args.unsup_ratio,
     )
-    runner = uda_llp_runner.UDALLPRunner(
-        task=task,
-        model_wrapper=model_wrapper,
-        optimizer_scheduler=optimizer_scheduler,
-        loss_criterion=loss_criterion,
-        device=quick_init_out.device,
-        rparams=rparams,
-        llp_params=llp_params,
-        llpuda_params=llpuda_params,
-        train_schedule=train_schedule,
-    )
+    with quick_init_out.log_writer.log_context():
+        runner = uda_llp_runner.UDALLPRunner(
+            task=task,
+            model_wrapper=model_wrapper,
+            optimizer_scheduler=optimizer_scheduler,
+            loss_criterion=loss_criterion,
+            device=quick_init_out.device,
+            rparams=rparams,
+            llp_params=llp_params,
+            llpuda_params=llpuda_params,
+            train_schedule=train_schedule,
+            log_writer=quick_init_out.log_writer,
+        )
 
     if args.do_train:
         runner.init_llp_state(train_examples)
-        runner.run_train(task_data)
+        runner.run_train(train_examples, uda_task_data)
 
     if args.do_save:
         torch.save(

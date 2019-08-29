@@ -30,8 +30,8 @@ def generic_load_task_data(uda_config, verbose=True):
     return task, task_data
 
 
-def load_task_data_from_path(uda_config_path):
-    return load_task_data(read_json(uda_config_path))
+def load_task_data_from_path(uda_config_path, verbose=True):
+    return load_task_data(read_json(uda_config_path), verbose=verbose)
 
 
 def create_examples_from_paths(path_dict, task_class, prefix="unsup-"):

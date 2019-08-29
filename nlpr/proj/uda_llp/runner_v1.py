@@ -7,12 +7,14 @@ import torch.nn.functional as F
 from nlpr.shared.train_setup import TrainSchedule
 from nlpr.shared.runner import (
     TrainEpochState,
+    TrainGlobalState,
 )
 import nlpr.proj.simple.runner as simple_runner
 import nlpr.proj.llp.runner as llp_runner
 import nlpr.proj.uda.runner as uda_runner
 
 from pyutils.display import maybe_trange, maybe_tqdm
+from pyutils.datastructures import combine_dicts
 
 
 @dataclass
@@ -28,7 +30,7 @@ class UDALLPRunner:
                  rparams: simple_runner.RunnerParameters,
                  llp_params: llp_runner.LlpParameters,
                  llpuda_params: LLPUDAParameters,
-                 train_schedule: TrainSchedule):
+                 train_schedule: TrainSchedule, log_writer):
         self.task = task
         self.model_wrapper = model_wrapper
         self.optimizer_scheduler = optimizer_scheduler
@@ -38,6 +40,7 @@ class UDALLPRunner:
         self.llp_params = llp_params
         self.llpuda_params = llpuda_params
         self.train_schedule = train_schedule
+        self.log_writer = log_writer
 
         self.llp_state = None
 
@@ -45,13 +48,13 @@ class UDALLPRunner:
         self.model = self.model_wrapper.model
 
     # LLP
-    init_llp_state = llp_runner.LLPRunner.init_llp_state
     create_empty_llp_state = llp_runner.LLPRunner.create_empty_llp_state
-    # populate_llp_state = llp_runner.LLPRunner.populate_llp_state
+    populate_llp_state = llp_runner.LLPRunner.populate_llp_state
     compute_representation_loss = llp_runner.LLPRunner.compute_representation_loss
-    run_label_propagate = llp_runner.LLPRunner.propagate_labels
+    propagate_labels = llp_runner.LLPRunner.propagate_labels
     convert_examples_to_dataset = llp_runner.LLPRunner.convert_examples_to_dataset
     get_sup_dataloader = llp_runner.LLPRunner.get_train_dataloader
+    zero_out_unlabeled_confidence = llp_runner.LLPRunner.zero_out_unlabeled_confidence
 
     # UDA
     form_dataloader_triplet = uda_runner.UDARunner.form_dataloader_triplet
@@ -64,19 +67,31 @@ class UDALLPRunner:
     get_eval_dataloader = llp_runner.LLPRunner.get_eval_dataloader
     complex_backpropagate = llp_runner.LLPRunner.complex_backpropagate
 
-    def run_train(self, task_data, verbose=True):
+    def run_train(self, train_examples, uda_task_data, verbose=True):
         train_dataset_with_metadata = self.convert_examples_to_dataset(
-            examples=task_data["sup"]["train"],
+            examples=train_examples,
             verbose=verbose,
         )
+        train_global_state = TrainGlobalState()
         for _ in maybe_trange(int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
-            self.run_train_epoch(train_dataset_with_metadata, task_data, verbose=verbose)
+            self.run_train_epoch(
+                train_dataset_with_metadata=train_dataset_with_metadata,
+                uda_task_data=uda_task_data,
+                train_global_state=train_global_state,
+                verbose=verbose,
+            )
 
-    def run_train_epoch(self, train_dataset_with_metadata, task_data, verbose=True):
-        for _ in self.run_train_epoch_context(train_dataset_with_metadata, task_data, verbose=verbose):
+    def run_train_epoch(self, train_dataset_with_metadata, uda_task_data, train_global_state,
+                        verbose=True):
+        for _ in self.run_train_epoch_context(
+                train_dataset_with_metadata=train_dataset_with_metadata,
+                uda_task_data=uda_task_data,
+                train_global_state=train_global_state,
+                verbose=verbose):
             pass
 
-    def run_train_epoch_context(self, train_dataset_with_metadata, task_data, verbose=True):
+    def run_train_epoch_context(self, train_dataset_with_metadata, uda_task_data, train_global_state,
+                                populate_after=True, verbose=True):
         self.model.train()
         train_epoch_state = TrainEpochState()
         sup_dataloader = self.get_sup_dataloader(
@@ -85,7 +100,7 @@ class UDALLPRunner:
         )
         unsup_dataloaders = self.get_unsup_dataloaders(
             sup_dataloader=sup_dataloader,
-            task_data=task_data,
+            uda_task_data=uda_task_data,
         )
         dataloader_triplet = self.form_dataloader_triplet(
             sup_dataloader=sup_dataloader,
@@ -109,6 +124,17 @@ class UDALLPRunner:
                 train_epoch_state=train_epoch_state,
             )
             yield step, batch_m_triplet, train_epoch_state
+        if populate_after:
+            self.populate_llp_state(
+                train_dataloader=sup_dataloader,
+                verbose=verbose,
+            )
+            self.log_writer.write_entry("populate_logs", combine_dicts([
+                llp_runner.populate_logs(llp_state=self.llp_state, llp_params=self.llp_params),
+                {
+                    "epoch": train_global_state.epoch,
+                },
+            ]))
 
     def run_train_step(self, step, batch_m_triplet, train_epoch_state):
         llp_loss = self.compute_llp_loss(
@@ -140,7 +166,7 @@ class UDALLPRunner:
         )
 
     def compute_llp_loss(self, sup_batch_m):
-        llp_loss, _ = self.compute_representation_loss(
+        llp_loss, _, _ = self.compute_representation_loss(
             batch=sup_batch_m.batch,
             batch_metadata=sup_batch_m.metadata,
         )
@@ -157,23 +183,7 @@ class UDALLPRunner:
             dim=-1,
         )).mean()
 
-    def populate_llp_state(self, train_examples, verbose=True):
-        train_dataset_with_metadata = self.convert_examples_to_dataset(train_examples, verbose=True)
-        train_dataloader = self.get_sup_dataloader(
-            train_dataset_with_metadata=train_dataset_with_metadata,
-            use_eval_batch_size=True, do_override_labels=False, verbose=verbose,
-        )
-
-        with torch.no_grad():
-            for batch, metadata in maybe_tqdm(train_dataloader, desc="Initializing big_m",
-                                              verbose=verbose):
-                batch = batch.to(self.device)
-                embedding = self.model.forward_batch(batch).embedding
-                self.llp_state.big_m_tensor[metadata["example_id"]] = embedding
-        self.run_label_propagate(verbose=verbose)
-        self.llp_state.all_label_confidence[self.llp_params.num_labeled:] = 0
-
-    def get_unsup_dataloaders(self, sup_dataloader, task_data):
+    def get_unsup_dataloaders(self, sup_dataloader, uda_task_data):
         num_unsup = (
             len(sup_dataloader)
             * self.train_schedule.train_batch_size
@@ -181,11 +191,11 @@ class UDALLPRunner:
         )
 
         if self.llpuda_params.use_unsup:
-            unsup_indices = np.random.randint(len(task_data["unsup"]["orig"]), size=num_unsup)
-            aug_indices = np.random.randint(len(task_data["unsup"]["aug"]), size=num_unsup)
-            unsup_orig_examples = [task_data["unsup"]["orig"][i] for i in unsup_indices]
+            unsup_indices = np.random.randint(len(uda_task_data["unsup"]["orig"]), size=num_unsup)
+            aug_indices = np.random.randint(len(uda_task_data["unsup"]["aug"]), size=num_unsup)
+            unsup_orig_examples = [uda_task_data["unsup"]["orig"][i] for i in unsup_indices]
             unsup_aug_examples = [
-                task_data["unsup"]["aug"][j][i]
+                uda_task_data["unsup"]["aug"][j][i]
                 for i, j in zip(unsup_indices, aug_indices)
             ]
             unsup_orig_loader = self.get_dataloader(
@@ -212,3 +222,24 @@ class UDALLPRunner:
                 "unsup_aug_set": aug_indices,
             }
         )
+
+    def init_llp_state(self, train_examples, verbose=True, zero_out_unlabeled_confidence=True):
+        self.llp_state = self.create_empty_llp_state(train_examples=train_examples)
+        train_dataset_with_metadata = self.convert_examples_to_dataset(train_examples, verbose=True)
+        train_dataloader = self.get_sup_dataloader(
+            train_dataset_with_metadata=train_dataset_with_metadata,
+            use_eval_batch_size=True, do_override_labels=False, verbose=verbose,
+        )
+        self.populate_llp_state(
+            train_dataloader=train_dataloader,
+            verbose=verbose
+        )
+        if zero_out_unlabeled_confidence:
+            self.zero_out_unlabeled_confidence()
+        self.log_writer.write_entry("populate_logs", combine_dicts([
+            llp_runner.populate_logs(llp_state=self.llp_state, llp_params=self.llp_params),
+            {
+                "epoch": -1,
+            },
+        ]))
+        self.log_writer.flush()
