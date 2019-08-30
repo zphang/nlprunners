@@ -14,12 +14,13 @@ from pyutils.datastructures import combine_dicts
 import nlpr.proj.llp.propagate as llp_propagate
 import nlpr.proj.llp.representation as llp_representation
 from nlpr.shared.runner import (
+    BaseRunner,
     convert_examples_to_dataset,
     HybridLoader,
     complex_backpropagate,
     get_sampler,
-    TrainEpochState,
     TrainGlobalState,
+    optim_step_grad_accum,
 )
 from nlpr.shared.train_setup import TrainSchedule
 import nlpr.tasks.evaluate as evaluate
@@ -60,7 +61,7 @@ class LlpState:
     all_label_confidence: torch.Tensor
 
 
-class LLPRunner:
+class LLPRunner(BaseRunner):
     def __init__(self, task, model_wrapper, optimizer_scheduler, loss_criterion,
                  device, rparams: RunnerParameters, llp_params: LlpParameters,
                  train_schedule: TrainSchedule, log_writer):
@@ -157,31 +158,29 @@ class LLPRunner:
             epoch_result_dict[i] = epoch_result
         return epoch_result_dict
 
-    def run_train_epoch(self, train_dataset_with_metadata, train_global_state, verbose=True):
+    def run_train_epoch(self, train_dataset_with_metadata,
+                        train_global_state: TrainGlobalState, verbose=True):
         for _ in self.run_train_epoch_context(
                 train_dataset_with_metadata=train_dataset_with_metadata,
                 train_global_state=train_global_state,
                 verbose=verbose):
             pass
 
-    def run_train_epoch_context(self, train_dataset_with_metadata, train_global_state,
+    def run_train_epoch_context(self, train_dataset_with_metadata,
+                                train_global_state: TrainGlobalState,
                                 populate_after=True, verbose=True):
         self.model.train()
-        train_epoch_state = TrainEpochState()
         train_dataloader = self.get_train_dataloader(
             train_dataset_with_metadata=train_dataset_with_metadata,
             do_override_labels=True, verbose=verbose,
         )
-        for step, (batch, batch_metadata) in enumerate(
-                maybe_tqdm(train_dataloader, desc="Training", verbose=verbose)):
+        for batch, batch_metadata in maybe_tqdm(train_dataloader, desc="Training", verbose=verbose):
             self.run_train_step(
-                step=step,
                 batch=batch,
                 batch_metadata=batch_metadata,
-                train_epoch_state=train_epoch_state,
                 train_global_state=train_global_state,
             )
-            yield step, batch, train_epoch_state
+            yield batch, train_global_state
         if populate_after:
             self.populate_llp_state(
                 train_dataloader=train_dataloader,
@@ -194,20 +193,18 @@ class LLPRunner:
                 },
             ]))
 
-    def run_train_step(self, step, batch, batch_metadata, train_epoch_state, train_global_state):
+    def run_train_step(self, batch, batch_metadata,
+                       train_global_state: TrainGlobalState):
         batch = batch.to(self.device)
         loss, loss_details, model_output = self.compute_representation_loss(batch, batch_metadata)
         loss = self.complex_backpropagate(loss)
         loss_val = loss.item()
 
-        train_epoch_state.tr_loss += loss_val
-        train_epoch_state.nb_tr_examples += len(batch)
-        train_epoch_state.nb_tr_steps += 1
-        if (step + 1) % self.train_schedule.gradient_accumulation_steps == 0:
-            self.optimizer_scheduler.step()
-            self.model.zero_grad()
-            train_epoch_state.global_step += 1
-            train_global_state.global_step += 1
+        optim_step_grad_accum(
+            optimizer_scheduler=self.optimizer_scheduler,
+            train_global_state=train_global_state,
+            gradient_accumulation_steps=self.train_schedule.gradient_accumulation_steps,
+        )
 
         # Update memory bank
         with torch.no_grad():
@@ -224,7 +221,7 @@ class LLPRunner:
         }
         self.log_writer.write_entry("loss_train", combine_dicts([{
             "epoch": train_global_state.epoch,
-            "epoch_step": train_epoch_state.global_step,
+            "epoch_step": train_global_state.epoch_step,
             "global_step": train_global_state.global_step,
             "loss_val": loss_val,
             "pred_entropy": torch_utils.compute_pred_entropy_clean(model_output.logits)

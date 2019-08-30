@@ -8,12 +8,13 @@ from torch.utils.data import DataLoader, SequentialSampler
 from pyutils.display import maybe_tqdm, maybe_trange
 
 from nlpr.shared.runner import (
+    BaseRunner,
     convert_examples_to_dataset,
     HybridLoader,
     complex_backpropagate,
     get_sampler,
-    TrainEpochState,
     TrainGlobalState,
+    optim_step_grad_accum,
 )
 from nlpr.shared.modeling import forward_batch_basic
 from nlpr.shared.train_setup import TrainSchedule
@@ -32,7 +33,7 @@ class RunnerParameters:
     max_grad_norm: float
 
 
-class SimpleTaskRunner:
+class SimpleTaskRunner(BaseRunner):
     def __init__(self, task, model_wrapper, optimizer_scheduler, loss_criterion,
                  device, rparams: RunnerParameters, train_schedule: TrainSchedule,
                  log_writer):
@@ -85,19 +86,17 @@ class SimpleTaskRunner:
                 verbose=verbose):
             pass
 
-    def run_train_epoch_context(self, train_dataloader, train_global_state, verbose=True):
-        train_epoch_state = TrainEpochState()
-        for step, (batch, batch_metadata) in enumerate(
-                maybe_tqdm(train_dataloader, desc="Training", verbose=verbose)):
+    def run_train_epoch_context(self, train_dataloader,
+                                train_global_state: TrainGlobalState, verbose=True):
+        for batch, batch_metadata in maybe_tqdm(train_dataloader, desc="Training", verbose=verbose):
             self.run_train_step(
-                step=step,
                 batch=batch,
-                train_epoch_state=train_epoch_state,
                 train_global_state=train_global_state,
             )
-            yield step, batch, train_epoch_state
+            yield batch, train_global_state
+        train_global_state.step_epoch()
 
-    def run_train_step(self, step, batch, train_epoch_state, train_global_state):
+    def run_train_step(self, batch, train_global_state):
         self.model.train()
         batch = batch.to(self.device)
         logits = forward_batch_basic(
@@ -109,18 +108,14 @@ class SimpleTaskRunner:
         loss = self.complex_backpropagate(loss)
         loss_val = loss.item()
 
-        train_epoch_state.tr_loss += loss_val
-        train_epoch_state.nb_tr_examples += len(batch)
-        train_epoch_state.nb_tr_steps += 1
-        if (step + 1) % self.train_schedule.gradient_accumulation_steps == 0:
-            self.optimizer_scheduler.step()
-            self.model.zero_grad()
-            train_epoch_state.global_step += 1
-            train_global_state.global_step += 1
-
+        optim_step_grad_accum(
+            optimizer_scheduler=self.optimizer_scheduler,
+            train_global_state=train_global_state,
+            gradient_accumulation_steps=self.train_schedule.gradient_accumulation_steps,
+        )
         self.log_writer.write_entry("loss_train", {
             "epoch": train_global_state.epoch,
-            "epoch_step": train_epoch_state.global_step,
+            "epoch_step": train_global_state.epoch_step,
             "global_step": train_global_state.global_step,
             "loss_val": loss_val,
             "pred_entropy": compute_pred_entropy_clean(logits)

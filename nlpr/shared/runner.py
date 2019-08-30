@@ -1,33 +1,41 @@
+import os
+
 from dataclasses import dataclass
 from typing import Dict, Union, NamedTuple
 
 import torch
-import torch.nn.functional as F
+import torch.nn as nn
 from torch.utils.data import TensorDataset, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
 from pyutils.display import maybe_tqdm
+import pyutils.io as io
 
 from nlpr.tasks.core import BatchMixin
+from nlpr.shared.pycore import ExtendedDataClassMixin
+from nlpr.shared.model_setup import OptimizerScheduler
+
+
+class BaseRunner:
+    pass
 
 
 @dataclass
-class TrainEpochState:
-    tr_loss: float = 0
+class TrainGlobalState(ExtendedDataClassMixin):
+    epoch: int = 0
+    epoch_step: int = 0
     global_step: int = 0
-    nb_tr_examples: int = 0
-    nb_tr_steps: int = 0
+
+    def step(self):
+        self.global_step += 1
+        self.epoch_step += 1
+
+    def step_epoch(self):
+        self.epoch += 1
+        self.epoch_step = 0
 
     def __str__(self):
-        s = f"global_step: {self.global_step}, tr_loss: {self.tr_loss}, " \
-            f"nb_tr_examples: {self.nb_tr_examples}, nb_tr_steps: {self.nb_tr_steps}"
-        return s
-
-
-@dataclass
-class TrainGlobalState:
-    epoch: int = 0
-    global_step: int = 0
+        return f"TGS({self.epoch} / {self.epoch_step} ({self.global_step}))"
 
 
 @dataclass
@@ -161,6 +169,7 @@ def complex_backpropagate(loss, optimizer, model,
     if gradient_accumulation_steps > 1:
         loss = loss / gradient_accumulation_steps
     if fp16:
+        # noinspection PyUnresolvedReferences
         import amp
         with amp.scale_loss(loss, optimizer) as scaled_loss:
             scaled_loss.backward()
@@ -169,3 +178,23 @@ def complex_backpropagate(loss, optimizer, model,
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
     return loss
+
+
+def optim_step_grad_accum(optimizer_scheduler: OptimizerScheduler,
+                          train_global_state: TrainGlobalState,
+                          gradient_accumulation_steps: int):
+    if (train_global_state.epoch_step + 1) % gradient_accumulation_steps == 0:
+        optimizer_scheduler.step()
+        optimizer_scheduler.optimizer.zero_grad()
+        train_global_state.global_step += 1
+
+
+def save_model_with_metadata(model: nn.Module, metadata: dict, output_dir: str, file_name="model"):
+    torch.save(
+        model.state_dict(),
+        os.path.join(output_dir, f"{file_name}.p")
+    )
+    io.write_json(
+        metadata,
+        os.path.join(output_dir, f"{file_name}.metadata.json")
+    )

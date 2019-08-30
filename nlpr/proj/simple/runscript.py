@@ -11,6 +11,7 @@ import nlpr.shared.train_setup as train_setup
 import nlpr.tasks as tasks
 import nlpr.tasks.evaluate as evaluate
 import nlpr.proj.simple.runner as simple_runner
+import nlpr.shared.metarunner as metarunner
 
 
 @zconf.run_config
@@ -34,11 +35,8 @@ class RunConfiguration(zconf.RunConfig):
     do_val = zconf.attr(action='store_true')
     do_test = zconf.attr(action='store_true')
     do_save = zconf.attr(action="store_true")
-    do_val_history = zconf.attr(action='store_true')
-    train_save_every = zconf.attr(type=int, default=None)
-    train_save_every_epoch = zconf.attr(action="store_true")
-    eval_every_epoch = zconf.attr(action="store_true")
-    eval_every = zconf.attr(type=int, default=None)
+    eval_every_steps = zconf.attr(type=int, default=0)
+    save_every_steps = zconf.attr(type=int, default=0)
     train_batch_size = zconf.attr(default=8, type=int)  # per gpu
     eval_batch_size = zconf.attr(default=8, type=int)  # per gpu
     force_overwrite = zconf.attr(action="store_true")
@@ -144,7 +142,19 @@ def main(args):
 
     with quick_init_out.log_writer.log_context():
         if args.do_train:
-            runner.run_train(train_examples)
+            val_examples = task.get_val_examples()
+            metarunner.train_val_save_every(
+                runner=runner,
+                train_examples=train_examples,
+                val_examples=val_examples,
+                should_save_func=metarunner.get_should_save_func(args.save_every_steps),
+                should_eval_func=metarunner.get_should_eval_func(args.eval_every_steps),
+                output_dir=args.output_dir,
+                verbose=True,
+                save_best_model=args.do_save,
+                load_best_model=True,
+                log_writer=quick_init_out.log_writer,
+            )
 
         if args.do_save:
             torch.save(

@@ -11,8 +11,9 @@ import nlpr.shared.model_setup as model_setup
 import nlpr.shared.train_setup as train_setup
 import nlpr.shared.model_resolution as model_resolution
 import nlpr.proj.simple.runner as simple_runner
+from nlpr.shared.runner import BaseRunner
 
-import zproto.zlogv1  as zlogv1
+import zproto.zlogv1 as zlogv1
 
 
 class RunnerCreator:
@@ -166,7 +167,7 @@ class TrainingSet:
         )
 
 
-class NTrainingRunner:
+class NTrainingRunner(BaseRunner):
     def __init__(self,
                  runner_creator: RunnerCreator,
                  labeled_examples, unlabeled_examples,
@@ -274,18 +275,3 @@ def get_n_training_pseudolabels(all_preds, with_disagreement=False, null_value=-
         chosen_preds[~chosen_idx] = null_value  # For safety
         chosen_preds_ls.append(chosen_preds)
     return chosen_examples_ls, chosen_preds_ls
-
-"""
-def run_val_write(runner_ls, val_examples):
-    votes_ls = []
-    loss_ls = []
-    for sub_runner in runner_ls:
-        val_results = sub_runner.run_val(val_examples)
-        votes = np.argmax(val_results["logits"], axis=1)
-        loss_ls.append(float(val_examples["loss"]))
-
-    return {
-        "loss": loss_ls,
-
-    }
-"""

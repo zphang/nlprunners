@@ -6,8 +6,9 @@ import torch.nn.functional as F
 
 from nlpr.shared.train_setup import TrainSchedule
 from nlpr.shared.runner import (
-    TrainEpochState,
+    BaseRunner,
     TrainGlobalState,
+    optim_step_grad_accum,
 )
 import nlpr.proj.simple.runner as simple_runner
 import nlpr.proj.llp.runner as llp_runner
@@ -24,7 +25,7 @@ class LLPUDAParameters:
     unsup_ratio: int
 
 
-class UDALLPRunner:
+class UDALLPRunner(BaseRunner):
     def __init__(self, task, model_wrapper, optimizer_scheduler, loss_criterion,
                  device,
                  rparams: simple_runner.RunnerParameters,
@@ -81,7 +82,8 @@ class UDALLPRunner:
                 verbose=verbose,
             )
 
-    def run_train_epoch(self, train_dataset_with_metadata, uda_task_data, train_global_state,
+    def run_train_epoch(self, train_dataset_with_metadata, uda_task_data,
+                        train_global_state: TrainGlobalState,
                         verbose=True):
         for _ in self.run_train_epoch_context(
                 train_dataset_with_metadata=train_dataset_with_metadata,
@@ -90,10 +92,10 @@ class UDALLPRunner:
                 verbose=verbose):
             pass
 
-    def run_train_epoch_context(self, train_dataset_with_metadata, uda_task_data, train_global_state,
+    def run_train_epoch_context(self, train_dataset_with_metadata, uda_task_data,
+                                train_global_state: TrainGlobalState,
                                 populate_after=True, verbose=True):
         self.model.train()
-        train_epoch_state = TrainEpochState()
         sup_dataloader = self.get_sup_dataloader(
             train_dataset_with_metadata=train_dataset_with_metadata,
             do_override_labels=True, verbose=verbose,
@@ -112,18 +114,17 @@ class UDALLPRunner:
             dataloader_triplet.unsup_orig,
             dataloader_triplet.unsup_aug
         ), total=len(dataloader_triplet.sup), desc="Training", verbose=verbose))
-        for step, (sup_batch_m, unsup_orig_batch_m, unsup_aug_batch_m) in train_iterator:
+        for sup_batch_m, unsup_orig_batch_m, unsup_aug_batch_m in train_iterator:
             batch_m_triplet = uda_runner.TrainDataTriplet(
                 sup=sup_batch_m.to(self.device),
                 unsup_orig=unsup_orig_batch_m.to(self.device),
                 unsup_aug=unsup_aug_batch_m.to(self.device),
             )
             self.run_train_step(
-                step=step,
                 batch_m_triplet=batch_m_triplet,
-                train_epoch_state=train_epoch_state,
+                train_global_state=train_global_state,
             )
-            yield step, batch_m_triplet, train_epoch_state
+            yield batch_m_triplet, train_global_state
         if populate_after:
             self.populate_llp_state(
                 train_dataloader=sup_dataloader,
@@ -136,7 +137,7 @@ class UDALLPRunner:
                 },
             ]))
 
-    def run_train_step(self, step, batch_m_triplet, train_epoch_state):
+    def run_train_step(self, batch_m_triplet, train_global_state: TrainGlobalState):
         llp_loss = self.compute_llp_loss(
             sup_batch_m=batch_m_triplet.sup,
         )
@@ -145,16 +146,14 @@ class UDALLPRunner:
             unsup_aug_batch_m=batch_m_triplet.unsup_aug,
         )
         loss = llp_loss + self.llpuda_params.uda_coeff * uda_loss
-
         loss = self.complex_backpropagate(loss)
+        loss_val = loss.item()
 
-        train_epoch_state.tr_loss += loss.item()
-        train_epoch_state.nb_tr_examples += len(batch_m_triplet.sup)
-        train_epoch_state.nb_tr_steps += 1
-        if (step + 1) % self.train_schedule.gradient_accumulation_steps == 0:
-            self.optimizer_scheduler.step()
-            self.model.zero_grad()
-            train_epoch_state.global_step += 1
+        optim_step_grad_accum(
+            optimizer_scheduler=self.optimizer_scheduler,
+            train_global_state=train_global_state,
+            gradient_accumulation_steps=self.train_schedule.gradient_accumulation_steps,
+        )
 
         # Update memory bank
         with torch.no_grad():
@@ -164,6 +163,13 @@ class UDALLPRunner:
             * self.llp_state.big_m_tensor[batch_m_triplet.sup.metadata["example_id"]]
             + self.llp_params.llp_mem_bank_t * new_embedding
         )
+
+        self.log_writer.write_entry("loss_train", {
+            "epoch": train_global_state.epoch,
+            "epoch_step": train_global_state.epoch_step,
+            "global_step": train_global_state.global_step,
+            "loss_val": loss_val,
+        })
 
     def compute_llp_loss(self, sup_batch_m):
         llp_loss, _, _ = self.compute_representation_loss(
