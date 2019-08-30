@@ -37,6 +37,7 @@ class RunConfiguration(zconf.RunConfig):
     do_save = zconf.attr(action="store_true")
     eval_every_steps = zconf.attr(type=int, default=0)
     save_every_steps = zconf.attr(type=int, default=0)
+    partial_eval_number = zconf.attr(type=int, default=1000)
     train_batch_size = zconf.attr(default=8, type=int)  # per gpu
     eval_batch_size = zconf.attr(default=8, type=int)  # per gpu
     force_overwrite = zconf.attr(action="store_true")
@@ -146,7 +147,7 @@ def main(args):
             metarunner.train_val_save_every(
                 runner=runner,
                 train_examples=train_examples,
-                val_examples=val_examples,
+                val_examples=val_examples[:args.partial_eval_number],  # quick and dirty
                 should_save_func=metarunner.get_should_save_func(args.save_every_steps),
                 should_eval_func=metarunner.get_should_eval_func(args.eval_every_steps),
                 output_dir=args.output_dir,

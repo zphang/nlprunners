@@ -4,7 +4,7 @@ import torch
 
 from dataclasses import dataclass
 
-from pyutils.display import maybe_tqdm
+from pyutils.display import maybe_trange
 from pyutils.functional import always_false
 from zproto.zlogv1 import BaseZLogger, PRINT_LOGGER
 
@@ -14,7 +14,7 @@ from nlpr.shared.runner import (
     save_model_with_metadata,
 )
 from nlpr.shared.pycore import ExtendedDataClassMixin
-from nlpr.shared.torch_utils import copy_state_dict
+from nlpr.shared.torch_utils import copy_state_dict, CPU_DEVICE
 
 
 @dataclass
@@ -63,7 +63,7 @@ def train_val_save_every(runner: BaseRunner,
     best_val_state = None
     best_state_dict = None
     val_state_history = []
-    for _ in maybe_tqdm(
+    for _ in maybe_trange(
             int(runner.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
         train_dataloader = runner.get_train_dataloader(train_examples)
         for _ in runner.run_train_epoch_context(
@@ -80,7 +80,7 @@ def train_val_save_every(runner: BaseRunner,
             if should_eval_func(train_global_state):
                 val_result = runner.run_val(val_examples)
                 val_state = ValState(
-                    score=val_result["metrics"]["major"],
+                    score=val_result["metrics"].major,
                     train_global_state=train_global_state.new(),
                 )
                 log_writer.write_entry("train_val", val_state.asdict()  )
@@ -98,7 +98,10 @@ def train_val_save_every(runner: BaseRunner,
                             output_dir=output_dir,
                             file_name="best_model.p",
                         )
-                    best_state_dict = copy_state_dict(runner.model.state_dict())
+                    best_state_dict = copy_state_dict(
+                        state_dict=runner.model.state_dict(),
+                        target_device=CPU_DEVICE,
+                    )
                 val_state_history.append(val_state)
 
     if load_best_model:

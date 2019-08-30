@@ -3,6 +3,8 @@ import copy
 import torch
 import torch.nn.functional as F
 
+CPU_DEVICE = torch.device("cpu")
+
 
 def normalize_embedding_tensor(embedding):
     return F.normalize(embedding, p=2, dim=1)
