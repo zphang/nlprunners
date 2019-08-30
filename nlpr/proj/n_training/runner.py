@@ -1,16 +1,19 @@
 import numpy as np
 import os
 import pandas as pd
-import torch
 import tqdm
 from dataclasses import dataclass
 import typing
+
+import torch
+import torch.nn.functional as F
 
 import nlpr.shared.distributed as distributed
 import nlpr.shared.model_setup as model_setup
 import nlpr.shared.train_setup as train_setup
 import nlpr.shared.model_resolution as model_resolution
 import nlpr.proj.simple.runner as simple_runner
+import nlpr.shared.metarunner as metarunner
 from nlpr.shared.runner import BaseRunner
 
 import zproto.zlogv1 as zlogv1
@@ -122,10 +125,20 @@ class RunnerCreator:
 
 
 @dataclass
+class MetaRunnerParameters:
+    partial_eval_number: int
+    save_every_steps: int
+    eval_every_steps: int
+    output_dir: str
+    do_save: bool
+
+
+@dataclass
 class NTrainingRunnerParameters:
     num_models: int
     num_iter: int
     with_disagreement: bool
+    confidence_threshold: typing.Union[float, None]
 
 
 @dataclass
@@ -172,11 +185,13 @@ class NTrainingRunner(BaseRunner):
                  runner_creator: RunnerCreator,
                  labeled_examples, unlabeled_examples,
                  rparams: NTrainingRunnerParameters,
+                 meta_runner_parameters: MetaRunnerParameters,
                  log_writer: zlogv1.BaseZLogger):
         self.runner_creator = runner_creator
         self.labeled_examples = labeled_examples
         self.unlabeled_examples = unlabeled_examples
         self.rparams = rparams
+        self.meta_runner_parameters = meta_runner_parameters
         self.log_writer = log_writer
 
         self.task = self.runner_creator.task
@@ -212,7 +227,7 @@ class NTrainingRunner(BaseRunner):
         return runner_ls
 
     def n_training_step(self, step, training_set: TrainingSet):
-        preds_ls = []
+        logits_ls = []
         runner_ls = []
         for i in tqdm.trange(self.rparams.num_models):
             runner_train_examples = training_set.get_training_examples(i)
@@ -222,21 +237,36 @@ class NTrainingRunner(BaseRunner):
                     num_train_examples=len(runner_train_examples),
                     log_writer=sub_log_writer,
                 )
-                runner.run_train(runner_train_examples, verbose=True)
+                val_examples = self.task.get_val_examples()
+                metarunner.train_val_save_every(
+                    runner=runner,
+                    train_examples=runner_train_examples,
+                    # quick and dirty
+                    val_examples=val_examples[:self.meta_runner_parameters.partial_eval_number],
+                    should_save_func=metarunner.get_should_save_func(
+                        self.meta_runner_parameters.save_every_steps),
+                    should_eval_func=metarunner.get_should_eval_func(
+                        self.meta_runner_parameters.eval_every_steps),
+                    output_dir=self.meta_runner_parameters.output_dir,
+                    verbose=True,
+                    save_best_model=self.meta_runner_parameters.do_save,
+                    load_best_model=True,
+                    log_writer=self.log_writer,
+                )
                 logits = runner.run_test(self.unlabeled_examples)
-            preds_ls.append(np.argmax(logits, axis=-1))
+            logits_ls.append(logits)
             runner_ls.append(runner)
 
-        all_preds = np.stack(preds_ls, axis=1)
-        self.log_writer.write_entry("sub_runner_preds", {
+        all_logits = np.stack(logits_ls, axis=1)
+        self.log_writer.write_obj("sub_runner_logits", {
             "step": step,
-            "preds": pd.DataFrame(all_preds).to_dict(),
-        })
+        }, all_logits)
         self.log_writer.flush()
 
         chosen_examples_ls, chosen_preds_ls = get_n_training_pseudolabels(
-            all_preds=all_preds,
+            all_logits=all_logits,
             with_disagreement=self.rparams.with_disagreement,
+            confidence_threshold=self.rparams.confidence_threshold,
         )
 
         new_training_set = TrainingSet(
@@ -256,17 +286,43 @@ class NTrainingRunner(BaseRunner):
             return self.log_writer
 
 
-def get_n_training_pseudolabels(all_preds, with_disagreement=False, null_value=-1):
-    num_models = all_preds.shape[-1]
+def get_n_training_pseudolabels(all_logits, with_disagreement=False, null_value=-1,
+                                confidence_threshold=None):
+    # all logits: [n, num_models, num_classes]
+    num_examples, num_models, num_classes = all_logits.shape
+    above_conf_threshold = np.ones([num_examples, num_models]).astype(bool)
+    if confidence_threshold is not None:
+        softmax_preds = F.softmax(torch.from_numpy(num_models), dim=-1).numpy()
+        max_softmax_preds = np.max(softmax_preds, axis=-1)
+        above_conf_threshold &= (max_softmax_preds > confidence_threshold)
+    all_preds = np.argmax(all_logits, axis=-1)
+
+    all_above_conf_threshold_preds = all_preds.copy()
+    all_above_conf_threshold_preds[~above_conf_threshold] = null_value
+
     chosen_examples_ls = []
     chosen_preds_ls = []
     for i in range(num_models):
+        # Extract some preds
         others_selector = np.arange(num_models) != i
-        others_preds = all_preds[:, others_selector]
-        others_agreement = np.all((others_preds[:, 0][:, np.newaxis] == others_preds), axis=1)
+        others_preds = all_above_conf_threshold_preds[:, others_selector]
+        this_preds = all_preds[:, i]
+        one_other_preds = others_preds[:, 0]
+
+        # Check that all others_preds agree with an arbitrarily chosen other column
+        others_agreement = np.all((one_other_preds[:, np.newaxis] == others_preds), axis=1)
+        # Check that that column's preds aren't invalid
+        # (Some subtlety here. If any of the other columns are below threshold, there're 2 cases:
+        #  1. All of them are below threshold, in which case others_agreement[i]=True, so
+        #     we need to set it to false here. If they're all below, we just need to check
+        #     the arbitrary column.
+        #  2. Only some are under threshold, in which case others_agreement[i]=False, so
+        #     we don't need to do anything
+        if confidence_threshold is not None:
+            others_agreement &= (one_other_preds != null_value)
 
         if with_disagreement:
-            chosen_idx = others_agreement & (others_preds[:, 0] != all_preds[:, i])
+            chosen_idx = others_agreement & (one_other_preds != this_preds)
         else:
             chosen_idx = others_agreement
 
@@ -274,4 +330,8 @@ def get_n_training_pseudolabels(all_preds, with_disagreement=False, null_value=-
         chosen_preds = np.array(others_preds)[:, 0]
         chosen_preds[~chosen_idx] = null_value  # For safety
         chosen_preds_ls.append(chosen_preds)
-    return chosen_examples_ls, chosen_preds_ls
+
+    all_chosen_examples = np.stack(chosen_examples_ls, axis=1),
+    all_chosen_preds = np.stack(chosen_preds_ls, axis=1),
+
+    return all_chosen_examples, all_chosen_preds

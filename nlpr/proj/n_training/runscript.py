@@ -33,11 +33,9 @@ class RunConfiguration(zconf.RunConfig):
     do_val = zconf.attr(action='store_true')
     do_test = zconf.attr(action='store_true')
     do_save = zconf.attr(action="store_true")
-    do_val_history = zconf.attr(action='store_true')
-    train_save_every = zconf.attr(type=int, default=None)
-    train_save_every_epoch = zconf.attr(action="store_true")
-    eval_every_epoch = zconf.attr(action="store_true")
-    eval_every = zconf.attr(type=int, default=None)
+    eval_every_steps = zconf.attr(type=int, default=0)
+    save_every_steps = zconf.attr(type=int, default=0)
+    partial_eval_number = zconf.attr(type=int, default=1000)
     train_batch_size = zconf.attr(default=8, type=int)  # per gpu
     eval_batch_size = zconf.attr(default=8, type=int)  # per gpu
     force_overwrite = zconf.attr(action="store_true")
@@ -67,6 +65,7 @@ class RunConfiguration(zconf.RunConfig):
     num_models = zconf.attr(default=3, type=int)
     num_iter = zconf.attr(default=10, type=int)
     with_disagreement = zconf.attr(action='store_true')
+    confidence_threshold = zconf.attr(default=None, type=float)
     num_unlabeled = zconf.attr(default=-1, type=int)
 
 
@@ -89,6 +88,7 @@ def main(args):
         num_models=args.num_models,
         num_iter=args.num_iter,
         with_disagreement=args.with_disagreement,
+        confidence_threshold=args.confidence_threshold,
     )
 
     runner_creator = n_training_runner.RunnerCreator(
@@ -106,12 +106,20 @@ def main(args):
         device=quick_init_out.device, n_gpu=quick_init_out.n_gpu,
         verbose=False,
     )
+    meta_runner_parameters = n_training_runner.MetaRunnerParameters(
+        partial_eval_number=args.partial_eval_number,
+        save_every_steps=args.save_every_steps,
+        eval_every_steps=args.eval_every_steps,
+        output_dir=args.output_dir,
+        do_save=args.do_save,
+    )
     runner = n_training_runner.NTrainingRunner(
         runner_creator=runner_creator,
         labeled_examples=labeled_train_examples,
         unlabeled_examples=unlabeled_train_examples,
         rparams=n_training_rparams,
         log_writer=quick_init_out.log_writer,
+        meta_runner_parameters=meta_runner_parameters,
     )
 
     with quick_init_out.log_writer.log_context():
