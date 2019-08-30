@@ -14,6 +14,7 @@ from nlpr.shared.runner import (
     save_model_with_metadata,
 )
 from nlpr.shared.pycore import ExtendedDataClassMixin
+from nlpr.shared.torch_utils import copy_state_dict
 
 
 @dataclass
@@ -57,11 +58,10 @@ def train_val_save_every(runner: BaseRunner,
                          save_best_model: bool = True,
                          load_best_model: bool = True,
                          log_writer: BaseZLogger = PRINT_LOGGER):
-    if load_best_model:
-        assert save_best_model
 
     train_global_state = TrainGlobalState()
     best_val_state = None
+    best_state_dict = None
     val_state_history = []
     for _ in maybe_tqdm(
             int(runner.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
@@ -89,18 +89,20 @@ def train_val_save_every(runner: BaseRunner,
                     best_val_state = val_state.new()
                     log_writer.write_entry("train_val_best", best_val_state.asdict())
                     log_writer.flush()
-                    save_model_with_metadata(
-                        model=runner.model,
-                        metadata={
-                            "val_state": best_val_state.as_dict(),
-                        },
-                        output_dir=output_dir,
-                        file_name="best_model.p",
-                    )
+                    if save_best_model:
+                        save_model_with_metadata(
+                            model=runner.model,
+                            metadata={
+                                "val_state": best_val_state.as_dict(),
+                            },
+                            output_dir=output_dir,
+                            file_name="best_model.p",
+                        )
+                    best_state_dict = copy_state_dict(runner.model.state_dict())
                 val_state_history.append(val_state)
 
     if load_best_model:
-        runner.model.load_state_dict(torch.load(os.path.join(output_dir, "best_model.p")))
+        runner.model.load_state_dict(best_state_dict)
 
     return {
         "best_val_state": best_val_state,

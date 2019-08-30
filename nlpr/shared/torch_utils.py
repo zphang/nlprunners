@@ -1,3 +1,5 @@
+import copy
+
 import torch
 import torch.nn.functional as F
 
@@ -27,3 +29,14 @@ def compute_pred_entropy(logits):
 
 def compute_pred_entropy_clean(logits):
     return float(compute_pred_entropy(logits).item())
+
+
+def copy_state_dict(state_dict, target_device=None):
+    if target_device is None:
+        return copy.deepcopy(state_dict)
+
+    return {
+        k: v.to(target_device).clone()
+        for k, v in state_dict.items()
+    }
+
