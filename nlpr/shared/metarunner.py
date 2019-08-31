@@ -104,7 +104,8 @@ def train_val_save_every(runner: BaseRunner,
                         target_device=CPU_DEVICE,
                     )
                 val_state_history.append(val_state)
-            if train_global_state.global_step >= runner.train_schedule.max_steps:
+            if runner.train_schedule.max_steps != -1 and \
+                    train_global_state.global_step >= runner.train_schedule.max_steps:
                 full_break = True
 
             if full_break:
