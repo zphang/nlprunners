@@ -12,6 +12,7 @@ from ..utils import truncate_sequences, pad_to_max_seq_length
 class TaskTypes(Enum):
     CLASSIFICATION = 1
     REGRESSION = 2
+    SPAN_COMPARISON_CLASSIFICATION = 3
     UNDEFINED = -1
 
 

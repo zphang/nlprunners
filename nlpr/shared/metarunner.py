@@ -62,6 +62,7 @@ def train_val_save_every(runner: BaseRunner,
     train_global_state = TrainGlobalState()
     best_val_state = None
     best_state_dict = None
+    full_break = False
     val_state_history = []
     for _ in maybe_trange(
             int(runner.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
@@ -103,8 +104,17 @@ def train_val_save_every(runner: BaseRunner,
                         target_device=CPU_DEVICE,
                     )
                 val_state_history.append(val_state)
+            if train_global_state.global_step >= runner.train_schedule.max_steps:
+                full_break = True
 
-    if load_best_model:
+            if full_break:
+                break
+
+        if full_break:
+            break
+
+
+    if load_best_model and best_state_dict is not None:
         runner.model.load_state_dict(best_state_dict)
 
     return {

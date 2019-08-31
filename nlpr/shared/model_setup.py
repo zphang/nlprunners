@@ -4,6 +4,7 @@ import torch.nn as nn
 import pytorch_transformers
 
 from nlpr.shared.model_resolution import ModelArchitectures
+from nlpr.tasks.lib.shared import TaskTypes
 
 
 class ModelWrapper:
@@ -14,7 +15,16 @@ class ModelWrapper:
 
 def simple_model_setup(model_type, model_class_spec, config_path, tokenizer_path, task):
     config = model_class_spec.config_class.from_json_file(config_path)
-    config.num_labels = len(task.LABELS)
+    if task.TASK_TYPE == TaskTypes.CLASSIFICATION:
+        config.num_labels = len(task.LABELS)
+    elif task.TASK_TYPE == TaskTypes.REGRESSION:
+        config.num_labels = 1
+    elif task.TASK_TYPE == TaskTypes.SPAN_COMPARISON_CLASSIFICATION:
+        config.num_labels = len(task.LABELS)
+        config.num_spans = 2  # todo: hardcode
+    else:
+        raise KeyError(task.TASK_TYPE)
+
     model = model_class_spec.model_class(config)
     model_arch = ModelArchitectures.from_model_type(model_type)
     if model_arch in [ModelArchitectures.BERT]:

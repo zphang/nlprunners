@@ -14,6 +14,7 @@ import pyutils.io as io
 from nlpr.tasks.core import BatchMixin
 from nlpr.shared.pycore import ExtendedDataClassMixin
 from nlpr.shared.model_setup import OptimizerScheduler
+from nlpr.tasks.lib.shared import TaskTypes
 
 
 class BaseRunner:

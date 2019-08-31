@@ -62,7 +62,7 @@ class TokenizedExample(BaseTokenizedExample):
             unpadded_tokens=(
                 paragraph
                 + self.question + [tokenizer.sep_token] + maybe_extra_sep
-                + self.answer + [tokenizer.sep_token],
+                + self.answer + [tokenizer.sep_token]
             ),
             unpadded_segment_ids=(
                 [feat_spec.sequence_a_segment_id] * len(paragraph)
@@ -123,8 +123,8 @@ class MultiRCTask(Task):
     DataRow = DataRow
     Batch = Batch
 
-    TASK_TYPE = TaskTypes.UNDEFINED
-    LABELS = [False, True]
+    TASK_TYPE = TaskTypes.CLASSIFICATION
+    LABELS = [0, 1]
     LABEL_BIMAP = labels_to_bimap(LABELS)
 
     def __init__(self, name, path_dict, filter_sentences=True):
@@ -146,13 +146,13 @@ class MultiRCTask(Task):
         examples = []
         question_id = 0
         for line in lines:
-            soup = bs4.BeautifulSoup(line["paragraph"]["text"], features="lxml")
+            soup = bs4.BeautifulSoup(line["passage"]["text"], features="lxml")
             sentence_ls = []
             for i, elem in enumerate(soup.html.body.contents):
                 if isinstance(elem, bs4.element.NavigableString):
                     sentence_ls.append(str(elem).strip())
 
-            for question_dict in line["paragraph"]["questions"]:
+            for question_dict in line["passage"]["questions"]:
                 question = question_dict["question"]
                 if self.filter_sentences:
                     paragraph = " ".join(
@@ -169,7 +169,7 @@ class MultiRCTask(Task):
                         paragraph=paragraph,
                         question=question,
                         answer=answer,
-                        label=answer_dict["isAnswer"] if set_type != "test" else self.LABELS[-1],
+                        label=answer_dict["label"] if set_type != "test" else self.LABELS[-1],
                         question_id=question_id,
                     ))
                 question_id += 1

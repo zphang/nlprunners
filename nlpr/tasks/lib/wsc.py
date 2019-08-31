@@ -173,7 +173,7 @@ class WSCTask(Task):
     DataRow = DataRow
     Batch = Batch
 
-    TASK_TYPE = TaskTypes.UNDEFINED
+    TASK_TYPE = TaskTypes.SPAN_COMPARISON_CLASSIFICATION
     LABELS = [False, True]
     LABEL_BIMAP = labels_to_bimap(LABELS)
 

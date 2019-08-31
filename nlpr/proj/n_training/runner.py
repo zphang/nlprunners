@@ -258,12 +258,12 @@ class NTrainingRunner(BaseRunner):
             runner_ls.append(runner)
 
         all_logits = np.stack(logits_ls, axis=1)
-        self.log_writer.write_obj("sub_runner_logits", {
+        self.log_writer.write_obj("sub_runner_logits", all_logits, {
             "step": step,
-        }, all_logits)
+        })
         self.log_writer.flush()
 
-        chosen_examples_ls, chosen_preds_ls = get_n_training_pseudolabels(
+        chosen_examples, chosen_preds = get_n_training_pseudolabels(
             all_logits=all_logits,
             with_disagreement=self.rparams.with_disagreement,
             confidence_threshold=self.rparams.confidence_threshold,
@@ -274,8 +274,8 @@ class NTrainingRunner(BaseRunner):
             labeled_examples=training_set.labeled_examples,
             unlabeled_examples=training_set.unlabeled_examples,
             labeled_indices=training_set.labeled_indices,
-            chosen_examples=np.stack(chosen_examples_ls, axis=1),
-            chosen_preds=np.stack(chosen_preds_ls, axis=1),
+            chosen_examples=chosen_examples,
+            chosen_preds=chosen_preds,
         )
         return new_training_set, runner_ls
 
@@ -292,7 +292,7 @@ def get_n_training_pseudolabels(all_logits, with_disagreement=False, null_value=
     num_examples, num_models, num_classes = all_logits.shape
     above_conf_threshold = np.ones([num_examples, num_models]).astype(bool)
     if confidence_threshold is not None:
-        softmax_preds = F.softmax(torch.from_numpy(num_models), dim=-1).numpy()
+        softmax_preds = F.softmax(torch.from_numpy(all_logits), dim=-1).numpy()
         max_softmax_preds = np.max(softmax_preds, axis=-1)
         above_conf_threshold &= (max_softmax_preds > confidence_threshold)
     all_preds = np.argmax(all_logits, axis=-1)
@@ -331,7 +331,7 @@ def get_n_training_pseudolabels(all_logits, with_disagreement=False, null_value=
         chosen_preds[~chosen_idx] = null_value  # For safety
         chosen_preds_ls.append(chosen_preds)
 
-    all_chosen_examples = np.stack(chosen_examples_ls, axis=1),
-    all_chosen_preds = np.stack(chosen_preds_ls, axis=1),
+    all_chosen_examples = np.stack(chosen_examples_ls, axis=1)
+    all_chosen_preds = np.stack(chosen_preds_ls, axis=1)
 
     return all_chosen_examples, all_chosen_preds

@@ -84,7 +84,7 @@ class Batch(BatchMixin):
             input_ids=torch.tensor([f.input_ids for f in data_row_ls], dtype=torch.long),
             input_mask=torch.tensor([f.input_mask for f in data_row_ls], dtype=torch.long),
             segment_ids=torch.tensor([f.segment_ids for f in data_row_ls], dtype=torch.long),
-            label=torch.tensor([f.label_id for f in data_row_ls], dtype=torch.float),
+            label=torch.tensor([f.label for f in data_row_ls], dtype=torch.float),
             tokens=[f.tokens for f in data_row_ls],
         )
 

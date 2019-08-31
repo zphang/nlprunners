@@ -5,6 +5,7 @@ import pytorch_transformers as ptt
 
 from nlpr.tasks.core import FeaturizationSpec
 from nlpr.tasks.lib.shared import TaskTypes
+import nlpr.shared.modeling as modeling
 
 
 class ModelArchitectures(Enum):
@@ -114,19 +115,20 @@ def build_featurization_spec(model_type, max_seq_length):
 MODEL_CLASS_DICT = {
     ModelArchitectures.BERT: {
         TaskTypes.CLASSIFICATION: ptt.BertForSequenceClassification,
-        TaskTypes.REGRESSION: None,  # todo, regression
+        TaskTypes.REGRESSION: ptt.BertForSequenceClassification,  # ptt is weird
+        TaskTypes.SPAN_COMPARISON_CLASSIFICATION: modeling.BertForSpanComparisonClassification,
     },
     ModelArchitectures.XLNET: {
         TaskTypes.CLASSIFICATION: ptt.XLNetForSequenceClassification,
-        TaskTypes.REGRESSION: None,  # todo, regression
+        TaskTypes.REGRESSION: ptt.XLNetForSequenceClassification,  # ptt is weird
     },
     ModelArchitectures.XLM: {
         TaskTypes.CLASSIFICATION: ptt.XLMForSequenceClassification,
-        TaskTypes.REGRESSION: None,  # todo, regression
+        TaskTypes.REGRESSION: ptt.XLMForSequenceClassification,  # ptt is weird
     },
     ModelArchitectures.ROBERTA: {
         TaskTypes.CLASSIFICATION: ptt.RobertaForSequenceClassification,
-        TaskTypes.REGRESSION: None,  # todo, regression
+        TaskTypes.REGRESSION: ptt.RobertaForSequenceClassification,  # ptt is weird
     },
 }
 

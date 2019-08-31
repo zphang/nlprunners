@@ -43,7 +43,8 @@ class RunConfiguration(zconf.RunConfig):
     force_overwrite = zconf.attr(action="store_true")
     # overwrite_cache = zconf.attr(action="store_true")
     seed = zconf.attr(type=int, default=-1)
-    use_tensorboard = zconf.attr(action="store_true")
+    train_examples_number = zconf.attr(type=int, default=None)
+    train_examples_fraction = zconf.attr(type=float, default=None)
 
     # === Training Learning Parameters === #
     learning_rate = zconf.attr(default=1e-5, type=float)
@@ -92,6 +93,11 @@ def main(args):
         model_wrapper.model.to(quick_init_out.device)
 
     train_examples = task.get_train_examples()
+    train_examples, _ = train_setup.maybe_subsample_train(
+        train_examples=train_examples,
+        train_examples_number=args.train_examples_number,
+        train_examples_fraction=args.train_examples_fraction,
+    )
     num_train_examples = len(train_examples)
 
     train_schedule = train_setup.get_train_schedule(

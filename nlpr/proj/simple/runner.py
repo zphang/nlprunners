@@ -16,7 +16,7 @@ from nlpr.shared.runner import (
     TrainGlobalState,
     optim_step_grad_accum,
 )
-from nlpr.shared.modeling import forward_batch_basic
+from nlpr.shared.modeling import forward_batch_delegate, compute_loss_from_model_output
 from nlpr.shared.train_setup import TrainSchedule
 import nlpr.tasks.evaluate as evaluate
 from nlpr.shared.torch_utils import compute_pred_entropy_clean
@@ -99,12 +99,19 @@ class SimpleTaskRunner(BaseRunner):
     def run_train_step(self, batch, train_global_state):
         self.model.train()
         batch = batch.to(self.device)
-        logits = forward_batch_basic(
+        logits = forward_batch_delegate(
             model=self.model,
             batch=batch,
             omit_label_ids=True,
+            task_type=self.task.TASK_TYPE,
         )[0]
-        loss = self.loss_criterion(logits, batch.label_ids)
+        loss = compute_loss_from_model_output(
+            logits=logits,
+            loss_criterion=self.loss_criterion,
+            batch=batch,
+            task_type=self.task.TASK_TYPE,
+        )
+
         loss = self.complex_backpropagate(loss)
         loss_val = loss.item()
 
@@ -134,12 +141,18 @@ class SimpleTaskRunner(BaseRunner):
             batch = batch.to(self.device)
 
             with torch.no_grad():
-                logits = forward_batch_basic(
+                logits = forward_batch_delegate(
                     model=self.model,
                     batch=batch,
                     omit_label_ids=True,
+                    task_type=self.task.TASK_TYPE,
                 )[0]
-                tmp_eval_loss = self.loss_criterion(logits, batch.label_ids)
+                tmp_eval_loss = compute_loss_from_model_output(
+                    logits=logits,
+                    loss_criterion=self.loss_criterion,
+                    batch=batch,
+                    task_type=self.task.TASK_TYPE,
+                )
 
             logits = logits.detach().cpu().numpy()
             total_eval_loss += tmp_eval_loss.mean().item()
@@ -164,10 +177,11 @@ class SimpleTaskRunner(BaseRunner):
                 maybe_tqdm(test_dataloader, desc="Predictions (Test)", verbose=verbose)):
             batch = batch.to(self.device)
             with torch.no_grad():
-                logits = forward_batch_basic(
+                logits = forward_batch_delegate(
                     model=self.model,
                     batch=batch,
                     omit_label_ids=True,
+                    task_type=self.task.TASK_TYPE,
                 )[0]
             logits = logits.detach().cpu().numpy()
             all_logits.append(logits)
