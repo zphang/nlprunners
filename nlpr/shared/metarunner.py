@@ -1,7 +1,3 @@
-import os
-
-import torch
-
 from dataclasses import dataclass
 
 from pyutils.display import maybe_trange
@@ -12,6 +8,7 @@ from nlpr.shared.runner import (
     BaseRunner,
     TrainGlobalState,
     save_model_with_metadata,
+    compare_steps_max_steps,
 )
 from nlpr.shared.pycore import ExtendedDataClassMixin
 from nlpr.shared.torch_utils import copy_state_dict, CPU_DEVICE
@@ -108,12 +105,16 @@ def train_val_save_every(runner: BaseRunner,
                     train_global_state.global_step >= runner.train_schedule.max_steps:
                 full_break = True
 
+            if compare_steps_max_steps(
+                    step=train_global_state.global_step,
+                    max_steps=runner.train_schedule.max_steps):
+                full_break = True
+
             if full_break:
                 break
 
         if full_break:
             break
-
 
     if load_best_model and best_state_dict is not None:
         runner.model.load_state_dict(best_state_dict)

@@ -199,3 +199,10 @@ def save_model_with_metadata(model: nn.Module, metadata: dict, output_dir: str, 
         metadata,
         os.path.join(output_dir, f"{file_name}.metadata.json")
     )
+
+
+def compare_steps_max_steps(step, max_steps):
+    return (
+        max_steps != -1
+        and step >= max_steps
+    )

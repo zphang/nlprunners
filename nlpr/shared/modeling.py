@@ -25,9 +25,16 @@ def forward_batch_delegate(model: nn.Module, batch, task_type: TaskTypes, omit_l
         )
     elif task_type == TaskTypes.SPAN_COMPARISON_CLASSIFICATION:
         spans = torch.stack([
-            batch.sent1_span,
-            batch.sent2_span,
+            batch.sentence1_span,
+            batch.sentence2_span,
         ], dim=-2)
+        return model(
+            input_ids=batch.input_ids,
+            spans=spans,
+            token_type_ids=batch.segment_ids,
+            attention_mask=batch.input_mask,
+            labels=batch.label_ids if not omit_label_ids else None,
+        )
     else:
         raise KeyError(task_type)
 
@@ -38,6 +45,8 @@ def compute_loss_from_model_output(logits, loss_criterion, batch, task_type: Tas
         loss = loss_criterion(logits, batch.label_ids)
     elif task_type == TaskTypes.REGRESSION:
         loss = loss_criterion(logits.squeeze(-1), batch.label)
+    elif task_type == TaskTypes.SPAN_COMPARISON_CLASSIFICATION:
+        loss = loss_criterion(logits, batch.label_ids)
     else:
         raise KeyError(task_type)
     return loss
@@ -97,17 +106,18 @@ class BertForSpanComparisonClassification(ptt.BertPreTrainedModel):
     def forward(self, input_ids, spans,
                 token_type_ids=None, attention_mask=None, labels=None,
                 position_ids=None, head_mask=None):
-        sequence_output, other_outputs = self.bert(
+        bert_output = self.bert(
             input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
             attention_mask=attention_mask, head_mask=head_mask,
         )
+        sequence_output = bert_output[0]
         span_embeddings = self.span_attention_extractor(sequence_output, spans)
         span_embeddings = span_embeddings.view(-1, self.num_spans * self.config.hidden_size)
         span_embeddings = self.dropout(span_embeddings)
 
         logits = self.classifier(span_embeddings)
 
-        outputs = (logits,) + other_outputs  # add hidden states and attention if they are here
+        outputs = (logits,) + bert_output[2:]  # add hidden states and attention if they are here
 
         if labels is not None:
             loss_fct = CrossEntropyLoss()

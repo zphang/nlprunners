@@ -21,7 +21,7 @@ def simple_model_setup(model_type, model_class_spec, config_path, tokenizer_path
         config.num_labels = 1
     elif task.TASK_TYPE == TaskTypes.SPAN_COMPARISON_CLASSIFICATION:
         config.num_labels = len(task.LABELS)
-        config.num_spans = 2  # todo: hardcode
+        config.num_spans = 2  # todo: this is hardcoded
     else:
         raise KeyError(task.TASK_TYPE)
 

@@ -2,9 +2,10 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, TypeVar
 from overrides import overrides
 
 import torch
+import torch.nn as nn
 
 
-class SelfAttentiveSpanExtractor:
+class SelfAttentiveSpanExtractor(nn.Module):
     """
     Computes span representations by generating an unnormalized attention score for each
     word in the document. Spans representations are computed with respect to these

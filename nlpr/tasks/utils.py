@@ -80,3 +80,10 @@ def convert_word_idx_for_bert_tokens(text, bert_tokens, word_idx_ls, check=True)
         span_ls=span_ls,
         check=check,
     )
+
+
+def get_tokens_start_end(sent, char_span_start, char_span_end, tokenizer):
+    front_tokens = tokenizer.tokenize(sent[:char_span_start])
+    front_span_tokens = tokenizer.tokenize(sent[:char_span_end])
+    span_tokens_start, span_tokens_end = len(front_tokens), len(front_span_tokens)
+    return span_tokens_start, span_tokens_end
