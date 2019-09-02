@@ -16,6 +16,8 @@ import nlpr.shared.train_setup as train_setup
 import nlpr.shared.model_resolution as model_resolution
 import nlpr.proj.simple.runner as simple_runner
 import nlpr.shared.metarunner as metarunner
+import nlpr.tasks as tasks
+import nlpr.tasks.evaluate as evaluate
 from nlpr.shared.runner import BaseRunner
 
 import zproto.zlogv1 as zlogv1
@@ -318,8 +320,37 @@ def get_pred_from_n_logits_slice(logits_slice):
         return np.argmax(scipy.special.softmax(logits_slice, axis=1).mean(0))
 
 
-def evaluate_n_logits(task, ):
-    evaluate.compute_task_metrics(self.task, all_logits, val_examples),
+def evaluate_n_logits(task, logits_cube, examples):
+    if task.TASK_TYPE == tasks.TaskTypes.CLASSIFICATION:
+        preds = get_preds_from_n_logits_cube(logits_cube)
+        return evaluate.compute_task_metrics_from_classification_preds(
+            task=task, preds=preds, examples=examples)
+    elif task.TASK_TYPE == tasks.TaskTypes.REGRESSION:
+        preds = logits_cube.mean(axis=1)
+        return evaluate.compute_task_metrics(
+            task=task, logits=preds, examples=examples)
+    else:
+        raise KeyError(task.TASK_TYPE)
+
+
+def write_n_training_val_results(task, logits_ls, val_examples, output_dir, verbose=True):
+    logits_cube = np.stack(logits_ls, axis=1)
+    metrics = evaluate_n_logits(
+        task=task,
+        logits_cube=logits_cube,
+        examples=val_examples,
+    )
+    torch.save(
+        logits_cube,
+        os.path.join(output_dir, "val_preds.p"),
+    )
+    evaluate.write_metrics(
+        results={
+            "metrics": metrics
+        },
+        output_path=os.path.join(output_dir, "val_metrics.json"),
+        verbose=verbose,
+    )
 
 
 def get_n_training_pseudolabels(all_logits, with_disagreement=False, null_value=-1,

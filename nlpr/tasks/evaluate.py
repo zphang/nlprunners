@@ -50,11 +50,47 @@ def compute_task_metrics(task, logits, examples):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.StsbTask):
         # Not actually logits
-        return PearsonAndSpearmanEval.from_preds(logits, examples)
+        return PearsonAndSpearmanEval.from_preds(np.squeeze(logits, axis=-1), examples)
     elif isinstance(task, tasks.WiCTask):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.WSCTask):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
+    else:
+        raise KeyError(task)
+
+
+def compute_task_metrics_from_classification_preds(task, preds, examples):
+    # Todo: move logic to task?
+    if isinstance(task, tasks.BoolQTask):
+        return SimpleAccuracyEval.from_preds(task, preds, examples)
+    elif isinstance(task, tasks.CommitmentBankTask):
+        return CommitmentBankEval.from_preds(task, preds, examples)
+    elif isinstance(task, tasks.ColaTask):
+        return MccEval.from_preds(task, preds, examples)
+    elif isinstance(task, tasks.CopaTask):
+        return SimpleAccuracyEval.from_preds(task, preds, examples)
+    elif isinstance(task, tasks.IMDBTask):
+        return SimpleAccuracyEval.from_preds(task, preds, examples)
+    elif isinstance(task, tasks.MnliTask):
+        return SimpleAccuracyEval.from_preds(task, preds, examples)
+    elif isinstance(task, tasks.MrpcTask):
+        return AccAndF1Eval.from_preds(task, preds, examples)
+    elif isinstance(task, tasks.MultiRCTask):
+        return MultiRCEval.from_preds(task, preds, examples)
+    elif isinstance(task, tasks.QnliTask):
+        return SimpleAccuracyEval.from_preds(task, preds, examples)
+    elif isinstance(task, tasks.QqpTask):
+        return AccAndF1Eval.from_preds(task, preds, examples)
+    elif isinstance(task, tasks.RteTask):
+        return SimpleAccuracyEval.from_preds(task, preds, examples)
+    elif isinstance(task, tasks.SstTask):
+        return SimpleAccuracyEval.from_preds(task, preds, examples)
+    elif isinstance(task, tasks.StsbTask):
+        raise RuntimeError("Not supported for regression")
+    elif isinstance(task, tasks.WiCTask):
+        return SimpleAccuracyEval.from_preds(task, preds, examples)
+    elif isinstance(task, tasks.WSCTask):
+        return SimpleAccuracyEval.from_preds(task, preds, examples)
     else:
         raise KeyError(task)
 
@@ -215,10 +251,13 @@ def mean(*args) -> float:
 
 
 def write_metrics(results, output_path, verbose=True):
-    metrics_str = json.dumps(
-        {"loss": results["loss"], "metrics": results["metrics"].asdict()},
-        indent=2,
-    )
+    results_to_write = {}
+    if "loss" in results:
+        results_to_write["loss"] = results["loss"]
+    if "metrics" in results:
+        results_to_write["metrics"] = results["metrics"].asdict()
+    assert results_to_write
+    metrics_str = json.dumps(results_to_write, indent=2)
     if verbose:
         print(metrics_str)
     with open(output_path, "w") as f:

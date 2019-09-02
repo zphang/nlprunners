@@ -41,7 +41,6 @@ class RunConfiguration(zconf.RunConfig):
     force_overwrite = zconf.attr(action="store_true")
     # overwrite_cache = zconf.attr(action="store_true")
     seed = zconf.attr(type=int, default=-1)
-    use_tensorboard = zconf.attr(action="store_true")
 
     # === Training Learning Parameters === #
     learning_rate = zconf.attr(default=1e-5, type=float)
@@ -145,6 +144,14 @@ def main(args):
                     verbose=True,
                 )
                 logits_ls.append(results["logits"])
+            print("N_Training")
+            n_training_runner.write_n_training_val_results(
+                task=task,
+                logits_ls=logits_ls,
+                val_examples=val_examples,
+                output_dir=args.output_dir,
+                verbose=True,
+            )
 
         if args.do_test:
             raise NotImplementedError()
