@@ -18,125 +18,184 @@ class Metrics(ExtendedDataClassMixin):
     minor: Dict
 
 
+class BaseEvaluation:
+    pass
+
+
 def compute_task_metrics(task, logits, examples):
     # Todo: move logic to task?
     if isinstance(task, tasks.BoolQTask):
-        return simple_accuracy(task, logits, examples)
+        return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.CommitmentBankTask):
-        return commitment_bank_eval(task, logits, examples)
+        return CommitmentBankEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.ColaTask):
-        return compute_mcc(task, logits, examples)
+        return MccEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.CopaTask):
-        return simple_accuracy(task, logits, examples)
+        return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.IMDBTask):
-        return simple_accuracy(task, logits, examples)
+        return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.MnliTask):
-        return simple_accuracy(task, logits, examples)
+        return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.MrpcTask):
-        return acc_and_f1(task, logits, examples)
+        return AccAndF1Eval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.MultiRCTask):
-        return multirc_eval(task, logits, examples)
+        return MultiRCEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.QnliTask):
-        return simple_accuracy(task, logits, examples)
+        return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.QqpTask):
-        return acc_and_f1(task, logits, examples)
+        return AccAndF1Eval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.RteTask):
-        return simple_accuracy(task, logits, examples)
+        return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.SstTask):
-        return simple_accuracy(task, logits, examples)
+        return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.StsbTask):
-        return pearson_and_spearman(logits, examples)
+        # Not actually logits
+        return PearsonAndSpearmanEval.from_preds(logits, examples)
     elif isinstance(task, tasks.WiCTask):
-        return simple_accuracy(task, logits, examples)
+        return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.WSCTask):
-        return simple_accuracy(task, logits, examples)
+        return SimpleAccuracyEval.from_logits(task, logits, examples)
     else:
         raise KeyError(task)
 
 
-def commitment_bank_eval(task, logits, examples):
-    preds = get_preds(logits)
-    labels = get_label_ids(examples, task)
-    acc = (preds == labels).mean()
-    f11 = f1_score(y_true=labels == 0, y_pred=preds == 0)
-    f12 = f1_score(y_true=labels == 1, y_pred=preds == 1)
-    f13 = f1_score(y_true=labels == 2, y_pred=preds == 2)
-    avg_f1 = mean(f11, f12, f13)
-    return Metrics(
-        major=mean(acc, avg_f1),
-        minor={"acc": acc, "avg_f1": avg_f1,
-               "f11": f11, "f12": f12, "f13": f13}
-    )
+class SimpleAccuracyEval(BaseEvaluation):
+    @classmethod
+    def from_logits(cls, task, logits, examples):
+        return cls.from_preds(task=task, preds=get_preds(logits), examples=examples)
+
+    @classmethod
+    def from_preds(cls, task, preds, examples):
+        labels = get_label_ids(examples=examples, task=task)
+        return cls.from_preds_and_labels(preds=preds, labels=labels)
+
+    @classmethod
+    def from_preds_and_labels(cls, preds, labels):
+        acc = float((preds == labels).mean())
+        return Metrics(
+            major=acc,
+            minor={"acc": acc},
+        )
 
 
-def multirc_eval(task, logits, examples):
-    df = pd.DataFrame({
-        "preds": get_preds(logits),
-        "labels": get_label_ids(examples, task),
-        "question_ids": np.array([example.question_id for example in examples]),
-    })
-    exact_match = df \
-        .groupby("question_ids") \
-        .apply(lambda _: (_["preds"] == _["labels"]).all()) \
-        .mean()
-    exact_match = float(exact_match)
-    f1 = f1_score(y_true=df["labels"], y_pred=df["preds"])
-    return Metrics(
-        major=mean(exact_match, f1),
-        minor={"em": exact_match, "f1": f1},
-    )
+class CommitmentBankEval(BaseEvaluation):
+    @classmethod
+    def from_logits(cls, task, logits, examples):
+        return cls.from_preds(task=task, preds=get_preds(logits), examples=examples)
+
+    @classmethod
+    def from_preds(cls, task, preds, examples):
+        labels = get_label_ids(examples=examples, task=task)
+        return cls.from_preds_and_labels(preds=preds, labels=labels)
+
+    @classmethod
+    def from_preds_and_labels(cls, preds, labels):
+        acc = float((preds == labels).mean())
+        f11 = f1_score(y_true=labels == 0, y_pred=preds == 0)
+        f12 = f1_score(y_true=labels == 1, y_pred=preds == 1)
+        f13 = f1_score(y_true=labels == 2, y_pred=preds == 2)
+        avg_f1 = mean(f11, f12, f13)
+        return Metrics(
+            major=mean(acc, avg_f1),
+            minor={"acc": acc, "avg_f1": avg_f1,
+                   "f11": f11, "f12": f12, "f13": f13}
+        )
 
 
-def simple_accuracy(task, logits, examples):
-    preds = get_preds(logits)
-    labels = get_label_ids(examples, task)
-    acc = float((preds == labels).mean())
-    return Metrics(
-        major=acc,
-        minor={"acc": acc},
-    )
+class MultiRCEval(BaseEvaluation):
+    @classmethod
+    def from_logits(cls, task, logits, examples):
+        return cls.from_preds(task=task, preds=get_preds(logits), examples=examples)
+
+    @classmethod
+    def from_preds(cls, task, preds, examples):
+        labels = get_label_ids(examples=examples, task=task)
+        question_ids = np.array([example.question_id for example in examples])
+        return cls.from_preds_and_labels(preds=preds, labels=labels, question_ids=question_ids)
+
+    @classmethod
+    def from_preds_and_labels(cls, preds, labels, question_ids):
+        df = pd.DataFrame({
+            "preds": preds,
+            "labels": labels,
+            "question_ids": question_ids,
+        })
+        exact_match = df \
+            .groupby("question_ids") \
+            .apply(lambda _: (_["preds"] == _["labels"]).all()) \
+            .mean()
+        exact_match = float(exact_match)
+        f1 = f1_score(y_true=df["labels"], y_pred=df["preds"])
+        return Metrics(
+            major=mean(exact_match, f1),
+            minor={"em": exact_match, "f1": f1},
+        )
 
 
-def acc_and_f1(task, logits, examples):
-    preds = get_preds(logits)
-    labels = get_label_ids(examples, task)
-    acc = (preds == labels).mean()
-    f1 = f1_score(y_true=labels, y_pred=preds)
-    minor = {
-        "acc": acc,
-        "f1": f1,
-        "acc_and_f1": (acc + f1) / 2,
-    }
-    return Metrics(
-        major=minor["acc_and_f1"],
-        minor=minor,
-    )
+class AccAndF1Eval(BaseEvaluation):
+    @classmethod
+    def from_logits(cls, task, logits, examples):
+        return cls.from_preds(task=task, preds=get_preds(logits), examples=examples)
+
+    @classmethod
+    def from_preds(cls, task, preds, examples):
+        labels = get_label_ids(examples=examples, task=task)
+        return cls.from_preds_and_labels(preds=preds, labels=labels)
+
+    @classmethod
+    def from_preds_and_labels(cls, preds, labels):
+        acc = float((preds == labels).mean())
+        f1 = f1_score(y_true=labels, y_pred=preds)
+        minor = {
+            "acc": acc,
+            "f1": f1,
+            "acc_and_f1": (acc + f1) / 2,
+        }
+        return Metrics(
+            major=minor["acc_and_f1"],
+            minor=minor,
+        )
 
 
-def compute_mcc(task, logits, examples):
-    preds = get_preds(logits)
-    labels = get_label_ids(examples, task)
-    mcc = matthews_corrcoef(labels, preds)
-    return Metrics(
-        major=mcc,
-        minor={"mcc": mcc},
-    )
+class MccEval(BaseEvaluation):
+    @classmethod
+    def from_logits(cls, task, logits, examples):
+        return cls.from_preds(task=task, preds=get_preds(logits), examples=examples)
+
+    @classmethod
+    def from_preds(cls, task, preds, examples):
+        labels = get_label_ids(examples=examples, task=task)
+        return cls.from_preds_and_labels(preds=preds, labels=labels)
+
+    @classmethod
+    def from_preds_and_labels(cls, preds, labels):
+        mcc = matthews_corrcoef(labels, preds)
+        return Metrics(
+            major=mcc,
+            minor={"mcc": mcc},
+        )
 
 
-def pearson_and_spearman(logits, examples):
-    preds = get_preds(logits)
-    labels = get_label_vals(examples)
-    pearson_corr = float(pearsonr(preds, labels)[0])
-    spearman_corr = float(spearmanr(preds, labels)[0])
-    minor = {
-        "pearson": pearson_corr,
-        "spearmanr": spearman_corr,
-        "corr": (pearson_corr + spearman_corr) / 2,
-    }
-    return Metrics(
-        major=minor["corr"],
-        minor=minor,
-    )
+class PearsonAndSpearmanEval(BaseEvaluation):
+
+    @classmethod
+    def from_preds(cls, preds, examples):
+        true_values = get_label_vals(examples)
+        return cls.from_preds_and_labels(preds=preds, true_values=true_values)
+
+    @classmethod
+    def from_preds_and_labels(cls, preds, true_values):
+        pearson_corr = float(pearsonr(preds, true_values)[0])
+        spearman_corr = float(spearmanr(preds, true_values)[0])
+        minor = {
+            "pearson": pearson_corr,
+            "spearmanr": spearman_corr,
+            "corr": (pearson_corr + spearman_corr) / 2,
+        }
+        return Metrics(
+            major=minor["corr"],
+            minor=minor,
+        )
 
 
 def get_preds(logits):

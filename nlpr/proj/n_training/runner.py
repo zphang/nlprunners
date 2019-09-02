@@ -1,7 +1,9 @@
+import collections
 import numpy as np
 import os
 import pandas as pd
 import tqdm
+import scipy.special
 from dataclasses import dataclass
 import typing
 
@@ -218,7 +220,7 @@ class NTrainingRunner(BaseRunner):
             self.log_writer.write_entry("iter_stats", {
                 "iter_i": i,
                 "num_chosen": pd.Series(new_training_set.chosen_examples.sum(0)).tolist(),
-            })
+            }, do_print=True)
             self.log_writer.flush()
             if np.all(new_training_set.chosen_examples == training_set.chosen_examples):
                 print("Full Agreement")
@@ -254,6 +256,7 @@ class NTrainingRunner(BaseRunner):
                     log_writer=self.log_writer,
                 )
                 logits = runner.run_test(self.unlabeled_examples)
+                runner_save_memory(runner)
             logits_ls.append(logits)
             runner_ls.append(runner)
 
@@ -284,6 +287,39 @@ class NTrainingRunner(BaseRunner):
             return zlogv1.ZLogger(fol_path=os.path.join(self.log_writer.fol_path, "sub", key))
         else:
             return self.log_writer
+
+
+def runner_save_memory(runner):
+    runner.model_wrapper.model = runner.model_wrapper.model.to(torch.device("cpu"))
+    runner.optimizer_scheduler = None
+
+
+def runner_reactivate(runner):
+    runner.model_wrapper.model = runner.model_wrapper.model.to(runner.device)
+
+
+def get_preds_from_n_logits_cube(logits_cube):
+    if isinstance(logits_cube, list):
+        logits_cube = np.stack(logits_cube, axis=1)
+    return np.array([get_pred_from_n_logits_slice(logits_slice) for logits_slice in logits_cube])
+
+
+def get_pred_from_n_logits_slice(logits_slice):
+    # logits_slice: [num_models, num_classes]
+    counter = collections.Counter(np.argmax(logits_slice, axis=1))
+    # Get 0 entries
+    for i in range(logits_slice.shape[-1]):
+        counter[i] += 0
+    most_common_ls = counter.most_common()
+    if most_common_ls[0][1] > most_common_ls[1][1]:
+        return most_common_ls[0][0]
+    else:
+        # Averaging probabilities
+        return np.argmax(scipy.special.softmax(logits_slice, axis=1).mean(0))
+
+
+def evaluate_n_logits(task, ):
+    evaluate.compute_task_metrics(self.task, all_logits, val_examples),
 
 
 def get_n_training_pseudolabels(all_logits, with_disagreement=False, null_value=-1,

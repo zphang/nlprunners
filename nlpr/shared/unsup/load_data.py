@@ -43,7 +43,14 @@ def load_unsup_examples_from_config(unsup_config, prefix="unsup-"):
                 task=task,
                 prefix=f"{prefix}-aug{i}-",
             ))
-    return unsup_data
+    return task, unsup_data
+
+
+def load_unsup_examples_from_config_path(unsup_config_path, prefix="unsup-"):
+    return load_unsup_examples_from_config(
+        unsup_config=io.read_json(unsup_config_path),
+        prefix=prefix,
+    )
 
 
 """
