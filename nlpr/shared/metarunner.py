@@ -81,7 +81,7 @@ def train_val_save_every(runner: BaseRunner,
                     score=val_result["metrics"].major,
                     train_global_state=train_global_state.new(),
                 )
-                log_writer.write_entry("train_val", val_state.asdict()  )
+                log_writer.write_entry("train_val", val_state.asdict())
                 log_writer.flush()
                 if best_val_state is None or val_state.score > best_val_state.score:
                     best_val_state = val_state.new()
@@ -117,7 +117,12 @@ def train_val_save_every(runner: BaseRunner,
             break
 
     if load_best_model and best_state_dict is not None:
-        runner.model.load_state_dict(best_state_dict)
+        if verbose:
+            print("Loading Best")
+        runner.model.load_state_dict(copy_state_dict(
+            state_dict=best_state_dict,
+            target_device=runner.device,
+        ))
 
     return {
         "best_val_state": best_val_state,

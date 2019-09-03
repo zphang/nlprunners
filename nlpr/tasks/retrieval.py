@@ -11,6 +11,7 @@ from nlpr.tasks.lib.imdb import IMDBTask
 from nlpr.tasks.lib.mrpc import MrpcTask
 from nlpr.tasks.lib.cola import ColaTask
 from nlpr.tasks.lib.boolq import BoolQTask
+from nlpr.tasks.lib.record import ReCoRDTask
 from nlpr.tasks.lib.qqp import QqpTask
 from nlpr.tasks.lib.qnli import QnliTask
 from nlpr.tasks.lib.snli import SnliTask
@@ -39,6 +40,7 @@ TASK_DICT = {
     "boolq": BoolQTask,
     "qqp": QqpTask,
     "qnli": QnliTask,
+    "record": ReCoRDTask,
     "snli": SnliTask,
     "squad": SquadTask,
     "sst": SstTask,

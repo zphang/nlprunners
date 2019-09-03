@@ -1,5 +1,8 @@
+import collections
 import json
 import os
+import re
+import string
 
 from dataclasses import dataclass
 import numpy as np
@@ -44,6 +47,8 @@ def compute_task_metrics(task, logits, examples):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.QqpTask):
         return AccAndF1Eval.from_logits(task, logits, examples)
+    elif isinstance(task, tasks.ReCoRDTask):
+        return RecordTaskEval.from_logits(logits, examples)
     elif isinstance(task, tasks.RteTask):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.SstTask):
@@ -191,6 +196,113 @@ class AccAndF1Eval(BaseEvaluation):
             major=minor["acc_and_f1"],
             minor=minor,
         )
+
+
+class RecordTaskEval(BaseEvaluation):
+    @classmethod
+    def from_logits(cls, logits, examples):
+        psg_qns_idx_dict = {}
+        for i, example in examples:
+            psq_qns_idx = example.passage_idx, example.question_idx
+            if psq_qns_idx not in psg_qns_idx_dict:
+                psg_qns_idx_dict[psq_qns_idx] = []
+            psg_qns_idx_dict[psq_qns_idx].append(i)
+
+        f1_ls = []
+        em_ls = []
+
+        for psq_qns_idx, example_indices in psg_qns_idx_dict:
+            # answer_dict should be same across all examples with the same psq_qns_idx
+            relevant_examples = [examples[i] for i in example_indices]
+            golds = list(relevant_examples[0].answers_dict.values())
+            psg_qns_logits = logits[example_indices]
+            psg_qns_pred = np.argmax(psg_qns_logits[:, 1])  # Take argmax over positive preds
+            pred_ans = relevant_examples[psg_qns_pred].entity_str
+
+            # F1
+            f1 = cls.metric_max_over_ground_truths(cls.f1_score, pred_ans, golds)
+            f1_ls.append(f1)
+
+            # EM
+            em = cls.metric_max_over_ground_truths(cls.exact_match_score, pred_ans, golds)
+            em_ls.append(em)
+
+        em = sum(em_ls) / len(em_ls)
+        f1 = sum(f1_ls) / len(f1_ls)
+        minor = {
+            "em": em,
+            "f1": f1,
+            "f1_em": (f1 + em) / 2,
+        }
+        return Metrics(
+            major=minor["f1_em"],
+            minor=minor,
+        )
+
+    @classmethod
+    def from_preds_and_labels(cls, preds, labels):
+        acc = float((preds == labels).mean())
+        f1 = f1_score(y_true=labels, y_pred=preds)
+        minor = {
+            "acc": acc,
+            "f1": f1,
+            "acc_and_f1": (acc + f1) / 2,
+        }
+        return Metrics(
+            major=minor["acc_and_f1"],
+            minor=minor,
+        )
+
+    @classmethod
+    def normalize_answer(cls, s):
+        """Lower text and remove punctuation, articles and extra whitespace.
+        From official ReCoRD eval script """
+
+        def remove_articles(text):
+            return re.sub(r"\b(a|an|the)\b", " ", text)
+
+        def white_space_fix(text):
+            return " ".join(text.split())
+
+        def remove_punc(text):
+            exclude = set(string.punctuation)
+            return "".join(ch for ch in text if ch not in exclude)
+
+        def lower(text):
+            return text.lower()
+
+        return white_space_fix(remove_articles(remove_punc(lower(s))))
+
+    @classmethod
+    def f1_score(cls, prediction, ground_truth):
+        """ Compute normalized token level F1
+        From official ReCoRD eval script """
+        prediction_tokens = cls.normalize_answer(prediction).split()
+        ground_truth_tokens = cls.normalize_answer(ground_truth).split()
+        common = collections.Counter(prediction_tokens) & collections.Counter(ground_truth_tokens)
+        num_same = sum(common.values())
+        if num_same == 0:
+            return 0
+        precision = 1.0 * num_same / len(prediction_tokens)
+        recall = 1.0 * num_same / len(ground_truth_tokens)
+        f1 = (2 * precision * recall) / (precision + recall)
+        return f1
+
+    @classmethod
+    def exact_match_score(cls, prediction, ground_truth):
+        """ Compute normalized exact match
+        From official ReCoRD eval script """
+        return cls.normalize_answer(prediction) == cls.normalize_answer(ground_truth)
+
+    @classmethod
+    def metric_max_over_ground_truths(cls, metric_fn, prediction, ground_truths):
+        """ Compute max metric between prediction and each ground truth.
+        From official ReCoRD eval script """
+        scores_for_ground_truths = []
+        for ground_truth in ground_truths:
+            score = metric_fn(prediction, ground_truth)
+            scores_for_ground_truths.append(score)
+        return max(scores_for_ground_truths)
 
 
 class MccEval(BaseEvaluation):

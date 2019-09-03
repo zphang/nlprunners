@@ -98,7 +98,7 @@ def main(args):
             model_load_mode=args.model_load_mode,
             learning_rate=args.learning_rate, warmup_steps=args.warmup_steps,
             warmup_proportion=args.warmup_proportion,
-            train_batch_size=args.train_batch_size, eval_batch_size=args.max_seq_length,
+            train_batch_size=args.train_batch_size, eval_batch_size=args.eval_batch_size,
             num_train_epochs=args.num_train_epochs,
             max_steps=args.max_steps, gradient_accumulation_steps=args.gradient_accumulation_steps,
             max_grad_norm=args.max_grad_norm, max_seq_length=args.max_seq_length,
