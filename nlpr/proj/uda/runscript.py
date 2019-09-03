@@ -11,6 +11,7 @@ import nlpr.shared.train_setup as train_setup
 import nlpr.tasks.evaluate as evaluate
 import nlpr.proj.uda.runner as uda_runner
 import nlpr.proj.uda.load_data as load_data
+import nlpr.shared.metarunner as metarunner
 
 
 @zconf.run_config
@@ -156,7 +157,20 @@ def main(args):
 
     with quick_init_out.log_writer.log_context():
         if args.do_train:
-            runner.run_train(task_data=task_data)
+            val_examples = task.get_val_examples()
+            # runner.run_train(task_data=task_data)
+            uda_runner.train_val_save_every(
+                runner=runner,
+                task_data=task_data,
+                val_examples=val_examples[:args.partial_eval_number],  # quick and dirty
+                should_save_func=metarunner.get_should_save_func(args.save_every_steps),
+                should_eval_func=metarunner.get_should_eval_func(args.eval_every_steps),
+                output_dir=args.output_dir,
+                verbose=True,
+                save_best_model=args.do_save,
+                load_best_model=True,
+                log_writer=quick_init_out.log_writer,
+            )
 
         if args.do_save:
             torch.save(

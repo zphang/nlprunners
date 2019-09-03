@@ -6,6 +6,7 @@ import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 
 from pyutils.display import maybe_tqdm, maybe_trange
+from zproto.zlogv1 import BaseZLogger, PRINT_LOGGER
 
 from nlpr.shared.train_setup import TrainSchedule
 from nlpr.shared.runner import (
@@ -21,6 +22,8 @@ from nlpr.shared.modeling import forward_batch_basic
 import nlpr.tasks.evaluate as evaluate
 from nlpr.proj.uda import uda_ops
 from nlpr.shared.torch_utils import get_val, compute_pred_entropy_clean
+from nlpr.shared.torch_utils import copy_state_dict, CPU_DEVICE
+import nlpr.shared.metarunner as metarunner
 
 
 @dataclass
@@ -401,3 +404,108 @@ class UDARunner(BaseRunner):
             gradient_accumulation_steps=self.train_schedule.gradient_accumulation_steps,
             max_grad_norm=self.rparams.max_grad_norm,
         )
+
+
+def train_val_save_every(runner: UDARunner,
+                         task_data: list, val_examples: list,
+                         should_save_func,
+                         should_eval_func,
+                         output_dir,
+                         verbose: bool = True,
+                         save_best_model: bool = True,
+                         load_best_model: bool = True,
+                         log_writer: BaseZLogger = PRINT_LOGGER):
+    # HACK: from nlpr.shared.metarunner # todo: refactor
+
+    train_global_state = TrainGlobalState()
+    best_val_state = None
+    best_state_dict = None
+    full_break = False
+    val_state_history = []
+
+    sup_dataloader = runner.get_sup_dataloader(
+        task_data=task_data,
+        verbose=verbose,
+    )
+
+    for _ in maybe_trange(
+            int(runner.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
+        unsup_dataloaders = runner.get_unsup_dataloaders(
+            sup_dataloader=sup_dataloader,
+            task_data=task_data,
+        )
+        if runner.uda_params.use_unsup:
+            runner.log_writer.write_entry("misc", {
+                "unsup_indices": [int(x) for x in unsup_dataloaders.metadata["unsup_indices"]],
+                "unsup_aug_set": [int(x) for x in unsup_dataloaders.metadata["unsup_aug_set"]],
+            })
+            runner.log_writer.flush()
+        dataloader_triplet = runner.form_dataloader_triplet(
+            sup_dataloader=sup_dataloader,
+            unsup_orig_loader=unsup_dataloaders.unsup_orig,
+            unsup_aug_loader=unsup_dataloaders.unsup_aug,
+        )
+        for _ in runner.run_train_epoch_context(
+                dataloader_triplet=dataloader_triplet,
+                train_global_state=train_global_state,
+                verbose=verbose):
+            if should_save_func(train_global_state):
+                metarunner.save_model_with_metadata(
+                    model=runner.model,
+                    metadata={},
+                    output_dir=output_dir,
+                    file_name=f"model__{train_global_state.global_step}.p",
+                )
+            if should_eval_func(train_global_state):
+                val_result = runner.run_val(val_examples)
+                val_state = metarunner.ValState(
+                    score=val_result["metrics"].major,
+                    train_global_state=train_global_state.new(),
+                )
+                log_writer.write_entry("train_val", val_state.asdict())
+                log_writer.flush()
+                if best_val_state is None or val_state.score > best_val_state.score:
+                    best_val_state = val_state.new()
+                    log_writer.write_entry("train_val_best", best_val_state.asdict())
+                    log_writer.flush()
+                    if save_best_model:
+                        metarunner.save_model_with_metadata(
+                            model=runner.model,
+                            metadata={
+                                "val_state": best_val_state.as_dict(),
+                            },
+                            output_dir=output_dir,
+                            file_name="best_model.p",
+                        )
+                    best_state_dict = copy_state_dict(
+                        state_dict=runner.model.state_dict(),
+                        target_device=CPU_DEVICE,
+                    )
+                val_state_history.append(val_state)
+            if runner.train_schedule.max_steps != -1 and \
+                    train_global_state.global_step >= runner.train_schedule.max_steps:
+                full_break = True
+
+            if metarunner.compare_steps_max_steps(
+                    step=train_global_state.global_step,
+                    max_steps=runner.train_schedule.max_steps):
+                full_break = True
+
+            if full_break:
+                break
+
+        if full_break:
+            break
+
+    if load_best_model and best_state_dict is not None:
+        if verbose:
+            print("Loading Best")
+        runner.model.load_state_dict(copy_state_dict(
+            state_dict=best_state_dict,
+            target_device=runner.device,
+        ))
+
+    return {
+        "best_val_state": best_val_state,
+        "val_state_history": val_state_history,
+    }
