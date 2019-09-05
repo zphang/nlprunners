@@ -69,6 +69,9 @@ class RunConfiguration(zconf.RunConfig):
 
 
 def main(args):
+    if os.path.exists(os.path.join(args.output_dir, "val_metrics.json")):
+        print("HACK TO SKIP JOBS")
+        return
     quick_init_out = initialization.quick_init(args=args, verbose=True)
     task = tasks.create_task_from_config_path(
         config_path=args.task_config_path,

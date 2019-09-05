@@ -26,16 +26,18 @@ class _Output:
 
 
 class LlpModel(nn.Module):
-    def __init__(self, ptt_model, embedding_dim):
+    def __init__(self, ptt_model, embedding_dim, dropout_p=0.5):
         super().__init__()
         self.ptt_model = ptt_model
         self.embedding_dim = embedding_dim
+        self.dropout_p = dropout_p
 
         self.model_arch = ModelArchitectures.from_ptt_model(ptt_model)
         self.embedding_layer = nn.Linear(
             get_ptt_model_embedding_dim(ptt_model),
             embedding_dim,
         )
+        self.dropout = nn.Dropout(p=dropout_p)
 
     def forward_batch(self, batch, normalize_embedding=True):
         return self(
@@ -52,8 +54,9 @@ class LlpModel(nn.Module):
             token_type_ids=token_type_ids,
             input_mask=input_mask,
         ))
+        modified_output = self.dropout(self.relu(pooled_output))
 
-        embedding = self.embedding_layer(pooled_output)
+        embedding = self.embedding_layer(F.relu(modified_output))
         if normalize_embedding:
             returned_embedding = F.normalize(embedding, p=2, dim=1)
         else:

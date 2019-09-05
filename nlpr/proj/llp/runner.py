@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, SequentialSampler
 
 from pyutils.display import maybe_tqdm, maybe_trange
 from pyutils.datastructures import combine_dicts
+from zproto.zlogv1 import BaseZLogger, PRINT_LOGGER
 
 import nlpr.proj.llp.propagate as llp_propagate
 import nlpr.proj.llp.representation as llp_representation
@@ -25,6 +26,8 @@ from nlpr.shared.runner import (
 from nlpr.shared.train_setup import TrainSchedule
 import nlpr.tasks.evaluate as evaluate
 import nlpr.shared.torch_utils as torch_utils
+from nlpr.shared.torch_utils import copy_state_dict, CPU_DEVICE
+import nlpr.shared.metarunner as metarunner
 
 
 @dataclass
@@ -438,4 +441,93 @@ def populate_logs(llp_state, llp_params):
             for k, v in value_counts.items()
         },
         "avg_confidence": float(llp_state.all_label_confidence[llp_params.num_labeled:].mean()),
+    }
+
+
+def train_val_save_every(runner: LLPRunner,
+                         train_examples: list, val_examples: list,
+                         should_save_func,
+                         should_eval_func,
+                         output_dir,
+                         verbose: bool = True,
+                         save_best_model: bool = True,
+                         load_best_model: bool = True,
+                         log_writer: BaseZLogger = PRINT_LOGGER):
+
+    train_global_state = TrainGlobalState()
+    best_val_state = None
+    best_state_dict = None
+    full_break = False
+    val_state_history = []
+
+    train_dataset_with_metadata = runner.convert_examples_to_dataset(
+        examples=train_examples,
+        verbose=verbose,
+    )
+
+    for _ in maybe_trange(
+            int(runner.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
+        for _ in runner.run_train_epoch_context(
+                train_dataset_with_metadata=train_dataset_with_metadata,
+                train_global_state=train_global_state,
+                verbose=verbose):
+            if should_save_func(train_global_state):
+                metarunner.save_model_with_metadata(
+                    model=runner.model,
+                    metadata={},
+                    output_dir=output_dir,
+                    file_name=f"model__{train_global_state.global_step}.p",
+                )
+            if should_eval_func(train_global_state):
+                val_result = runner.run_val(val_examples)
+                val_state = metarunner.ValState(
+                    score=val_result["metrics"].major,
+                    train_global_state=train_global_state.new(),
+                )
+                log_writer.write_entry("train_val", val_state.asdict())
+                log_writer.flush()
+                if best_val_state is None or val_state.score > best_val_state.score:
+                    best_val_state = val_state.new()
+                    log_writer.write_entry("train_val_best", best_val_state.asdict())
+                    log_writer.flush()
+                    if save_best_model:
+                        metarunner.save_model_with_metadata(
+                            model=runner.model,
+                            metadata={
+                                "val_state": best_val_state.as_dict(),
+                            },
+                            output_dir=output_dir,
+                            file_name="best_model.p",
+                        )
+                    best_state_dict = metarunner.copy_state_dict(
+                        state_dict=runner.model.state_dict(),
+                        target_device=CPU_DEVICE,
+                    )
+                val_state_history.append(val_state)
+            if runner.train_schedule.max_steps != -1 and \
+                    train_global_state.global_step >= runner.train_schedule.max_steps:
+                full_break = True
+
+            if metarunner.compare_steps_max_steps(
+                    step=train_global_state.global_step,
+                    max_steps=runner.train_schedule.max_steps):
+                full_break = True
+
+            if full_break:
+                break
+
+        if full_break:
+            break
+
+    if load_best_model and best_state_dict is not None:
+        if verbose:
+            print("Loading Best")
+        runner.model.load_state_dict(metarunner.copy_state_dict(
+            state_dict=best_state_dict,
+            target_device=runner.device,
+        ))
+
+    return {
+        "best_val_state": best_val_state,
+        "val_state_history": val_state_history,
     }

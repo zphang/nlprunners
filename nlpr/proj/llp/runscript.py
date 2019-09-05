@@ -10,6 +10,7 @@ import nlpr.shared.model_resolution as model_resolution
 import nlpr.shared.train_setup as train_setup
 import nlpr.tasks.evaluate as evaluate
 import nlpr.tasks as tasks
+import nlpr.shared.metarunner as metarunner
 
 import nlpr.proj.llp.runner as llp_runner
 import nlpr.proj.llp.model_setup as llp_model_setup
@@ -186,7 +187,20 @@ def main(args):
     with quick_init_out.log_writer.log_context():
         if args.do_train:
             runner.init_llp_state(train_examples)
-            runner.run_train(train_examples)
+            # runner.run_train(train_examples)
+            val_examples = task.get_val_examples()
+            metarunner.train_val_save_every(
+                runner=runner,
+                train_examples=train_examples,
+                val_examples=val_examples[:args.partial_eval_number],  # quick and dirty
+                should_save_func=metarunner.get_should_save_func(args.save_every_steps),
+                should_eval_func=metarunner.get_should_eval_func(args.eval_every_steps),
+                output_dir=args.output_dir,
+                verbose=True,
+                save_best_model=args.do_save,
+                load_best_model=True,
+                log_writer=quick_init_out.log_writer,
+            )
 
         if args.do_save:
             torch.save(
