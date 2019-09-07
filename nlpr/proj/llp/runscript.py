@@ -40,11 +40,9 @@ class RunConfiguration(zconf.RunConfig):
     do_val = zconf.attr(action='store_true')
     do_test = zconf.attr(action='store_true')
     do_save = zconf.attr(action="store_true")
-    do_val_history = zconf.attr(action='store_true')
-    train_save_every = zconf.attr(type=int, default=None)
-    train_save_every_epoch = zconf.attr(action="store_true")
-    eval_every_epoch = zconf.attr(action="store_true")
-    eval_every = zconf.attr(type=int, default=None)
+    eval_every_steps = zconf.attr(type=int, default=0)
+    save_every_steps = zconf.attr(type=int, default=0)
+    partial_eval_number = zconf.attr(type=int, default=1000)
     train_batch_size = zconf.attr(default=8, type=int)  # per gpu
     eval_batch_size = zconf.attr(default=8, type=int)  # per gpu
     force_overwrite = zconf.attr(action="store_true")
@@ -189,7 +187,7 @@ def main(args):
             runner.init_llp_state(train_examples)
             # runner.run_train(train_examples)
             val_examples = task.get_val_examples()
-            metarunner.train_val_save_every(
+            llp_runner.train_val_save_every(
                 runner=runner,
                 train_examples=train_examples,
                 val_examples=val_examples[:args.partial_eval_number],  # quick and dirty

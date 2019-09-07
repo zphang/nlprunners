@@ -54,9 +54,8 @@ class LlpModel(nn.Module):
             token_type_ids=token_type_ids,
             input_mask=input_mask,
         ))
-        modified_output = self.dropout(self.relu(pooled_output))
 
-        embedding = self.embedding_layer(F.relu(modified_output))
+        embedding = self.embedding_layer(F.relu(pooled_output))
         if normalize_embedding:
             returned_embedding = F.normalize(embedding, p=2, dim=1)
         else:
