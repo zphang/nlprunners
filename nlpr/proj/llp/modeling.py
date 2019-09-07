@@ -55,6 +55,8 @@ class LlpModel(nn.Module):
             input_mask=input_mask,
         ))
 
+        pooled_output = self.dropout(pooled_output)
+
         embedding = self.embedding_layer(F.relu(pooled_output))
         if normalize_embedding:
             returned_embedding = F.normalize(embedding, p=2, dim=1)
@@ -67,7 +69,7 @@ class LlpModel(nn.Module):
         # Will probably need to refactor this out later
         if self.model_arch == ModelArchitectures.BERT:
             return self._get_bert_pooled(input_set)
-        if self.model_arch == ModelArchitectures.BERT:
+        if self.model_arch == ModelArchitectures.XLNET:
             return self._get_xlnet_pooled(input_set)
         else:
             raise KeyError(self.model_arch)

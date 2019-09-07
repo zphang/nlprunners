@@ -12,7 +12,6 @@ import nlpr.tasks.evaluate as evaluate
 import nlpr.proj.uda.runner as uda_runner
 import nlpr.proj.uda.load_data as load_data
 import nlpr.shared.metarunner as metarunner
-from nlpr.shared.torch_utils import copy_state_dict, CPU_DEVICE
 
 
 @zconf.run_config

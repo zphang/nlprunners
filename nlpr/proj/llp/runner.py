@@ -494,7 +494,7 @@ def train_val_save_every(runner: LLPRunner,
                         metarunner.save_model_with_metadata(
                             model=runner.model,
                             metadata={
-                                "val_state": best_val_state.as_dict(),
+                                "val_state": best_val_state.asdict(),
                             },
                             output_dir=output_dir,
                             file_name="best_model.p",
