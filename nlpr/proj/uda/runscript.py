@@ -10,7 +10,7 @@ import nlpr.shared.model_resolution as model_resolution
 import nlpr.shared.train_setup as train_setup
 import nlpr.tasks.evaluate as evaluate
 import nlpr.proj.uda.runner as uda_runner
-import nlpr.proj.uda.load_data as uda_load_data
+import nlpr.shared.unsup.load_data as unsup_load_data
 import nlpr.shared.metarunner as metarunner
 
 
@@ -75,7 +75,7 @@ class RunConfiguration(zconf.RunConfig):
 def main(args):
     quick_init_out = initialization.quick_init(args=args, verbose=True)
     with quick_init_out.log_writer.log_context():
-        task, task_data = uda_load_data.construct_uda_task_data(
+        task, task_data = unsup_load_data.load_sup_and_unsup_data(
             task_config_path=args.task_config_path,
             unsup_task_config_path=args.unsup_task_config_path,
         )

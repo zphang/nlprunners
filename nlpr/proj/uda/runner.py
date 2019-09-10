@@ -21,8 +21,10 @@ from nlpr.shared.runner import (
 from nlpr.shared.modeling import forward_batch_basic
 import nlpr.tasks.evaluate as evaluate
 from nlpr.proj.uda import uda_ops
-from nlpr.shared.torch_utils import get_val, compute_pred_entropy_clean
-from nlpr.shared.torch_utils import copy_state_dict, CPU_DEVICE
+from nlpr.shared.torch_utils import (
+    get_val, compute_pred_entropy_clean,
+    copy_state_dict, CPU_DEVICE,
+)
 import nlpr.shared.metarunner as metarunner
 
 

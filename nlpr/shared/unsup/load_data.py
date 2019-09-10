@@ -53,21 +53,19 @@ def load_unsup_examples_from_config_path(unsup_config_path, prefix="unsup-"):
     )
 
 
-"""
-def create_examples_from_paths(path_dict, task_class, prefix="unsup-"):
-    lines_dict = {
-        field: io.read_file_lines(path)
-        for field, path in path_dict.items()
+def load_sup_and_unsup_data(task_config_path, unsup_task_config_path):
+    task = tasks.create_task_from_config_path(
+        config_path=task_config_path,
+        verbose=True,
+    )
+    unsup_task, unsup_data = \
+        load_unsup_examples_from_config_path(unsup_task_config_path)
+    task_data = {
+        "sup": {
+            "train": task.get_train_examples(),
+            "val": task.get_val_examples(),
+            "test": task.get_test_examples(),
+        },
+        "unsup": unsup_data,
     }
-    length = len(list(lines_dict.values())[0])
-    unsup_examples = []
-    for i in range(length):
-        examples_fields_dict = {
-            "guid": f"{prefix}-{i}",
-            "label": task_class.LABELS[-1],
-        }
-        for key, lines in lines_dict.items():
-            examples_fields_dict[f"input_{key}"] = lines[i].strip()
-        unsup_examples.append(task_class.Example(**examples_fields_dict))
-    return unsup_examples
-"""
+    return task, task_data

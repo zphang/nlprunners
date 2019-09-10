@@ -1,7 +1,9 @@
 import collections as col
 import copy
+import math
 import numpy as np
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -22,8 +24,12 @@ import nlpr.shared.model_setup as model_setup
 from nlpr.shared.modeling import forward_batch_delegate, compute_loss_from_model_output
 from nlpr.shared.train_setup import TrainSchedule
 import nlpr.tasks.evaluate as evaluate
-from nlpr.shared.torch_utils import compute_pred_entropy_clean
+from nlpr.shared.torch_utils import (
+    compute_pred_entropy_clean, copy_state_dict, CPU_DEVICE,
+)
 import nlpr.proj.simple.runner as simple_runner
+import nlpr.shared.metarunner as metarunner
+from zproto.zlogv1 import BaseZLogger, PRINT_LOGGER
 
 
 @dataclass
@@ -32,6 +38,14 @@ class MeanTeacherParameters:
     consistency_type: str
     consistency_weight: float
     consistency_ramp_up_steps: int
+    use_unsup: bool
+    unsup_ratio: int
+
+
+@dataclass
+class TrainDataDuplet:
+    sup: Any
+    unsup: Any
 
 
 def create_teacher(model_wrapper: model_setup.ModelWrapper) -> model_setup.ModelWrapper:
@@ -119,7 +133,7 @@ def compute_raw_consistency_loss(student_logits, teacher_logits, mt_params: Mean
     return raw_consistency_loss
 
 
-class SimpleTaskRunner(BaseRunner):
+class MeanTeacherRunner(BaseRunner):
     def __init__(self, task, model_wrapper, optimizer_scheduler, teacher_model_wrapper, loss_criterion,
                  device, rparams: simple_runner.RunnerParameters, mt_params: MeanTeacherParameters,
                  train_schedule: TrainSchedule,
@@ -138,15 +152,17 @@ class SimpleTaskRunner(BaseRunner):
         # Convenience
         self.model = self.model_wrapper.model
 
-    def run_train(self, train_examples, verbose=True):
+    def run_train(self, task_data, verbose=True):
 
-        train_dataloader = self.get_train_dataloader(train_examples)
+        dataloader_duplet = self.get_train_dataloaders(
+            task_data=task_data,
+            verbose=verbose,
+        )
         train_global_state = TrainGlobalState()
-
         for epoch_i in \
                 maybe_trange(int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
             train_global_state.epoch = epoch_i
-            self.run_train_epoch(train_dataloader, train_global_state)
+            self.run_train_epoch(dataloader_duplet, train_global_state)
             results = self.run_val(val_examples=self.task.get_val_examples())
             self.log_writer.write_entry("val_metric", {
                 "epoch": train_global_state.epoch,
@@ -154,66 +170,86 @@ class SimpleTaskRunner(BaseRunner):
             })
             self.log_writer.flush()
 
-    def run_train_val(self, train_examples, val_examples, verbose=True):
-        epoch_result_dict = col.OrderedDict()
-        train_global_state = TrainGlobalState()
-        for epoch_i in maybe_trange(
-                int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
-            train_global_state.epoch = epoch_i
-            train_dataloader = self.get_train_dataloader(train_examples)
-            self.run_train_epoch(train_dataloader, train_global_state)
-            epoch_result = self.run_val(val_examples)
-            del epoch_result["logits"]
-            epoch_result["metrics"] = epoch_result["metrics"].asdict()
-            epoch_result_dict[epoch_i] = epoch_result
-        return epoch_result_dict
-
-    def run_train_epoch(self, train_dataloader, train_global_state, verbose=True):
+    def run_train_epoch(self,
+                        dataloader_duplet: TrainDataDuplet,
+                        train_global_state: TrainGlobalState, verbose=True):
         for _ in self.run_train_epoch_context(
-                train_dataloader=train_dataloader,
+                dataloader_duplet=dataloader_duplet,
                 train_global_state=train_global_state,
                 verbose=verbose):
             pass
 
-    def run_train_epoch_context(self, train_dataloader,
+    def run_train_epoch_context(self,
+                                dataloader_duplet: TrainDataDuplet,
                                 train_global_state: TrainGlobalState, verbose=True):
-        for batch, batch_metadata in maybe_tqdm(train_dataloader, desc="Training", verbose=verbose):
+        train_iterator = maybe_tqdm(zip(
+            dataloader_duplet.sup,
+            dataloader_duplet.unsup,
+        ), desc="Training", verbose=verbose, total=len(dataloader_duplet.sup))
+
+        for sup_batch, unsup_batch in train_iterator:
+            batch_duplet = TrainDataDuplet(
+                sup=sup_batch,
+                unsup=unsup_batch,
+            )
             self.run_train_step(
-                batch=batch,
+                batch_duplet=batch_duplet,
                 train_global_state=train_global_state,
             )
-            yield batch, train_global_state
+            yield batch_duplet, train_global_state
         train_global_state.step_epoch()
 
-    def run_train_step(self, batch, train_global_state):
+    def run_train_step(self, batch_duplet: TrainDataDuplet, train_global_state: TrainGlobalState):
         self.model.train()
         self.teacher_model_wrapper.model.train()
-        batch = batch.to(self.device)
 
-        # Classification
-        logits = forward_batch_delegate(
+        sup_batch = batch_duplet.sup.to(self.device)
+
+        # Classification [SUP]
+        sup_logits = forward_batch_delegate(
             model=self.model,
-            batch=batch,
+            batch=sup_batch,
             omit_label_ids=True,
             task_type=self.task.TASK_TYPE,
         )[0]
         classification_loss = compute_loss_from_model_output(
-            logits=logits,
+            logits=sup_logits,
             loss_criterion=self.loss_criterion,
-            batch=batch,
+            batch=sup_batch,
             task_type=self.task.TASK_TYPE,
         )
-
         # Consistency
         with torch.no_grad():
-            teacher_logits = forward_batch_delegate(
+            teacher_sup_logits = forward_batch_delegate(
                 model=self.teacher_model_wrapper.model,
-                batch=batch,
+                batch=sup_batch,
                 omit_label_ids=True,
                 task_type=self.task.TASK_TYPE,
             )[0]
+
+        # Consistency
+        if self.mt_params.use_unsup:
+            unsup_batch = batch_duplet.unsup.to(self.device)
+            unsup_logits = forward_batch_delegate(
+                model=self.model,
+                batch=unsup_batch,
+                omit_label_ids=True,
+                task_type=self.task.TASK_TYPE,
+            )[0]
+            teacher_unsup_logits = forward_batch_delegate(
+                model=self.teacher_model_wrapper.model,
+                batch=sup_batch,
+                omit_label_ids=True,
+                task_type=self.task.TASK_TYPE,
+            )[0]
+            student_logits = torch.cat([sup_logits, unsup_logits], dim=0)
+            teacher_logits = torch.cat([teacher_sup_logits, teacher_unsup_logits], dim=0)
+        else:
+            student_logits = sup_logits
+            teacher_logits = teacher_sup_logits
+
         raw_consistency_loss = compute_raw_consistency_loss(
-            student_logits=logits,
+            student_logits=student_logits,
             teacher_logits=teacher_logits,
             mt_params=self.mt_params,
         )
@@ -245,7 +281,7 @@ class SimpleTaskRunner(BaseRunner):
             "classification_loss": classification_loss.item(),
             "consistency_loss": consistency_loss.item(),
             "total_loss": loss.item(),
-            "pred_entropy": compute_pred_entropy_clean(logits)
+            "pred_entropy": compute_pred_entropy_clean(sup_logits)
         })
 
     def run_val(self, val_examples, verbose=True):
@@ -309,7 +345,7 @@ class SimpleTaskRunner(BaseRunner):
         all_logits = np.concatenate(all_logits, axis=0)
         return all_logits
 
-    def get_train_dataloader(self, train_examples, verbose=True):
+    def get_single_train_dataloader(self, train_examples, batch_size, verbose=True):
         dataset_with_metadata = convert_examples_to_dataset(
             examples=train_examples,
             feat_spec=self.rparams.feat_spec,
@@ -324,12 +360,45 @@ class SimpleTaskRunner(BaseRunner):
         train_dataloader = DataLoader(
             dataset=dataset_with_metadata.dataset,
             sampler=train_sampler,
-            batch_size=self.train_schedule.train_batch_size,
+            batch_size=batch_size,
         )
         return HybridLoader(
             dataloader=train_dataloader,
             metadata=dataset_with_metadata.metadata,
             task=self.task,
+        )
+
+    def get_sup_train_dataloader(self, task_data, verbose=True):
+        return self.get_single_train_dataloader(
+            train_examples=task_data["orig"],
+            verbose=verbose,
+            batch_size=self.train_schedule.train_batch_size
+        )
+
+    def get_unsup_train_dataloader(self, task_data):
+        num_unsup = len(task_data["orig"]) * self.mt_params.unsup_ratio,
+        if self.mt_params.use_unsup:
+            unsup_indices = np.random.randint(len(task_data["unsup"]["orig"]), size=num_unsup)
+            unsup_examples = [task_data["unsup"]["orig"][i] for i in unsup_indices]
+            unsup_loader = self.get_single_train_dataloader(
+                train_examples=unsup_examples,
+                batch_size=self.train_schedule.train_batch_size * self.mt_params.unsup_ratio,
+                verbose=True,
+            )
+        else:
+            unsup_loader = [None] * int(math.ceil(
+                len(task_data["orig"]) / self.train_schedule.train_batch_size))
+        return unsup_loader
+
+    def get_train_dataloaders(self, task_data, verbose=True):
+        return TrainDataDuplet(
+            sup=self.get_sup_train_dataloader(
+                task_data=task_data,
+                verbose=verbose,
+            ),
+            unsup=self.get_unsup_train_dataloader(
+                task_data=task_data,
+            )
         )
 
     def get_eval_dataloader(self, eval_examples):
@@ -361,3 +430,92 @@ class SimpleTaskRunner(BaseRunner):
             gradient_accumulation_steps=self.train_schedule.gradient_accumulation_steps,
             max_grad_norm=self.rparams.max_grad_norm,
         )
+
+
+def train_val_save_every(runner: MeanTeacherRunner,
+                         task_data: dict, val_examples: list,
+                         should_save_func,
+                         should_eval_func,
+                         output_dir,
+                         verbose: bool = True,
+                         save_best_model: bool = True,
+                         load_best_model: bool = True,
+                         log_writer: BaseZLogger = PRINT_LOGGER):
+
+    train_global_state = TrainGlobalState()
+    best_val_state = None
+    best_state_dict = None
+    full_break = False
+    val_state_history = []
+
+    dataloader_duplet = runner.get_train_dataloaders(
+        task_data=task_data,
+        verbose=verbose,
+    )
+
+    for _ in maybe_trange(
+            int(runner.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
+        for _ in runner.run_train_epoch_context(
+                dataloader_duplet=dataloader_duplet,
+                train_global_state=train_global_state,
+                verbose=verbose):
+            if should_save_func(train_global_state):
+                metarunner.save_model_with_metadata(
+                    model=runner.model,
+                    metadata={},
+                    output_dir=output_dir,
+                    file_name=f"model__{train_global_state.global_step}.p",
+                )
+            if should_eval_func(train_global_state):
+                val_result = runner.run_val(val_examples)
+                val_state = metarunner.ValState(
+                    score=val_result["metrics"].major,
+                    train_global_state=train_global_state.new(),
+                )
+                log_writer.write_entry("train_val", val_state.asdict())
+                log_writer.flush()
+                if best_val_state is None or val_state.score > best_val_state.score:
+                    best_val_state = val_state.new()
+                    log_writer.write_entry("train_val_best", best_val_state.asdict())
+                    log_writer.flush()
+                    if save_best_model:
+                        metarunner.save_model_with_metadata(
+                            model=runner.model,
+                            metadata={
+                                "val_state": best_val_state.as_dict(),
+                            },
+                            output_dir=output_dir,
+                            file_name="best_model.p",
+                        )
+                    best_state_dict = copy_state_dict(
+                        state_dict=runner.model.state_dict(),
+                        target_device=CPU_DEVICE,
+                    )
+                val_state_history.append(val_state)
+            if runner.train_schedule.max_steps != -1 and \
+                    train_global_state.global_step >= runner.train_schedule.max_steps:
+                full_break = True
+
+            if metarunner.compare_steps_max_steps(
+                    step=train_global_state.global_step,
+                    max_steps=runner.train_schedule.max_steps):
+                full_break = True
+
+            if full_break:
+                break
+
+        if full_break:
+            break
+
+    if load_best_model and best_state_dict is not None:
+        if verbose:
+            print("Loading Best")
+        runner.model.load_state_dict(copy_state_dict(
+            state_dict=best_state_dict,
+            target_device=runner.device,
+        ))
+
+    return {
+        "best_val_state": best_val_state,
+        "val_state_history": val_state_history,
+    }

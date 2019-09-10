@@ -8,17 +8,18 @@ import nlpr.shared.distributed as distributed
 import nlpr.shared.model_setup as model_setup
 import nlpr.shared.model_resolution as model_resolution
 import nlpr.shared.train_setup as train_setup
-import nlpr.tasks as tasks
 import nlpr.tasks.evaluate as evaluate
 import nlpr.proj.mean_teacher.runner as mean_teacher_runner
 import nlpr.proj.simple.runner as simple_runner
 import nlpr.shared.metarunner as metarunner
+import nlpr.shared.unsup.load_data as unsup_load_data
 
 
 @zconf.run_config
 class RunConfiguration(zconf.RunConfig):
     # === Required parameters === #
     task_config_path = zconf.attr(type=str, required=True)
+    unsup_task_config_path = zconf.attr(type=str, required=True)
     output_dir = zconf.attr(type=str, required=True)
 
     # === Model parameters === #
@@ -74,12 +75,13 @@ class RunConfiguration(zconf.RunConfig):
 
 def main(args):
     quick_init_out = initialization.quick_init(args=args, verbose=True)
-    task = tasks.create_task_from_config_path(
-        config_path=args.task_config_path,
-        verbose=True,
-    )
 
     with distributed.only_first_process(local_rank=args.local_rank):
+        task, task_data = unsup_load_data.load_sup_and_unsup_data(
+            task_config_path=args.task_config_path,
+            unsup_task_config_path=args.unsup_task_config_path,
+        )
+
         # load the model
         model_class_spec = model_resolution.resolve_model_setup_classes(
             model_type=args.model_type,
@@ -101,14 +103,7 @@ def main(args):
         teacher_model_wrapper = mean_teacher_runner.create_teacher(model_wrapper)
         # Teacher not set up for special setup (e.g. fp16) #todo
 
-    train_examples = task.get_train_examples()
-    train_examples, _ = train_setup.maybe_subsample_train(
-        train_examples=train_examples,
-        train_examples_number=args.train_examples_number,
-        train_examples_fraction=args.train_examples_fraction,
-    )
-    num_train_examples = len(train_examples)
-
+    num_train_examples = len(task_data["sup"]["train"])
     train_schedule = train_setup.get_train_schedule(
         num_train_examples=num_train_examples,
         max_steps=args.max_steps,
@@ -153,7 +148,7 @@ def main(args):
             args.consistency_ramp_up_fraction * train_schedule.t_total
         ),
     )
-    runner = mean_teacher_runner.SimpleTaskRunner(
+    runner = mean_teacher_runner.MeanTeacherRunner(
         task=task,
         model_wrapper=model_wrapper,
         teacher_model_wrapper=teacher_model_wrapper,
