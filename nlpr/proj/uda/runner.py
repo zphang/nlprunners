@@ -151,7 +151,7 @@ class UDARunner(BaseRunner):
             dataloader_triplet.sup,
             dataloader_triplet.unsup_orig,
             dataloader_triplet.unsup_aug
-        ), desc="Training", verbose=verbose)
+        ), desc="Training", verbose=verbose, total=len(dataloader_triplet.sup))
         for sup_batch, unsup_orig_batch, unsup_aug_batch in train_iterator:
             batch_triplet = TrainDataTriplet(
                 # batch, batch_metadata hack
@@ -407,7 +407,7 @@ class UDARunner(BaseRunner):
 
 
 def train_val_save_every(runner: UDARunner,
-                         task_data: list, val_examples: list,
+                         task_data: dict, val_examples: list,
                          should_save_func,
                          should_eval_func,
                          output_dir,

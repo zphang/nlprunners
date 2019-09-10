@@ -73,14 +73,15 @@ def main(args):
         print("HACK TO SKIP JOBS")
         return
     quick_init_out = initialization.quick_init(args=args, verbose=True)
-    task = tasks.create_task_from_config_path(
-        config_path=args.task_config_path,
-        verbose=True,
-    )
-    unsup_task, unsup_data = \
-        unsup_load_data.load_unsup_examples_from_config_path(args.unsup_task_config_path)
 
     with quick_init_out.log_writer.log_context():
+        task = tasks.create_task_from_config_path(
+            config_path=args.task_config_path,
+            verbose=True,
+        )
+        unsup_task, unsup_data = \
+            unsup_load_data.load_unsup_examples_from_config_path(args.unsup_task_config_path)
+
         labeled_train_examples = task.get_train_examples()
         unlabeled_train_examples = unsup_data["orig"]
         if args.num_unlabeled != -1:

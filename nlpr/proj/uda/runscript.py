@@ -10,14 +10,15 @@ import nlpr.shared.model_resolution as model_resolution
 import nlpr.shared.train_setup as train_setup
 import nlpr.tasks.evaluate as evaluate
 import nlpr.proj.uda.runner as uda_runner
-import nlpr.proj.uda.load_data as load_data
+import nlpr.proj.uda.load_data as uda_load_data
 import nlpr.shared.metarunner as metarunner
 
 
 @zconf.run_config
 class RunConfiguration(zconf.RunConfig):
     # === Required parameters === #
-    uda_task_config_path = zconf.attr(type=str, required=True)
+    task_config_path = zconf.attr(type=str, required=True)
+    unsup_task_config_path = zconf.attr(type=str, required=True)
     output_dir = zconf.attr(type=str, required=True)
 
     # === Model parameters === #
@@ -73,87 +74,90 @@ class RunConfiguration(zconf.RunConfig):
 
 def main(args):
     quick_init_out = initialization.quick_init(args=args, verbose=True)
-    task, task_data = load_data.load_task_data_from_path(args.uda_task_config_path)
-
-    with distributed.only_first_process(local_rank=args.local_rank):
-        # load the model
-        model_class_spec = model_resolution.resolve_model_setup_classes(
-            model_type=args.model_type,
-            task_type=task.TASK_TYPE,
-        )
-        model_wrapper = model_setup.simple_model_setup(
-            model_type=args.model_type,
-            model_class_spec=model_class_spec,
-            config_path=args.model_config_path,
-            tokenizer_path=args.model_tokenizer_path,
-            task=task,
-        )
-        model_setup.safe_load_model(
-            model=model_wrapper.model,
-            state_dict=torch.load(args.model_path)
-        )
-        model_wrapper.model.to(quick_init_out.device)
-
-    num_train_examples = len(task_data["sup"]["train"])
-
-    train_schedule = train_setup.get_train_schedule(
-        num_train_examples=num_train_examples,
-        max_steps=args.max_steps,
-        num_train_epochs=args.num_train_epochs,
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
-        per_gpu_train_batch_size=args.train_batch_size,
-        n_gpu=quick_init_out.n_gpu,
-    )
-    print("t_total", train_schedule.t_total)
-    loss_criterion = train_setup.resolve_loss_function(task_type=task.TASK_TYPE)
-    optimizer_scheduler = model_setup.create_optimizer(
-        model=model_wrapper.model,
-        learning_rate=args.learning_rate,
-        t_total=train_schedule.t_total,
-        warmup_steps=args.warmup_steps,
-        warmup_proportion=args.warmup_proportion,
-        verbose=True,
-    )
-    model_setup.special_model_setup(
-        model_wrapper=model_wrapper,
-        optimizer_scheduler=optimizer_scheduler,
-        fp16=args.fp16, fp16_opt_level=args.fp16_opt_level,
-        n_gpu=quick_init_out.n_gpu, local_rank=args.local_rank,
-    )
-    rparams = uda_runner.RunnerParameters(
-        feat_spec=model_resolution.build_featurization_spec(
-            model_type=args.model_type,
-            max_seq_length=args.max_seq_length,
-        ),
-        local_rank=args.local_rank,
-        n_gpu=quick_init_out.n_gpu,
-        fp16=args.fp16,
-        learning_rate=args.learning_rate,
-        eval_batch_size=args.eval_batch_size,
-        max_grad_norm=args.max_grad_norm,
-    )
-    uda_params = uda_runner.UDAParameters(
-        use_unsup=args.unsup_ratio != 0,
-        unsup_ratio=args.unsup_ratio,
-        tsa=not args.no_tsa,
-        tsa_schedule=args.tsa_schedule,
-        uda_softmax_temp=args.uda_softmax_temp,
-        uda_confidence_thresh=args.uda_confidence_thresh,
-        uda_coeff=args.uda_coeff,
-    )
-    runner = uda_runner.UDARunner(
-        task=task,
-        model_wrapper=model_wrapper,
-        optimizer_scheduler=optimizer_scheduler,
-        loss_criterion=loss_criterion,
-        device=quick_init_out.device,
-        rparams=rparams,
-        uda_params=uda_params,
-        train_schedule=train_schedule,
-        log_writer=quick_init_out.log_writer,
-    )
-
     with quick_init_out.log_writer.log_context():
+        task, task_data = uda_load_data.construct_uda_task_data(
+            task_config_path=args.task_config_path,
+            unsup_task_config_path=args.unsup_task_config_path,
+        )
+
+        with distributed.only_first_process(local_rank=args.local_rank):
+            # load the model
+            model_class_spec = model_resolution.resolve_model_setup_classes(
+                model_type=args.model_type,
+                task_type=task.TASK_TYPE,
+            )
+            model_wrapper = model_setup.simple_model_setup(
+                model_type=args.model_type,
+                model_class_spec=model_class_spec,
+                config_path=args.model_config_path,
+                tokenizer_path=args.model_tokenizer_path,
+                task=task,
+            )
+            model_setup.safe_load_model(
+                model=model_wrapper.model,
+                state_dict=torch.load(args.model_path)
+            )
+            model_wrapper.model.to(quick_init_out.device)
+
+        num_train_examples = len(task_data["sup"]["train"])
+
+        train_schedule = train_setup.get_train_schedule(
+            num_train_examples=num_train_examples,
+            max_steps=args.max_steps,
+            num_train_epochs=args.num_train_epochs,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+            per_gpu_train_batch_size=args.train_batch_size,
+            n_gpu=quick_init_out.n_gpu,
+        )
+        print("t_total", train_schedule.t_total)
+        loss_criterion = train_setup.resolve_loss_function(task_type=task.TASK_TYPE)
+        optimizer_scheduler = model_setup.create_optimizer(
+            model=model_wrapper.model,
+            learning_rate=args.learning_rate,
+            t_total=train_schedule.t_total,
+            warmup_steps=args.warmup_steps,
+            warmup_proportion=args.warmup_proportion,
+            verbose=True,
+        )
+        model_setup.special_model_setup(
+            model_wrapper=model_wrapper,
+            optimizer_scheduler=optimizer_scheduler,
+            fp16=args.fp16, fp16_opt_level=args.fp16_opt_level,
+            n_gpu=quick_init_out.n_gpu, local_rank=args.local_rank,
+        )
+        rparams = uda_runner.RunnerParameters(
+            feat_spec=model_resolution.build_featurization_spec(
+                model_type=args.model_type,
+                max_seq_length=args.max_seq_length,
+            ),
+            local_rank=args.local_rank,
+            n_gpu=quick_init_out.n_gpu,
+            fp16=args.fp16,
+            learning_rate=args.learning_rate,
+            eval_batch_size=args.eval_batch_size,
+            max_grad_norm=args.max_grad_norm,
+        )
+        uda_params = uda_runner.UDAParameters(
+            use_unsup=args.unsup_ratio != 0,
+            unsup_ratio=args.unsup_ratio,
+            tsa=not args.no_tsa,
+            tsa_schedule=args.tsa_schedule,
+            uda_softmax_temp=args.uda_softmax_temp,
+            uda_confidence_thresh=args.uda_confidence_thresh,
+            uda_coeff=args.uda_coeff,
+        )
+        runner = uda_runner.UDARunner(
+            task=task,
+            model_wrapper=model_wrapper,
+            optimizer_scheduler=optimizer_scheduler,
+            loss_criterion=loss_criterion,
+            device=quick_init_out.device,
+            rparams=rparams,
+            uda_params=uda_params,
+            train_schedule=train_schedule,
+            log_writer=quick_init_out.log_writer,
+        )
+
         if args.do_train:
             val_examples = task.get_val_examples()
             # runner.run_train(task_data=task_data)

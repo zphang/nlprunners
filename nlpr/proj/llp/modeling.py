@@ -69,8 +69,10 @@ class LlpModel(nn.Module):
         # Will probably need to refactor this out later
         if self.model_arch == ModelArchitectures.BERT:
             return self._get_bert_pooled(input_set)
-        if self.model_arch == ModelArchitectures.XLNET:
+        elif self.model_arch == ModelArchitectures.XLNET:
             return self._get_xlnet_pooled(input_set)
+        elif self.model_arch == ModelArchitectures.ROBERTA:
+            return self._get_roberta_pooled(input_set)
         else:
             raise KeyError(self.model_arch)
 
@@ -108,3 +110,13 @@ class LlpModel(nn.Module):
         output = self.sequence_summary(output)
         logits = self.logits_proj(output)
         return output, logits
+
+    def _get_roberta_pooled(self, input_set: _InputSet):
+        roberta_output = self.ptt_model.roberta(
+            input_ids=input_set.input_ids,
+            token_type_ids=input_set.token_type_ids,
+            attention_mask=input_set.input_mask,
+        )
+        sequence_output = roberta_output[0]
+        logits = self.ptt_model.classifier(sequence_output)
+        return sequence_output[:, 0], logits

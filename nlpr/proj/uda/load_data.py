@@ -1,4 +1,5 @@
 import nlpr.tasks as tasks
+import nlpr.shared.unsup.load_data as unsup_load_data
 
 from pyutils.io import read_file_lines, read_json
 
@@ -74,3 +75,21 @@ def load_unsup_data(unsup_config, task_class, verbose=True):
         assert len(aug_data) == len(unsup_data["orig"])
         unsup_data["aug"].append(aug_data)
     return unsup_data
+
+
+def construct_uda_task_data(task_config_path, unsup_task_config_path):
+    task = tasks.create_task_from_config_path(
+        config_path=task_config_path,
+        verbose=True,
+    )
+    unsup_task, unsup_data = \
+        unsup_load_data.load_unsup_examples_from_config_path(unsup_task_config_path)
+    task_data = {
+        "sup": {
+            "train": task.get_train_examples(),
+            "val": task.get_val_examples(),
+            "test": task.get_test_examples(),
+        },
+        "unsup": unsup_data,
+    }
+    return task, task_data
