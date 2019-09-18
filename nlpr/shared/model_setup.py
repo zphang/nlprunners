@@ -73,8 +73,26 @@ def simple_load_model(model, state_dict, model_load_mode, verbose=True):
             state_dict=state_dict,
             verbose=verbose,
         )
+    elif model_load_mode == "base_weights":
+        model.load_state_dict(load_model_base_weights(
+            model=model,
+            state_dict=state_dict,
+        ))
     else:
         raise KeyError(model_load_mode)
+
+
+def load_model_base_weights(model, state_dict):
+    arch = ModelArchitectures.from_ptt_model(model)
+    if arch == ModelArchitectures.BERT:
+        new_state_dict = {
+            k: v
+            for k, v in state_dict.items()
+            if not k.startswith("classifier.")
+        }
+    else:
+        raise NotImplementedError()
+    return new_state_dict
 
 
 class OptimizerScheduler:
@@ -101,25 +119,37 @@ class OptimizerScheduler:
 
 def create_optimizer(model, learning_rate, t_total, warmup_steps, warmup_proportion,
                      adam_epsilon=1e-8, verbose=False):
+    create_optimizer_from_params(
+        named_parameters=list(model.named_parameters()),
+        learning_rate=learning_rate,
+        t_total=t_total,
+        warmup_steps=warmup_steps,
+        warmup_proportion=warmup_proportion,
+        adam_epsilon=adam_epsilon,
+        verbose=False,
+    )
+
+
+def create_optimizer_from_params(named_parameters, learning_rate, t_total, warmup_steps, warmup_proportion,
+                                 adam_epsilon=1e-8, verbose=False):
     # Prepare optimizer
-    optimized_params = list(model.named_parameters())
     no_decay = [
         'bias', 'LayerNorm.bias', 'LayerNorm.weight',
         'adapter.down_project.weight', 'adapter.up_project.weight',
     ]
     if verbose:
         print("No optimizer decay for:")
-        for n, p in optimized_params:
+        for n, p in named_parameters:
             if any(nd in n for nd in no_decay):
                 print(f"  {n}")
 
     optimizer_grouped_parameters = [
         {
-            'params': [p for n, p in optimized_params if not any(nd in n for nd in no_decay)],
+            'params': [p for n, p in named_parameters if not any(nd in n for nd in no_decay)],
             'weight_decay': 0.01,
         },
         {
-            'params': [p for n, p in optimized_params if any(nd in n for nd in no_decay)],
+            'params': [p for n, p in named_parameters if any(nd in n for nd in no_decay)],
             'weight_decay': 0.0,
         }
     ]

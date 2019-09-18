@@ -1,6 +1,8 @@
 import os
 import torch
 
+import pytorch_transformers as ptt
+
 import zconf
 
 import nlpr.shared.initialization as initialization
@@ -8,18 +10,32 @@ import nlpr.shared.distributed as distributed
 import nlpr.shared.model_setup as model_setup
 import nlpr.shared.model_resolution as model_resolution
 import nlpr.shared.train_setup as train_setup
+import nlpr.tasks as tasks
 import nlpr.tasks.evaluate as evaluate
-import nlpr.proj.mean_teacher.runner as mean_teacher_runner
 import nlpr.proj.simple.runner as simple_runner
 import nlpr.shared.metarunner as metarunner
-import nlpr.shared.unsup.load_data as unsup_load_data
+import nlpr.shared.modeling.adapter as adapter
+
+
+def get_adapter_named_parameters(model):
+    # Todo: Refactor
+    named_parameters = ptt.modeling_bert.get_adapter_params(model)
+    add_ls = [
+        "bert.pooler.dense.weight",
+        "bert.pooler.dense.bias",
+        "classifier.weight",
+        "classifier.bias",
+    ]
+    full_named_parameters_dict = dict(model.named_parameters())
+    for name in add_ls:
+        named_parameters.append((name, full_named_parameters_dict[name]))
+    return named_parameters
 
 
 @zconf.run_config
 class RunConfiguration(zconf.RunConfig):
     # === Required parameters === #
     task_config_path = zconf.attr(type=str, required=True)
-    unsup_task_config_path = zconf.attr(type=str, required=True)
     output_dir = zconf.attr(type=str, required=True)
 
     # === Model parameters === #
@@ -43,7 +59,6 @@ class RunConfiguration(zconf.RunConfig):
     train_batch_size = zconf.attr(default=8, type=int)  # per gpu
     eval_batch_size = zconf.attr(default=8, type=int)  # per gpu
     force_overwrite = zconf.attr(action="store_true")
-    # overwrite_cache = zconf.attr(action="store_true")
     seed = zconf.attr(type=int, default=-1)
     train_examples_number = zconf.attr(type=int, default=None)
     train_examples_fraction = zconf.attr(type=float, default=None)
@@ -66,23 +81,15 @@ class RunConfiguration(zconf.RunConfig):
     server_ip = zconf.attr(default='', type=str)
     server_port = zconf.attr(default='', type=str)
 
-    # MT Config
-    mt_alpha = zconf.attr(default=0.999, type=float)
-    consistency_type = zconf.attr(default="kl", type=str)
-    consistency_weight = zconf.attr(default=10.0, type=float)
-    consistency_ramp_up_fraction = zconf.attr(default=0.3, type=float)
-    unsup_ratio = zconf.attr(default=3, type=int)
-
 
 def main(args):
     quick_init_out = initialization.quick_init(args=args, verbose=True)
+    task = tasks.create_task_from_config_path(
+        config_path=args.task_config_path,
+        verbose=True,
+    )
 
     with distributed.only_first_process(local_rank=args.local_rank):
-        task, task_data = unsup_load_data.load_sup_and_unsup_data(
-            task_config_path=args.task_config_path,
-            unsup_task_config_path=args.unsup_task_config_path,
-        )
-
         # load the model
         model_class_spec = model_resolution.resolve_model_setup_classes(
             model_type=args.model_type,
@@ -95,16 +102,20 @@ def main(args):
             tokenizer_path=args.model_tokenizer_path,
             task=task,
         )
-        model_setup.simple_load_model(
+        adapter.load_non_adapter_base_weights(
             model=model_wrapper.model,
-            model_load_mode=args.model_load_mode,
             state_dict=torch.load(args.model_path)
         )
         model_wrapper.model.to(quick_init_out.device)
-        teacher_model_wrapper = mean_teacher_runner.create_teacher(model_wrapper)
-        # Teacher not set up for special setup (e.g. fp16) #todo
 
-    num_train_examples = len(task_data["sup"]["train"])
+    train_examples = task.get_train_examples()
+    train_examples, _ = train_setup.maybe_subsample_train(
+        train_examples=train_examples,
+        train_examples_number=args.train_examples_number,
+        train_examples_fraction=args.train_examples_fraction,
+    )
+    num_train_examples = len(train_examples)
+
     train_schedule = train_setup.get_train_schedule(
         num_train_examples=num_train_examples,
         max_steps=args.max_steps,
@@ -113,10 +124,10 @@ def main(args):
         per_gpu_train_batch_size=args.train_batch_size,
         n_gpu=quick_init_out.n_gpu,
     )
-    print("t_total", train_schedule.t_total)
     loss_criterion = train_setup.resolve_loss_function(task_type=task.TASK_TYPE)
-    optimizer_scheduler = model_setup.create_optimizer(
-        model=model_wrapper.model,
+    named_parameters = get_adapter_named_parameters(model_wrapper.model)
+    optimizer_scheduler = model_setup.create_optimizer_from_params(
+        named_parameters=named_parameters,
         learning_rate=args.learning_rate,
         t_total=train_schedule.t_total,
         warmup_steps=args.warmup_steps,
@@ -141,25 +152,13 @@ def main(args):
         eval_batch_size=args.eval_batch_size,
         max_grad_norm=args.max_grad_norm,
     )
-    mt_params = mean_teacher_runner.MeanTeacherParameters(
-        alpha=args.mt_alpha,
-        consistency_type=args.consistency_type,
-        consistency_weight=args.consistency_weight,
-        consistency_ramp_up_steps=int(
-            args.consistency_ramp_up_fraction * train_schedule.t_total
-        ),
-        use_unsup=args.unsup_ratio != 0,
-        unsup_ratio=args.unsup_ratio,
-    )
-    runner = mean_teacher_runner.MeanTeacherRunner(
+    runner = simple_runner.SimpleTaskRunner(
         task=task,
         model_wrapper=model_wrapper,
-        teacher_model_wrapper=teacher_model_wrapper,
         optimizer_scheduler=optimizer_scheduler,
         loss_criterion=loss_criterion,
         device=quick_init_out.device,
         rparams=rparams,
-        mt_params=mt_params,
         train_schedule=train_schedule,
         log_writer=quick_init_out.log_writer,
     )
@@ -167,9 +166,9 @@ def main(args):
     with quick_init_out.log_writer.log_context():
         if args.do_train:
             val_examples = task.get_val_examples()
-            mean_teacher_runner.train_val_save_every(
+            metarunner.train_val_save_every(
                 runner=runner,
-                task_data=task_data,
+                train_examples=train_examples,
                 val_examples=val_examples[:args.partial_eval_number],  # quick and dirty
                 should_save_func=metarunner.get_should_save_func(args.save_every_steps),
                 should_eval_func=metarunner.get_should_eval_func(args.eval_every_steps),

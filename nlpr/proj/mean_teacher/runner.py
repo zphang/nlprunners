@@ -208,21 +208,21 @@ class MeanTeacherRunner(BaseRunner):
         # Classification [SUP]
         sup_logits = forward_batch_delegate(
             model=self.model,
-            batch=sup_batch,
+            batch=sup_batch.batch,
             omit_label_ids=True,
             task_type=self.task.TASK_TYPE,
         )[0]
         classification_loss = compute_loss_from_model_output(
             logits=sup_logits,
             loss_criterion=self.loss_criterion,
-            batch=sup_batch,
+            batch=sup_batch.batch,
             task_type=self.task.TASK_TYPE,
         )
         # Consistency
         with torch.no_grad():
             teacher_sup_logits = forward_batch_delegate(
                 model=self.teacher_model_wrapper.model,
-                batch=sup_batch,
+                batch=sup_batch.batch,
                 omit_label_ids=True,
                 task_type=self.task.TASK_TYPE,
             )[0]
@@ -232,13 +232,13 @@ class MeanTeacherRunner(BaseRunner):
             unsup_batch = batch_duplet.unsup.to(self.device)
             unsup_logits = forward_batch_delegate(
                 model=self.model,
-                batch=unsup_batch,
+                batch=unsup_batch.batch,
                 omit_label_ids=True,
                 task_type=self.task.TASK_TYPE,
             )[0]
             teacher_unsup_logits = forward_batch_delegate(
                 model=self.teacher_model_wrapper.model,
-                batch=sup_batch,
+                batch=unsup_batch.batch,
                 omit_label_ids=True,
                 task_type=self.task.TASK_TYPE,
             )[0]
@@ -370,13 +370,13 @@ class MeanTeacherRunner(BaseRunner):
 
     def get_sup_train_dataloader(self, task_data, verbose=True):
         return self.get_single_train_dataloader(
-            train_examples=task_data["orig"],
+            train_examples=task_data["sup"]["train"],
             verbose=verbose,
             batch_size=self.train_schedule.train_batch_size
         )
 
     def get_unsup_train_dataloader(self, task_data):
-        num_unsup = len(task_data["orig"]) * self.mt_params.unsup_ratio,
+        num_unsup = len(task_data["sup"]["train"]) * self.mt_params.unsup_ratio,
         if self.mt_params.use_unsup:
             unsup_indices = np.random.randint(len(task_data["unsup"]["orig"]), size=num_unsup)
             unsup_examples = [task_data["unsup"]["orig"][i] for i in unsup_indices]
@@ -387,7 +387,7 @@ class MeanTeacherRunner(BaseRunner):
             )
         else:
             unsup_loader = [None] * int(math.ceil(
-                len(task_data["orig"]) / self.train_schedule.train_batch_size))
+                len(task_data["sup"]["train"]) / self.train_schedule.train_batch_size))
         return unsup_loader
 
     def get_train_dataloaders(self, task_data, verbose=True):

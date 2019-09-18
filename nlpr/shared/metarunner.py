@@ -91,10 +91,10 @@ def train_val_save_every(runner: BaseRunner,
                         save_model_with_metadata(
                             model=runner.model,
                             metadata={
-                                "val_state": best_val_state.as_dict(),
+                                "val_state": best_val_state.asdict(),
                             },
                             output_dir=output_dir,
-                            file_name="best_model.p",
+                            file_name="best_model",
                         )
                     best_state_dict = copy_state_dict(
                         state_dict=runner.model.state_dict(),
@@ -115,6 +115,34 @@ def train_val_save_every(runner: BaseRunner,
 
         if full_break:
             break
+
+    # Hack
+    val_result = runner.run_val(val_examples)
+    val_state = ValState(
+        score=val_result["metrics"].major,
+        train_global_state=train_global_state.new(),
+    )
+    log_writer.write_entry("train_val", val_state.asdict())
+    log_writer.flush()
+    if best_val_state is None or val_state.score > best_val_state.score:
+        best_val_state = val_state.new()
+        log_writer.write_entry("train_val_best", best_val_state.asdict())
+        log_writer.flush()
+        if save_best_model:
+            save_model_with_metadata(
+                model=runner.model,
+                metadata={
+                    "val_state": best_val_state.asdict(),
+                },
+                output_dir=output_dir,
+                file_name="best_model",
+            )
+        best_state_dict = copy_state_dict(
+            state_dict=runner.model.state_dict(),
+            target_device=CPU_DEVICE,
+        )
+    val_state_history.append(val_state)
+    # End Hack
 
     if load_best_model and best_state_dict is not None:
         if verbose:
