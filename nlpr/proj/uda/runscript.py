@@ -26,7 +26,7 @@ class RunConfiguration(zconf.RunConfig):
     model_path = zconf.attr(type=str, required=True)
     model_config_path = zconf.attr(default=None, type=str)
     model_tokenizer_path = zconf.attr(default=None, type=str)
-    #model_load_mode = zconf.attr(type=str, required=True)
+    model_load_mode = zconf.attr(default="safe", type=str)
     model_save_mode = zconf.attr(default="all", type=str)
     max_seq_length = zconf.attr(default=128, type=int)
 
@@ -93,9 +93,10 @@ def main(args):
                 tokenizer_path=args.model_tokenizer_path,
                 task=task,
             )
-            model_setup.safe_load_model(
+            model_setup.simple_load_model_path(
                 model=model_wrapper.model,
-                state_dict=torch.load(args.model_path)
+                model_load_mode=args.model_load_mode,
+                model_path=args.model_path,
             )
             model_wrapper.model.to(quick_init_out.device)
 
@@ -160,7 +161,6 @@ def main(args):
 
         if args.do_train:
             val_examples = task.get_val_examples()
-            # runner.run_train(task_data=task_data)
             uda_runner.train_val_save_every(
                 runner=runner,
                 task_data=task_data,

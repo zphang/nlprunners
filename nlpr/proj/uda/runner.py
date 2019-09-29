@@ -148,7 +148,6 @@ class UDARunner(BaseRunner):
 
     def run_train_epoch_context(self, dataloader_triplet,
                                 train_global_state: TrainGlobalState, verbose=True):
-        self.model.train()
         train_iterator = maybe_tqdm(zip(
             dataloader_triplet.sup,
             dataloader_triplet.unsup_orig,
@@ -169,6 +168,7 @@ class UDARunner(BaseRunner):
 
     def run_train_step(self, batch_triplet,
                        train_global_state: TrainGlobalState):
+        self.model.train()
         example_count = len(batch_triplet.sup)
         sup_loss, sup_logits = uda_ops.sup_train_step(
             model=self.model,

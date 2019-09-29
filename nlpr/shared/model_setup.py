@@ -78,7 +78,7 @@ def glove_lstm_setup(tokenizer_path, task):
         num_labels = len(task.LABELS)
     else:
         raise KeyError(task.TASK_TYPE)
-    glove = glove_lstm_modeling.GloVeEmbeddings.read_glove(tokenizer_path, vocab_size=100000,
+    glove = glove_lstm_modeling.GloVeEmbeddings.read_glove(tokenizer_path, vocab_size=200000,
                                                            verbose=True)
     glove_embedding = glove_lstm_modeling.GloVeEmbeddingModule(glove)
     glove_model_base = glove_lstm_modeling.GloveLSTMModelBase(

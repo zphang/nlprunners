@@ -12,7 +12,7 @@ class GloVeEmbeddings:
     UNK = "<UNK>"
     CLS = "<CLS>"
     SEP = "<SEP>"
-    PAD = "<PAD"
+    PAD = "<PAD>"
     SPECIAL_LIST = [PAD, CLS, SEP, UNK]
 
     def __init__(self, embeddings):
