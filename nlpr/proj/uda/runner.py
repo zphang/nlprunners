@@ -18,7 +18,7 @@ from nlpr.shared.runner import (
     TrainGlobalState,
     optim_step_grad_accum,
 )
-from nlpr.shared.modeling import forward_batch_basic
+from nlpr.shared.modeling.models import forward_batch_basic
 import nlpr.tasks.evaluate as evaluate
 from nlpr.proj.uda import uda_ops
 from nlpr.shared.torch_utils import (

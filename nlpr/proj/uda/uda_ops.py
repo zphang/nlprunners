@@ -2,7 +2,7 @@ import numpy as np
 
 import torch
 import torch.nn.functional as F
-from nlpr.shared.modeling import forward_batch_basic
+from nlpr.shared.modeling.models import forward_batch_basic
 
 import zproto.zlogv1 as zlogv1
 

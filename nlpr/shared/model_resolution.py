@@ -5,7 +5,8 @@ import pytorch_transformers as ptt
 
 from nlpr.tasks.core import FeaturizationSpec
 from nlpr.tasks.lib.shared import TaskTypes
-import nlpr.shared.modeling as modeling
+import nlpr.shared.modeling.models as models
+import nlpr.shared.modeling.glove_lstm as glove_lstm_modeling
 
 
 class ModelArchitectures(Enum):
@@ -13,6 +14,7 @@ class ModelArchitectures(Enum):
     XLNET = 2
     XLM = 3
     ROBERTA = 4
+    GLOVE_LSTM = 5
 
     @classmethod
     def from_model_type(cls, model_type):
@@ -24,6 +26,8 @@ class ModelArchitectures(Enum):
             return cls.XLM
         elif model_type.startswith("roberta-"):
             return cls.ROBERTA
+        elif model_type == "glove_lstm":
+            return cls.GLOVE_LSTM
         else:
             raise KeyError(model_type)
 
@@ -39,6 +43,9 @@ class ModelArchitectures(Enum):
         elif isinstance(ptt_model, ptt.BertPreTrainedModel) \
                 and ptt_model.__class__.__name__.startswith("Robert"):
             return cls.ROBERTA
+        elif isinstance(ptt_model, glove_lstm_modeling.GloveLSTMModel) \
+                and ptt_model.__class__.__name__.startswith("Robert"):
+            return cls.GLOVE_LSTM
         else:
             raise KeyError(str(ptt_model))
 
@@ -108,6 +115,10 @@ def build_featurization_spec(model_type, max_seq_length):
             sequence_b_segment_id=0,  # RoBERTa has no token_type_ids
             sep_token_extra=True,
         )
+    elif model_arch == ModelArchitectures.GLOVE_LSTM:
+        return glove_lstm_modeling.GloVeEmbeddings.get_feat_spec(
+            max_seq_length=max_seq_length,
+        )
     else:
         raise KeyError(model_arch)
 
@@ -116,7 +127,7 @@ MODEL_CLASS_DICT = {
     ModelArchitectures.BERT: {
         TaskTypes.CLASSIFICATION: ptt.BertForSequenceClassification,
         TaskTypes.REGRESSION: ptt.BertForSequenceClassification,  # ptt is weird
-        TaskTypes.SPAN_COMPARISON_CLASSIFICATION: modeling.BertForSpanComparisonClassification,
+        TaskTypes.SPAN_COMPARISON_CLASSIFICATION: models.BertForSpanComparisonClassification,
     },
     ModelArchitectures.XLNET: {
         TaskTypes.CLASSIFICATION: ptt.XLNetForSequenceClassification,
@@ -129,6 +140,10 @@ MODEL_CLASS_DICT = {
     ModelArchitectures.ROBERTA: {
         TaskTypes.CLASSIFICATION: ptt.RobertaForSequenceClassification,
         TaskTypes.REGRESSION: ptt.RobertaForSequenceClassification,  # ptt is weird
+    },
+    ModelArchitectures.GLOVE_LSTM: {
+        TaskTypes.CLASSIFICATION: glove_lstm_modeling.GloveLSTMForSequenceClassification,
+        TaskTypes.REGRESSION: None,
     },
 }
 
@@ -162,6 +177,13 @@ def resolve_model_setup_classes(model_type, task_type):
             tokenizer_class=ptt.RobertaTokenizer,
             # TODO: resolve correct model
             model_class=MODEL_CLASS_DICT[ModelArchitectures.ROBERTA][task_type],
+        )
+    elif model_arch == ModelArchitectures.GLOVE_LSTM:
+        model_class_spec = ModelClassSpec(
+            config_class=type(None),
+            tokenizer_class=glove_lstm_modeling.GloVeEmbeddings,
+            # TODO: resolve correct model
+            model_class=MODEL_CLASS_DICT[ModelArchitectures.GLOVE_LSTM][task_type],
         )
     else:
         raise KeyError(model_arch)

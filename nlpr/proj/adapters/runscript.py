@@ -20,12 +20,25 @@ import nlpr.shared.modeling.adapter as adapter
 def get_adapter_named_parameters(model):
     # Todo: Refactor
     named_parameters = ptt.modeling_bert.get_adapter_params(model)
-    add_ls = [
-        "bert.pooler.dense.weight",
-        "bert.pooler.dense.bias",
-        "classifier.weight",
-        "classifier.bias",
-    ]
+    model_arch = model_resolution.ModelArchitectures.from_ptt_model(model)
+    if model_arch == model_resolution.ModelArchitectures.BERT:
+        add_ls = [
+            "bert.pooler.dense.weight",
+            "bert.pooler.dense.bias",
+            "classifier.weight",
+            "classifier.bias",
+        ]
+    elif model_arch == model_resolution.ModelArchitectures.ROBERTA:
+        add_ls = [
+            "roberta.pooler.dense.weight",
+            "roberta.pooler.dense.bias",
+            "classifier.dense.weight",
+            "classifier.dense.bias",
+            "classifier.dense.weight",
+            "classifier.dense.bias",
+        ]
+    else:
+        raise KeyError()
     full_named_parameters_dict = dict(model.named_parameters())
     for name in add_ls:
         named_parameters.append((name, full_named_parameters_dict[name]))
@@ -166,7 +179,7 @@ def main(args):
     with quick_init_out.log_writer.log_context():
         if args.do_train:
             val_examples = task.get_val_examples()
-            metarunner.train_val_save_every(
+            metarunner.MetaRunner(
                 runner=runner,
                 train_examples=train_examples,
                 val_examples=val_examples[:args.partial_eval_number],  # quick and dirty
@@ -177,7 +190,7 @@ def main(args):
                 save_best_model=args.do_save,
                 load_best_model=True,
                 log_writer=quick_init_out.log_writer,
-            )
+            ).train_val_save_every()
 
         if args.do_save:
             torch.save(

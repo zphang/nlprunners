@@ -4,6 +4,7 @@ import torch.nn as nn
 import pytorch_transformers
 
 from nlpr.shared.model_resolution import ModelArchitectures
+import nlpr.shared.modeling.glove_lstm as glove_lstm_modeling
 from nlpr.tasks.lib.shared import TaskTypes
 
 
@@ -14,6 +15,30 @@ class ModelWrapper:
 
 
 def simple_model_setup(model_type, model_class_spec, config_path, tokenizer_path, task):
+    model_arch = ModelArchitectures.from_model_type(model_type)
+    if model_arch in [
+            ModelArchitectures.BERT,
+            ModelArchitectures.XLNET,
+            ModelArchitectures.XLM,
+            ModelArchitectures.ROBERTA]:
+        return simple_ptt_model_setup(
+            model_type=model_type,
+            model_class_spec=model_class_spec,
+            config_path=config_path,
+            tokenizer_path=tokenizer_path,
+            task=task,
+        )
+    elif model_arch in [ModelArchitectures.GLOVE_LSTM]:
+        return glove_lstm_setup(
+            tokenizer_path=tokenizer_path,
+            task=task,
+        )
+    else:
+        raise KeyError(model_arch)
+
+
+def simple_ptt_model_setup(model_type, model_class_spec, config_path, tokenizer_path, task):
+
     config = model_class_spec.config_class.from_json_file(config_path)
     if task.TASK_TYPE == TaskTypes.CLASSIFICATION:
         config.num_labels = len(task.LABELS)
@@ -25,8 +50,8 @@ def simple_model_setup(model_type, model_class_spec, config_path, tokenizer_path
     else:
         raise KeyError(task.TASK_TYPE)
 
-    model = model_class_spec.model_class(config)
     model_arch = ModelArchitectures.from_model_type(model_type)
+    model = model_class_spec.model_class(config)
     if model_arch in [ModelArchitectures.BERT]:
         if "-cased" in model_type:
             do_lower_case = False
@@ -39,13 +64,33 @@ def simple_model_setup(model_type, model_class_spec, config_path, tokenizer_path
         do_lower_case = False
     else:
         raise RuntimeError(model_type)
-    print(do_lower_case)
     tokenizer = model_class_spec.tokenizer_class.from_pretrained(
         tokenizer_path, do_lower_case=do_lower_case,
     )
     return ModelWrapper(
         model=model,
-        tokenizer=tokenizer
+        tokenizer=tokenizer,
+    )
+
+
+def glove_lstm_setup(tokenizer_path, task):
+    if task.TASK_TYPE == TaskTypes.CLASSIFICATION:
+        num_labels = len(task.LABELS)
+    else:
+        raise KeyError(task.TASK_TYPE)
+    glove = glove_lstm_modeling.GloVeEmbeddings.read_glove(tokenizer_path, vocab_size=100000,
+                                                           verbose=True)
+    glove_embedding = glove_lstm_modeling.GloVeEmbeddingModule(glove)
+    glove_model_base = glove_lstm_modeling.GloveLSTMModelBase(
+        hidden_dim=256,
+        num_layers=1,
+        num_classes=num_labels,
+        glove_embedding=glove_embedding,
+    )
+    glove_model = glove_lstm_modeling.GloveLSTMModel(glove_model_base)
+    return ModelWrapper(
+        model=glove_model,
+        tokenizer=glove_embedding.glove,
     )
 
 
@@ -78,8 +123,19 @@ def simple_load_model(model, state_dict, model_load_mode, verbose=True):
             model=model,
             state_dict=state_dict,
         ))
+    elif model_load_mode == "no_load":
+        pass
     else:
         raise KeyError(model_load_mode)
+
+
+def simple_load_model_path(model, model_path, model_load_mode, verbose=True):
+    return simple_load_model(
+        model=model,
+        state_dict=torch.load(model_path) if model_load_mode != "no_load" else None,
+        model_load_mode=model_load_mode,
+        verbose=verbose
+    )
 
 
 def load_model_base_weights(model, state_dict):
@@ -119,14 +175,14 @@ class OptimizerScheduler:
 
 def create_optimizer(model, learning_rate, t_total, warmup_steps, warmup_proportion,
                      adam_epsilon=1e-8, verbose=False):
-    create_optimizer_from_params(
+    return create_optimizer_from_params(
         named_parameters=list(model.named_parameters()),
         learning_rate=learning_rate,
         t_total=t_total,
         warmup_steps=warmup_steps,
         warmup_proportion=warmup_proportion,
         adam_epsilon=adam_epsilon,
-        verbose=False,
+        verbose=verbose,
     )
 
 
@@ -143,6 +199,12 @@ def create_optimizer_from_params(named_parameters, learning_rate, t_total, warmu
             if any(nd in n for nd in no_decay):
                 print(f"  {n}")
 
+    named_parameters = [
+        (n, p)
+        for n, p in named_parameters
+        if p.requires_grad
+    ]
+
     optimizer_grouped_parameters = [
         {
             'params': [p for n, p in named_parameters if not any(nd in n for nd in no_decay)],
@@ -153,6 +215,9 @@ def create_optimizer_from_params(named_parameters, learning_rate, t_total, warmu
             'weight_decay': 0.0,
         }
     ]
+    print("REQ", [n for n, p in named_parameters if not any(nd in n for nd in no_decay)])
+    print("NOREQ", [n for n, p in named_parameters if any(nd in n for nd in no_decay)])
+
     optimizer = pytorch_transformers.AdamW(
         optimizer_grouped_parameters, lr=learning_rate, eps=adam_epsilon
     )

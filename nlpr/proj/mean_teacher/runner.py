@@ -1,4 +1,3 @@
-import collections as col
 import copy
 import math
 import numpy as np
@@ -21,7 +20,7 @@ from nlpr.shared.runner import (
     optim_step_grad_accum,
 )
 import nlpr.shared.model_setup as model_setup
-from nlpr.shared.modeling import forward_batch_delegate, compute_loss_from_model_output
+from nlpr.shared.modeling.models import forward_batch_delegate, compute_loss_from_model_output
 from nlpr.shared.train_setup import TrainSchedule
 import nlpr.tasks.evaluate as evaluate
 from nlpr.shared.torch_utils import (

@@ -67,90 +67,90 @@ class RunConfiguration(zconf.RunConfig):
 
 def main(args):
     quick_init_out = initialization.quick_init(args=args, verbose=True)
-    task = tasks.create_task_from_config_path(
-        config_path=args.task_config_path,
-        verbose=True,
-    )
-
-    with distributed.only_first_process(local_rank=args.local_rank):
-        # load the model
-        model_class_spec = model_resolution.resolve_model_setup_classes(
-            model_type=args.model_type,
-            task_type=task.TASK_TYPE,
-        )
-        model_wrapper = model_setup.simple_model_setup(
-            model_type=args.model_type,
-            model_class_spec=model_class_spec,
-            config_path=args.model_config_path,
-            tokenizer_path=args.model_tokenizer_path,
-            task=task,
-        )
-        model_setup.simple_load_model(
-            model=model_wrapper.model,
-            model_load_mode=args.model_load_mode,
-            state_dict=torch.load(args.model_path)
-        )
-        model_wrapper.model.to(quick_init_out.device)
-
-    train_examples = task.get_train_examples()
-    train_examples, _ = train_setup.maybe_subsample_train(
-        train_examples=train_examples,
-        train_examples_number=args.train_examples_number,
-        train_examples_fraction=args.train_examples_fraction,
-    )
-    num_train_examples = len(train_examples)
-
-    train_schedule = train_setup.get_train_schedule(
-        num_train_examples=num_train_examples,
-        max_steps=args.max_steps,
-        num_train_epochs=args.num_train_epochs,
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
-        per_gpu_train_batch_size=args.train_batch_size,
-        n_gpu=quick_init_out.n_gpu,
-    )
-    print("t_total", train_schedule.t_total)
-    loss_criterion = train_setup.resolve_loss_function(task_type=task.TASK_TYPE)
-    optimizer_scheduler = model_setup.create_optimizer(
-        model=model_wrapper.model,
-        learning_rate=args.learning_rate,
-        t_total=train_schedule.t_total,
-        warmup_steps=args.warmup_steps,
-        warmup_proportion=args.warmup_proportion,
-        verbose=True,
-    )
-    model_setup.special_model_setup(
-        model_wrapper=model_wrapper,
-        optimizer_scheduler=optimizer_scheduler,
-        fp16=args.fp16, fp16_opt_level=args.fp16_opt_level,
-        n_gpu=quick_init_out.n_gpu, local_rank=args.local_rank,
-    )
-    rparams = simple_runner.RunnerParameters(
-        feat_spec=model_resolution.build_featurization_spec(
-            model_type=args.model_type,
-            max_seq_length=args.max_seq_length,
-        ),
-        local_rank=args.local_rank,
-        n_gpu=quick_init_out.n_gpu,
-        fp16=args.fp16,
-        learning_rate=args.learning_rate,
-        eval_batch_size=args.eval_batch_size,
-        max_grad_norm=args.max_grad_norm,
-    )
-    runner = simple_runner.SimpleTaskRunner(
-        task=task,
-        model_wrapper=model_wrapper,
-        optimizer_scheduler=optimizer_scheduler,
-        loss_criterion=loss_criterion,
-        device=quick_init_out.device,
-        rparams=rparams,
-        train_schedule=train_schedule,
-        log_writer=quick_init_out.log_writer,
-    )
-
     with quick_init_out.log_writer.log_context():
+        task = tasks.create_task_from_config_path(
+            config_path=args.task_config_path,
+            verbose=True,
+        )
+
+        with distributed.only_first_process(local_rank=args.local_rank):
+            # load the model
+            model_class_spec = model_resolution.resolve_model_setup_classes(
+                model_type=args.model_type,
+                task_type=task.TASK_TYPE,
+            )
+            model_wrapper = model_setup.simple_model_setup(
+                model_type=args.model_type,
+                model_class_spec=model_class_spec,
+                config_path=args.model_config_path,
+                tokenizer_path=args.model_tokenizer_path,
+                task=task,
+            )
+            model_setup.simple_load_model_path(
+                model=model_wrapper.model,
+                model_load_mode=args.model_load_mode,
+                model_path=args.model_path,
+            )
+            model_wrapper.model.to(quick_init_out.device)
+
+        train_examples = task.get_train_examples()
+        train_examples, _ = train_setup.maybe_subsample_train(
+            train_examples=train_examples,
+            train_examples_number=args.train_examples_number,
+            train_examples_fraction=args.train_examples_fraction,
+        )
+        num_train_examples = len(train_examples)
+
+        train_schedule = train_setup.get_train_schedule(
+            num_train_examples=num_train_examples,
+            max_steps=args.max_steps,
+            num_train_epochs=args.num_train_epochs,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+            per_gpu_train_batch_size=args.train_batch_size,
+            n_gpu=quick_init_out.n_gpu,
+        )
+        quick_init_out.log_writer.write_entry("text", f"t_total: {train_schedule.t_total}", do_print=True)
+        loss_criterion = train_setup.resolve_loss_function(task_type=task.TASK_TYPE)
+        optimizer_scheduler = model_setup.create_optimizer(
+            model=model_wrapper.model,
+            learning_rate=args.learning_rate,
+            t_total=train_schedule.t_total,
+            warmup_steps=args.warmup_steps,
+            warmup_proportion=args.warmup_proportion,
+            verbose=True,
+        )
+        model_setup.special_model_setup(
+            model_wrapper=model_wrapper,
+            optimizer_scheduler=optimizer_scheduler,
+            fp16=args.fp16, fp16_opt_level=args.fp16_opt_level,
+            n_gpu=quick_init_out.n_gpu, local_rank=args.local_rank,
+        )
+        rparams = simple_runner.RunnerParameters(
+            feat_spec=model_resolution.build_featurization_spec(
+                model_type=args.model_type,
+                max_seq_length=args.max_seq_length,
+            ),
+            local_rank=args.local_rank,
+            n_gpu=quick_init_out.n_gpu,
+            fp16=args.fp16,
+            learning_rate=args.learning_rate,
+            eval_batch_size=args.eval_batch_size,
+            max_grad_norm=args.max_grad_norm,
+        )
+        runner = simple_runner.SimpleTaskRunner(
+            task=task,
+            model_wrapper=model_wrapper,
+            optimizer_scheduler=optimizer_scheduler,
+            loss_criterion=loss_criterion,
+            device=quick_init_out.device,
+            rparams=rparams,
+            train_schedule=train_schedule,
+            log_writer=quick_init_out.log_writer,
+        )
+
         if args.do_train:
             val_examples = task.get_val_examples()
-            metarunner.train_val_save_every(
+            metarunner.MetaRunner(
                 runner=runner,
                 train_examples=train_examples,
                 val_examples=val_examples[:args.partial_eval_number],  # quick and dirty
@@ -161,7 +161,7 @@ def main(args):
                 save_best_model=args.do_save,
                 load_best_model=True,
                 log_writer=quick_init_out.log_writer,
-            )
+            ).train_val_save_every()
 
         if args.do_save:
             torch.save(
