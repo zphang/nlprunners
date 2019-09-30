@@ -83,10 +83,12 @@ class GloVeEmbeddingModule(nn.Module):
         self.word_embeddings = nn.Embedding(
             num_embeddings=len(self.glove.word_list) + 1,
             embedding_dim=self.embedding_dim,
+            padding_idx=0,
         )
         self.special_embeddings = nn.Embedding(
             num_embeddings=len(self.glove.special_list) + 1,
             embedding_dim=self.embedding_dim,
+            padding_idx=0,
         )
         self.word_embeddings.weight.requires_grad = False
         self.special_embeddings.weight.requires_grad = True
@@ -117,23 +119,39 @@ class GloveLSTMModelBase(nn.Module):
         self.glove_embedding = glove_embedding
         self.drop_prob = drop_prob
 
-        self.lstm = nn.LSTM(
+        self.lstm1 = nn.LSTM(
             input_size=glove_embedding.embedding_dim,
             hidden_size=hidden_dim,
             batch_first=True,
             num_layers=num_layers,
             bidirectional=True,
         )
-        self.fc1 = nn.Linear(hidden_dim * 2, hidden_dim)  # bidirectional, so *2
+        self.lstm2 = nn.LSTM(
+            input_size=glove_embedding.embedding_dim,
+            hidden_size=hidden_dim,
+            batch_first=True,
+            num_layers=num_layers,
+            bidirectional=True,
+        )
+        self.fc1 = nn.Linear(hidden_dim * 2 * 4, hidden_dim)
+        # two inputs, and bidirectional
         self.dropout = nn.Dropout(p=self.drop_prob)
         self.fc2 = nn.Linear(hidden_dim, num_classes)
         self.relu = nn.ReLU()
 
-    def forward(self, input_ids):
-        embeddings = self.glove_embedding(input_ids)
-        lstm_out = self.lstm(embeddings)[0]  # get hidden out
-        pooled = lstm_out.mean(dim=1)
-        # pooled = lstm_out[:, -1]
+    def forward(self, input1, input2):
+        embeddings1 = self.glove_embedding(input1)
+        lstm_out1 = self.lstm1(embeddings1)[0]
+        #pooled1 = get_bilstm_last(lstm_out1, hidden_dim=self.hidden_dim)
+        pooled1 = lstm_out1.mean(1)
+
+        embeddings2 = self.glove_embedding(input2)
+        lstm_out2 = self.lstm2(embeddings2)[0]
+        #pooled2 = get_bilstm_last(lstm_out2, hidden_dim=self.hidden_dim)
+        pooled2 = lstm_out2.mean(1)
+
+        pooled = torch.cat([pooled1, pooled2, pooled1-pooled2, pooled1*pooled2], dim=1)
+
         pooled = self.fc1(self.relu(pooled))
         pooled = self.dropout(pooled)
         logits = self.fc2(self.relu(pooled))
@@ -146,18 +164,44 @@ class GloveLSTMModel(nn.Module):
         self.model = model
 
     def forward(self, input_ids, token_type_ids, attention_mask, labels):
-        # Ignore token_type_ids, attention_mask, labels
-        return self.model(self.cut_padding(input_ids))
+        input1_tensor, input2_tensor = self.modify_input(
+            input_ids=input_ids,
+            token_type_ids=token_type_ids,
+            attention_mask=attention_mask,
+        )
+        return self.model(input1=input1_tensor, input2=input2_tensor)
 
-    def cut_padding(self, input_ids):
-        not_padding = (input_ids.detach() != self.model.glove_embedding.glove.pad_id)
-        match = np.where(not_padding.sum(0).cpu().numpy() == 0)
-        if len(match[0]) == 0:
-            input_ids = input_ids
-        else:
-            input_ids = input_ids[:, :match[0][0]]
-        return input_ids
+    @classmethod
+    def modify_input(cls, input_ids, token_type_ids, attention_mask):
+        input_ids_arr = input_ids.cpu().numpy()
+        segment_ids_arr = (attention_mask + token_type_ids).cpu().numpy()
+        assert segment_ids_arr.max() == 2
+        batch_size = input_ids_arr.shape[0]
+        device = input_ids.device
+
+        input1_ls = []
+        input2_ls = []
+        for i in range(batch_size):
+            input1_ls.append(input_ids_arr[i][segment_ids_arr[i] == 1])
+            input2_ls.append(input_ids_arr[i][segment_ids_arr[i] == 2])
+
+        input1_tensor = torch.tensor(get_padded_ids(input1_ls)).long().to(device)
+        input2_tensor = torch.tensor(get_padded_ids(input2_ls)).long().to(device)
+        return input1_tensor, input2_tensor
 
 
 class GloveLSTMForSequenceClassification(GloveLSTMModel):
     pass
+
+
+def get_padded_ids(token_id_ls_ls):
+    zeros = np.zeros((len(token_id_ls_ls), max(map(len, token_id_ls_ls))), dtype=int)
+    for i, token_ids in enumerate(token_id_ls_ls):
+        zeros[i, :len(token_ids)] = token_ids
+    return zeros
+
+
+def get_bilstm_last(lstm_out, hidden_dim):
+    fwd = lstm_out[:, -1, :hidden_dim]
+    bwd = lstm_out[:, 0, hidden_dim:]
+    return torch.cat([fwd, bwd], dim=1)
