@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from .shared import Task, TaskTypes
 from ..core import BaseExample, BaseDataRow, BatchMixin, FeaturizationSpec
-from pytorch_transformers.tokenization_bert import whitespace_tokenize
+from transformers.tokenization_bert import whitespace_tokenize
 
 
 @dataclass

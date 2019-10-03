@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
 
-import pytorch_transformers as ptt
+import transformers as ptt
 
 from nlpr.tasks.core import FeaturizationSpec
 from nlpr.tasks.lib.shared import TaskTypes

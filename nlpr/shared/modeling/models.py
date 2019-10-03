@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-import pytorch_transformers as ptt
+import transformers as ptt
 from torch.nn import CrossEntropyLoss, MSELoss
 from nlpr.tasks.lib.shared import TaskTypes
 from nlpr.ext.allennlp import SelfAttentiveSpanExtractor

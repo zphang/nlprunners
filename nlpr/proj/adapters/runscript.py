@@ -1,7 +1,7 @@
 import os
 import torch
 
-import pytorch_transformers as ptt
+import transformers as ptt
 
 import zconf
 

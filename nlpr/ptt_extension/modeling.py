@@ -1,8 +1,8 @@
 import torch.nn as nn
 
-import pytorch_transformers.modeling_roberta as modeling_roberta
-from pytorch_transformers import PreTrainedModel
-from pytorch_transformers.modeling_bert import BertLayerNorm
+import transformers.modeling_roberta as modeling_roberta
+from transformers import PreTrainedModel
+from transformers.modeling_bert import BertLayerNorm
 
 
 class RobertaPretrainedModel(PreTrainedModel):

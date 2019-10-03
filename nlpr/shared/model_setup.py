@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-import pytorch_transformers
+import transformers
 
 from nlpr.shared.model_resolution import ModelArchitectures
 import nlpr.shared.modeling.glove_lstm as glove_lstm_modeling
@@ -218,14 +218,14 @@ def create_optimizer_from_params(named_parameters, learning_rate, t_total, warmu
     print("REQ", [n for n, p in named_parameters if not any(nd in n for nd in no_decay)])
     print("NOREQ", [n for n, p in named_parameters if any(nd in n for nd in no_decay)])
 
-    optimizer = pytorch_transformers.AdamW(
+    optimizer = transformers.AdamW(
         optimizer_grouped_parameters, lr=learning_rate, eps=adam_epsilon
     )
     warmup_steps = resolve_warmup_steps(
         t_total=t_total, warmup_steps=warmup_steps,
         warmup_proportion=warmup_proportion,
     )
-    scheduler = pytorch_transformers.WarmupLinearSchedule(
+    scheduler = transformers.WarmupLinearSchedule(
         optimizer, warmup_steps=warmup_steps, t_total=t_total
     )
     optimizer_scheduler = OptimizerScheduler(
