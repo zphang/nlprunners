@@ -172,7 +172,6 @@ class LLPRunner(BaseRunner):
     def run_train_epoch_context(self, train_dataset_with_metadata,
                                 train_global_state: TrainGlobalState,
                                 populate_after=True, verbose=True):
-        self.model.train()
         train_dataloader = self.get_train_dataloader(
             train_dataset_with_metadata=train_dataset_with_metadata,
             do_override_labels=True, verbose=verbose,
@@ -198,6 +197,7 @@ class LLPRunner(BaseRunner):
 
     def run_train_step(self, batch, batch_metadata,
                        train_global_state: TrainGlobalState):
+        self.model.train()
         batch = batch.to(self.device)
         loss, loss_details, model_output = self.compute_representation_loss(batch, batch_metadata)
         loss = self.complex_backpropagate(loss)

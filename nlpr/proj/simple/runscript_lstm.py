@@ -179,6 +179,9 @@ def main(args):
                 output_dir=args.output_dir,
                 verbose=True,
             )
+            train_examples = task.get_train_examples()
+            results = runner.run_val(train_examples)
+            print(results["metrics"])
 
         if args.do_test:
             test_examples = task.get_test_examples()

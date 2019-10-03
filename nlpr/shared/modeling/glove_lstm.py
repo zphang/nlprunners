@@ -119,36 +119,35 @@ class GloveLSTMModelBase(nn.Module):
         self.glove_embedding = glove_embedding
         self.drop_prob = drop_prob
 
-        self.lstm1 = nn.LSTM(
+        self.lstm1 = nn.GRU(
             input_size=glove_embedding.embedding_dim,
             hidden_size=hidden_dim,
             batch_first=True,
             num_layers=num_layers,
             bidirectional=True,
         )
-        self.lstm2 = nn.LSTM(
+        self.lstm2 = nn.GRU(
             input_size=glove_embedding.embedding_dim,
             hidden_size=hidden_dim,
             batch_first=True,
             num_layers=num_layers,
             bidirectional=True,
         )
-        self.fc1 = nn.Linear(hidden_dim * 2 * 4, hidden_dim)
+        #self.fc1 = nn.Linear(hidden_dim * 2 * 4, hidden_dim)
+        self.fc1 = nn.Linear(300 * 4, hidden_dim)
         # two inputs, and bidirectional
         self.dropout = nn.Dropout(p=self.drop_prob)
         self.fc2 = nn.Linear(hidden_dim, num_classes)
         self.relu = nn.ReLU()
 
-    def forward(self, input1, input2):
+    def forward(self, input1, input2, lengths1, lengths2):
         embeddings1 = self.glove_embedding(input1)
-        lstm_out1 = self.lstm1(embeddings1)[0]
-        #pooled1 = get_bilstm_last(lstm_out1, hidden_dim=self.hidden_dim)
-        pooled1 = lstm_out1.mean(1)
+        #pooled1 = self.get_lstm_output_v2(self.lstm1, embeddings1, lengths1)
+        pooled1 = self.masked_average(embeddings1, lengths1)
 
         embeddings2 = self.glove_embedding(input2)
-        lstm_out2 = self.lstm2(embeddings2)[0]
-        #pooled2 = get_bilstm_last(lstm_out2, hidden_dim=self.hidden_dim)
-        pooled2 = lstm_out2.mean(1)
+        #pooled2 = self.get_lstm_output_v2(self.lstm2, embeddings2, lengths2)
+        pooled2 = self.masked_average(embeddings2, lengths2)
 
         pooled = torch.cat([pooled1, pooled2, pooled1-pooled2, pooled1*pooled2], dim=1)
 
@@ -157,6 +156,43 @@ class GloveLSTMModelBase(nn.Module):
         logits = self.fc2(self.relu(pooled))
         return logits, None  # Follow PTT format of returning tuple
 
+    @classmethod
+    def get_lstm_output(cls, lstm, embeddings, lengths):
+        packed = torch.nn.utils.rnn.pack_padded_sequence(
+            embeddings, lengths,
+            batch_first=True, enforce_sorted=False,
+        )
+        batch_size = embeddings.shape[0]
+        lstm_out = lstm(packed)[1][0]
+        lstm_out = lstm_out.transpose(0, 1).reshape(batch_size, -1)
+        return lstm_out
+
+    @classmethod
+    def get_lstm_output_v2(cls, lstm, embeddings, lengths):
+        packed = torch.nn.utils.rnn.pack_padded_sequence(
+            embeddings, lengths,
+            batch_first=True,
+            enforce_sorted=False,
+        )
+        packed_lstm_out = lstm(packed)
+        lstm_out, lengths = torch.nn.utils.rnn.pad_packed_sequence(
+            packed_lstm_out[0],
+            batch_first=True,
+            total_length=embeddings.shape[1],
+        )
+
+        return cls.masked_average(lstm_out, lengths)
+
+    @classmethod
+    def masked_average(cls, inputs, lengths):
+        mask = torch.zeros(inputs.shape[:2]).unsqueeze(-1).long()
+        for i, length in enumerate(lengths):
+            mask[i, :length] = 1
+        mask = mask.to(inputs.device).float()
+        numerator = (inputs * mask).sum(1)
+        denominator = mask.sum(1).sum(1).clamp(1).unsqueeze(1)
+        return numerator / denominator
+
 
 class GloveLSTMModel(nn.Module):
     def __init__(self, model: GloveLSTMModelBase):
@@ -164,12 +200,17 @@ class GloveLSTMModel(nn.Module):
         self.model = model
 
     def forward(self, input_ids, token_type_ids, attention_mask, labels):
-        input1_tensor, input2_tensor = self.modify_input(
+        input1_tensor, input2_tensor, lengths1, lengths2 = self.modify_input(
             input_ids=input_ids,
             token_type_ids=token_type_ids,
             attention_mask=attention_mask,
         )
-        return self.model(input1=input1_tensor, input2=input2_tensor)
+        return self.model(
+            input1=input1_tensor,
+            input2=input2_tensor,
+            lengths1=lengths1,
+            lengths2=lengths2,
+        )
 
     @classmethod
     def modify_input(cls, input_ids, token_type_ids, attention_mask):
@@ -185,9 +226,11 @@ class GloveLSTMModel(nn.Module):
             input1_ls.append(input_ids_arr[i][segment_ids_arr[i] == 1])
             input2_ls.append(input_ids_arr[i][segment_ids_arr[i] == 2])
 
-        input1_tensor = torch.tensor(get_padded_ids(input1_ls)).long().to(device)
-        input2_tensor = torch.tensor(get_padded_ids(input2_ls)).long().to(device)
-        return input1_tensor, input2_tensor
+        padded1, lengths1 = get_padded_ids(input1_ls)
+        padded2, lengths2 = get_padded_ids(input2_ls)
+        input1_tensor = torch.tensor(padded1).long().to(device)
+        input2_tensor = torch.tensor(padded2).long().to(device)
+        return input1_tensor, input2_tensor, lengths1, lengths2
 
 
 class GloveLSTMForSequenceClassification(GloveLSTMModel):
@@ -196,9 +239,12 @@ class GloveLSTMForSequenceClassification(GloveLSTMModel):
 
 def get_padded_ids(token_id_ls_ls):
     zeros = np.zeros((len(token_id_ls_ls), max(map(len, token_id_ls_ls))), dtype=int)
+    lengths = []
     for i, token_ids in enumerate(token_id_ls_ls):
-        zeros[i, :len(token_ids)] = token_ids
-    return zeros
+        length = len(token_ids)
+        zeros[i, :length] = token_ids
+        lengths.append(length)
+    return zeros, lengths
 
 
 def get_bilstm_last(lstm_out, hidden_dim):

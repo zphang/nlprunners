@@ -82,7 +82,7 @@ def glove_lstm_setup(tokenizer_path, task):
                                                            verbose=True)
     glove_embedding = glove_lstm_modeling.GloVeEmbeddingModule(glove)
     glove_model_base = glove_lstm_modeling.GloveLSTMModelBase(
-        hidden_dim=512,
+        hidden_dim=256,
         num_layers=1,
         num_classes=num_labels,
         glove_embedding=glove_embedding,
