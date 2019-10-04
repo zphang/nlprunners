@@ -2,10 +2,24 @@ import numpy as np
 import sacremoses
 import torch
 import torch.nn as nn
+from dataclasses import dataclass
 
 from nlpr.tasks.core import FeaturizationSpec
 
 from pyutils.display import maybe_tqdm
+import pyutils.io as io
+
+
+@dataclass
+class GloveLSTMConfig:
+    hidden_dim: int
+    num_layers: int
+    vocab_size: int
+    drop_prob: float
+
+    @classmethod
+    def from_json(cls, path):
+        return cls(**io.read_json(path))
 
 
 class GloVeEmbeddings:
@@ -119,22 +133,28 @@ class GloveLSTMModelBase(nn.Module):
         self.glove_embedding = glove_embedding
         self.drop_prob = drop_prob
 
-        self.lstm1 = nn.GRU(
-            input_size=glove_embedding.embedding_dim,
-            hidden_size=hidden_dim,
-            batch_first=True,
-            num_layers=num_layers,
-            bidirectional=True,
-        )
-        self.lstm2 = nn.GRU(
-            input_size=glove_embedding.embedding_dim,
-            hidden_size=hidden_dim,
-            batch_first=True,
-            num_layers=num_layers,
-            bidirectional=True,
-        )
-        #self.fc1 = nn.Linear(hidden_dim * 2 * 4, hidden_dim)
-        self.fc1 = nn.Linear(300 * 4, hidden_dim)
+        self.has_lstm = self.num_layers > 0
+        if self.has_lstm:
+            self.lstm1 = nn.GRU(
+                input_size=glove_embedding.embedding_dim,
+                hidden_size=hidden_dim,
+                batch_first=True,
+                num_layers=num_layers,
+                bidirectional=True,
+            )
+            self.lstm2 = nn.GRU(
+                input_size=glove_embedding.embedding_dim,
+                hidden_size=hidden_dim,
+                batch_first=True,
+                num_layers=num_layers,
+                bidirectional=True,
+            )
+
+            self.fc1 = nn.Linear(hidden_dim * 2 * 4, hidden_dim)
+        else:
+            self.lstm1 = None
+            self.lstm2 = None
+            self.fc1 = nn.Linear(300 * 4, hidden_dim)
         # two inputs, and bidirectional
         self.dropout = nn.Dropout(p=self.drop_prob)
         self.fc2 = nn.Linear(hidden_dim, num_classes)
@@ -142,12 +162,12 @@ class GloveLSTMModelBase(nn.Module):
 
     def forward(self, input1, input2, lengths1, lengths2):
         embeddings1 = self.glove_embedding(input1)
-        #pooled1 = self.get_lstm_output_v2(self.lstm1, embeddings1, lengths1)
-        pooled1 = self.masked_average(embeddings1, lengths1)
+        lstm_out1 = self.get_lstm_output_v2(self.lstm1, embeddings1, lengths1)
+        pooled1 = self.masked_average(lstm_out1, lengths1)
 
         embeddings2 = self.glove_embedding(input2)
-        #pooled2 = self.get_lstm_output_v2(self.lstm2, embeddings2, lengths2)
-        pooled2 = self.masked_average(embeddings2, lengths2)
+        lstm_out2 = self.get_lstm_output_v2(self.lstm2, embeddings2, lengths2)
+        pooled2 = self.masked_average(lstm_out2, lengths2)
 
         pooled = torch.cat([pooled1, pooled2, pooled1-pooled2, pooled1*pooled2], dim=1)
 
@@ -167,8 +187,10 @@ class GloveLSTMModelBase(nn.Module):
         lstm_out = lstm_out.transpose(0, 1).reshape(batch_size, -1)
         return lstm_out
 
-    @classmethod
-    def get_lstm_output_v2(cls, lstm, embeddings, lengths):
+    def get_lstm_output_v2(self, lstm, embeddings, lengths):
+        if not self.has_lstm:
+            return embeddings
+
         packed = torch.nn.utils.rnn.pack_padded_sequence(
             embeddings, lengths,
             batch_first=True,
@@ -180,8 +202,7 @@ class GloveLSTMModelBase(nn.Module):
             batch_first=True,
             total_length=embeddings.shape[1],
         )
-
-        return cls.masked_average(lstm_out, lengths)
+        return lstm_out
 
     @classmethod
     def masked_average(cls, inputs, lengths):

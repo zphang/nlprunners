@@ -30,6 +30,7 @@ def simple_model_setup(model_type, model_class_spec, config_path, tokenizer_path
         )
     elif model_arch in [ModelArchitectures.GLOVE_LSTM]:
         return glove_lstm_setup(
+            config_path=config_path,
             tokenizer_path=tokenizer_path,
             task=task,
         )
@@ -73,19 +74,24 @@ def simple_ptt_model_setup(model_type, model_class_spec, config_path, tokenizer_
     )
 
 
-def glove_lstm_setup(tokenizer_path, task):
+def glove_lstm_setup(config_path, tokenizer_path, task):
+    config = glove_lstm_modeling.GloveLSTMConfig.from_json(config_path)
     if task.TASK_TYPE == TaskTypes.CLASSIFICATION:
         num_labels = len(task.LABELS)
     else:
         raise KeyError(task.TASK_TYPE)
-    glove = glove_lstm_modeling.GloVeEmbeddings.read_glove(tokenizer_path, vocab_size=200000,
-                                                           verbose=True)
+    glove = glove_lstm_modeling.GloVeEmbeddings.read_glove(
+        path=tokenizer_path,
+        vocab_size=config.vocab_size,
+        verbose=True,
+    )
     glove_embedding = glove_lstm_modeling.GloVeEmbeddingModule(glove)
     glove_model_base = glove_lstm_modeling.GloveLSTMModelBase(
-        hidden_dim=256,
-        num_layers=1,
+        hidden_dim=config.hidden_dim,
+        num_layers=config.num_layers,
         num_classes=num_labels,
         glove_embedding=glove_embedding,
+        drop_prob=config.drop_prob,
     )
     glove_model = glove_lstm_modeling.GloveLSTMModel(glove_model_base)
     return ModelWrapper(

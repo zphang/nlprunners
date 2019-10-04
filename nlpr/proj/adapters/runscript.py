@@ -15,6 +15,7 @@ import nlpr.tasks.evaluate as evaluate
 import nlpr.proj.simple.runner as simple_runner
 import nlpr.shared.metarunner as metarunner
 import nlpr.shared.modeling.adapter as adapter
+import nlpr.proj.adapters.model_setup as adapters_model_setup
 
 
 def get_adapter_named_parameters(model):
@@ -108,12 +109,11 @@ def main(args):
             model_type=args.model_type,
             task_type=task.TASK_TYPE,
         )
-        model_wrapper = model_setup.simple_model_setup(
+        model_wrapper = adapters_model_setup.setup_adapter_model(
             model_type=args.model_type,
             model_class_spec=model_class_spec,
             config_path=args.model_config_path,
             tokenizer_path=args.model_tokenizer_path,
-            task=task,
         )
         adapter.load_non_adapter_base_weights(
             model=model_wrapper.model,
@@ -193,8 +193,13 @@ def main(args):
             ).train_val_save_every()
 
         if args.do_save:
+            state_dict = model_wrapper.model.state_dict()
+            saved_state_dict = {
+                k: state_dict[k]
+                for k, _ in named_parameters
+            }
             torch.save(
-                model_wrapper.model.state_dict(),
+                saved_state_dict,
                 os.path.join(args.output_dir, "model.p")
             )
 
