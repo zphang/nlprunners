@@ -14,13 +14,13 @@ import nlpr.tasks as tasks
 import nlpr.tasks.evaluate as evaluate
 import nlpr.proj.simple.runner as simple_runner
 import nlpr.shared.metarunner as metarunner
-import nlpr.shared.modeling.adapter as adapter
+import nlpr.proj.adapters.modeling as adapters
 import nlpr.proj.adapters.model_setup as adapters_model_setup
 
 
 def get_adapter_named_parameters(model):
     # Todo: Refactor
-    named_parameters = ptt.modeling_bert.get_adapter_params(model)
+    named_parameters = adapters.get_adapter_params(model)
     model_arch = model_resolution.ModelArchitectures.from_ptt_model(model)
     if model_arch == model_resolution.ModelArchitectures.BERT:
         add_ls = [
@@ -115,7 +115,7 @@ def main(args):
             config_path=args.model_config_path,
             tokenizer_path=args.model_tokenizer_path,
         )
-        adapter.load_non_adapter_base_weights(
+        adapters.load_non_adapter_base_weights(
             model=model_wrapper.model,
             state_dict=torch.load(args.model_path)
         )

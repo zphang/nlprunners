@@ -151,14 +151,14 @@ class MetaRunner:
         self.log_writer.write_entry("train_val", val_state.asdict())
         self.log_writer.flush()
         if self.best_val_state is None or val_state.score > self.best_val_state.score:
-            best_val_state = val_state.new()
-            self.log_writer.write_entry("train_val_best", best_val_state.asdict())
+            self.best_val_state = val_state.new()
+            self.log_writer.write_entry("train_val_best", self.best_val_state.asdict())
             self.log_writer.flush()
             if self.save_best_model:
                 save_model_with_metadata(
                     model=self.model,
                     metadata={
-                        "val_state": best_val_state.asdict(),
+                        "val_state": self.best_val_state.asdict(),
                     },
                     output_dir=self.output_dir,
                     file_name="best_model",

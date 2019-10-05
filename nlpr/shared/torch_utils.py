@@ -1,6 +1,7 @@
 import copy
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
 CPU_DEVICE = torch.device("cpu")
@@ -42,3 +43,15 @@ def copy_state_dict(state_dict, target_device=None):
         for k, v in state_dict.items()
     }
 
+
+def get_parent_child_module_list(model):
+    ls = []
+    for parent_name, parent_module in model.named_modules():
+        for child_name, child_module in parent_module.named_children():
+            ls.append((parent_name, parent_module, child_name, child_module))
+    return ls
+
+
+class IdentityModule(nn.Module):
+    def forward(self, *inputs):
+        return inputs
