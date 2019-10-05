@@ -1,32 +1,38 @@
-from nlpr.shared.model_resolution import ModelArchitectures
-from nlpr.shared.model_setup import ModelWrapper
+import nlpr.shared.model_resolution as model_resolution
+import nlpr.proj.adapters.modeling as adapters
 
 
-def setup_adapter_model(model_type, model_class_spec,
-                        config_path, tokenizer_path):
-    config = model_class_spec.config_class.from_json_file(config_path)
-    config.use_adapter = True
-
-    model = model_class_spec.model_class(config)
-    model_arch = ModelArchitectures.from_model_type(model_type)
-    if model_arch in [ModelArchitectures.BERT]:
-        if "-cased" in model_type:
-            do_lower_case = False
-        elif "-uncased" in model_type:
-            do_lower_case = True
-        else:
-            raise RuntimeError(model_type)
-    elif model_arch in [
-            ModelArchitectures.XLNET, ModelArchitectures.XLM, ModelArchitectures.ROBERTA]:
-        do_lower_case = False
+def get_head_parameters(model_arch):
+    if model_arch == model_resolution.ModelArchitectures.BERT:
+        return [
+            "bert.pooler.dense.weight",
+            "bert.pooler.dense.bias",
+            "classifier.out_proj.weight",
+            "classifier.out_proj.bias",
+            "classifier.weight",
+            "classifier.bias",
+        ]
+    elif model_arch == model_resolution.ModelArchitectures.ROBERTA:
+        return [
+            "roberta.pooler.dense.weight",
+            "roberta.pooler.dense.bias",
+            "classifier.out_proj.weight",
+            "classifier.out_proj.bias",
+            "classifier.dense.weight",
+            "classifier.dense.bias",
+            "classifier.dense.weight",
+            "classifier.dense.bias",
+        ]
     else:
-        raise RuntimeError(model_type)
-    print(do_lower_case)
-    tokenizer = model_class_spec.tokenizer_class.from_pretrained(
-        tokenizer_path, do_lower_case=do_lower_case,
-    )
-    model_wrapper = ModelWrapper(
-        model=model,
-        tokenizer=tokenizer
-    )
-    return model_wrapper
+        raise KeyError()
+
+
+def get_adapter_named_parameters(model):
+    # Todo: Refactor
+    named_parameters = adapters.get_adapter_params(model)
+    model_arch = model_resolution.ModelArchitectures.from_ptt_model(model)
+
+    full_named_parameters_dict = dict(model.named_parameters())
+    for name in get_head_parameters(model_arch):
+        named_parameters.append((name, full_named_parameters_dict[name]))
+    return named_parameters

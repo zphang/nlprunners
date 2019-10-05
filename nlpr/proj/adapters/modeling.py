@@ -134,7 +134,7 @@ class WeightedSum(nn.Module):
 
         self.num = len(self.name_list)
         self.weights = nn.Parameter(torch.ones(self.num) / self.num)
-        self.name2idx = dict(zip(self.name_list, range(self.name_list)))
+        self.name2idx = dict(zip(self.name_list, range(self.num)))
 
     def forward(self, x_dict):
         if self.do_softmax:
@@ -174,7 +174,7 @@ class BertOutputWithMultiAdapters(nn.Module):
     def from_original(cls, old_module, sub_module_name_list,
                       adapter_config: AdapterConfig, do_weighted_softmax=True):
         assert isinstance(old_module, modeling_bert.BertOutput)
-        adapter_dict = {"base": None}
+        adapter_dict = {"base": torch_utils.IdentityModule()}
         layer_norm_dict = {"base": old_module.LayerNorm}
         for name in sub_module_name_list:
             adapter_dict[name] = Adapter(
@@ -224,7 +224,7 @@ class BertSelfOutputWithMultiAdapters(nn.Module):
     def from_original(cls, old_module, sub_module_name_list,
                       adapter_config: AdapterConfig, do_weighted_softmax=True):
         assert isinstance(old_module, modeling_bert.BertSelfOutput)
-        adapter_dict = {"base": None}
+        adapter_dict = {"base": torch_utils.IdentityModule()}
         layer_norm_dict = {"base": old_module.LayerNorm}
         for name in sub_module_name_list:
             adapter_dict[name] = Adapter(
@@ -248,7 +248,8 @@ class BertSelfOutputWithMultiAdapters(nn.Module):
         )
 
 
-def add_multi_adapters(model, sub_module_name_list, adapter_config, do_weighted_softmax=True):
+def add_multi_adapters(model, sub_module_name_list, adapter_config,
+                       do_weighted_softmax=True, share_weights=False):
     modified = {}
     for p_name, p_module, c_name, c_module in torch_utils.get_parent_child_module_list(model):
         if isinstance(c_module, modeling_bert.BertOutput):
@@ -269,6 +270,15 @@ def add_multi_adapters(model, sub_module_name_list, adapter_config, do_weighted_
             )
             setattr(p_module, c_name, new_module)
             modified[f"{p_name}.{c_name}"] = new_module
+
+    if share_weights:
+        shared_weighted_sum = None
+        for modified_module in modified.values():
+            if shared_weighted_sum is None:
+                shared_weighted_sum = modified_module.weighted_sum
+            else:
+                modified_module.weighted_sum = shared_weighted_sum
+
     return modified
 
 

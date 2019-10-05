@@ -54,4 +54,7 @@ def get_parent_child_module_list(model):
 
 class IdentityModule(nn.Module):
     def forward(self, *inputs):
-        return inputs
+        if len(inputs) == 1:
+            return inputs[0]
+        else:
+            return inputs

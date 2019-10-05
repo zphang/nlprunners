@@ -196,8 +196,10 @@ def create_optimizer_from_params(named_parameters, learning_rate, t_total, warmu
                                  adam_epsilon=1e-8, verbose=False):
     # Prepare optimizer
     no_decay = [
-        'bias', 'LayerNorm.bias', 'LayerNorm.weight',
+        'bias',
+        'LayerNorm.bias', 'LayerNorm.weight',
         'adapter.down_project.weight', 'adapter.up_project.weight',
+        'weighted_sum.weights',
     ]
     if verbose:
         print("No optimizer decay for:")
@@ -221,8 +223,8 @@ def create_optimizer_from_params(named_parameters, learning_rate, t_total, warmu
             'weight_decay': 0.0,
         }
     ]
-    print("REQ", [n for n, p in named_parameters if not any(nd in n for nd in no_decay)])
-    print("NOREQ", [n for n, p in named_parameters if any(nd in n for nd in no_decay)])
+    # print("REQ", [n for n, p in named_parameters if not any(nd in n for nd in no_decay)])
+    # print("NOREQ", [n for n, p in named_parameters if any(nd in n for nd in no_decay)])
 
     optimizer = transformers.AdamW(
         optimizer_grouped_parameters, lr=learning_rate, eps=adam_epsilon
