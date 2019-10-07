@@ -8,8 +8,16 @@ from nlpr.shared.model_resolution import ModelArchitectures
 
 
 def get_ptt_model_embedding_dim(ptt_model):
-    # potentially hacky
-    return ptt_model.config.hidden_size
+    model_arch = ModelArchitectures.from_ptt_model(ptt_model)
+    if model_arch in (ModelArchitectures.BERT,
+                      ModelArchitectures.XLNET,
+                      ModelArchitectures.XLM,
+                      ModelArchitectures.ROBERTA):
+        return ptt_model.config.hidden_size
+    elif model_arch == ModelArchitectures.GLOVE_LSTM:
+        return ptt_model.model.hidden_dim
+    else:
+        raise KeyError(model_arch)
 
 
 @dataclass
@@ -74,6 +82,8 @@ class LlpModel(nn.Module):
             return self._get_xlnet_pooled(input_set)
         elif self.model_arch == ModelArchitectures.ROBERTA:
             return self._get_roberta_pooled(input_set)
+        elif self.model_arch == ModelArchitectures.GLOVE_LSTM:
+            return self._get_glove_lstm_pooled(input_set)
         else:
             raise KeyError(self.model_arch)
 
@@ -121,3 +131,13 @@ class LlpModel(nn.Module):
         sequence_output = roberta_output[0]
         logits = self.ptt_model.classifier(sequence_output)
         return sequence_output[:, 0], logits
+
+    def _get_glove_lstm_pooled(self, input_set: _InputSet):
+        logits, pooled = self.ptt_model(
+            input_ids=input_set.input_ids,
+            token_type_ids=input_set.token_type_ids,
+            attention_mask=input_set.input_mask,
+            labels=None,
+        )
+        # Notice the swapped order
+        return pooled, logits

@@ -2,6 +2,7 @@ import math
 import matplotlib.pyplot as plt
 import os
 
+import pyutils.io as io
 import zproto.zlogv1 as zlogv1
 
 
@@ -48,3 +49,27 @@ def get_latest_log(path, verbose=False):
     if verbose:
         print(chosen_path)
     return zlogv1.load_log(chosen_path)
+
+
+def listify(code):
+    spec_ls = []  # prefix, name, i
+    glob_format_tokens = []
+    for i, token in enumerate(code.split("/")):
+        if "$" in token:
+            split_token = token.split("$")
+            assert len(split_token) == 2
+            spec_ls.append(split_token + [i])
+            glob_format_tokens.append(f"{split_token[0]}*")
+        else:
+            glob_format_tokens.append(token)
+    path_ls = io.sorted_glob("/".join(glob_format_tokens))
+    result_ls = []
+    for path in path_ls:
+        tokens = path.split("/")
+        result = {
+            name: tokens[i][len(prefix):]
+            for prefix, name, i in spec_ls
+        }
+        result["path"] = path
+        result_ls.append(result)
+    return result_ls

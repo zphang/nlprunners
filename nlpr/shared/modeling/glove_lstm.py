@@ -60,7 +60,7 @@ class GloVeEmbeddings:
     def read_glove(cls, path, vocab_size=None, verbose=False):
         embeddings = {}
         with open(path, "r", encoding="utf-8") as f:
-            for line in maybe_tqdm(f, total=vocab_size, verbose=verbose):
+            for line in maybe_tqdm(f, total=vocab_size, verbose=verbose, desc="GloVe"):
                 if vocab_size is not None and len(embeddings) == vocab_size:
                     break
                 word, vec = line.split(" ", 1)
@@ -125,15 +125,19 @@ class GloVeEmbeddingModule(nn.Module):
 
 
 class GloveLSTMModelBase(nn.Module):
-    def __init__(self, hidden_dim, num_layers, num_classes, glove_embedding, drop_prob=0.1):
+    def __init__(self, hidden_dim, num_layers, num_classes, num_inputs,
+                 glove_embedding, drop_prob=0.1):
         super().__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         self.num_classes = num_classes
+        self.num_inputs = num_inputs
         self.glove_embedding = glove_embedding
         self.drop_prob = drop_prob
 
         self.has_lstm = self.num_layers > 0
+
+        # Kind of hack-ish to handle BOW/LSTM, and single vs double input
         if self.has_lstm:
             self.lstm1 = nn.GRU(
                 input_size=glove_embedding.embedding_dim,
@@ -142,25 +146,50 @@ class GloveLSTMModelBase(nn.Module):
                 num_layers=num_layers,
                 bidirectional=True,
             )
-            self.lstm2 = nn.GRU(
-                input_size=glove_embedding.embedding_dim,
-                hidden_size=hidden_dim,
-                batch_first=True,
-                num_layers=num_layers,
-                bidirectional=True,
-            )
-
-            self.fc1 = nn.Linear(hidden_dim * 2 * 4, hidden_dim)
+            if self.num_inputs == 2:
+                self.lstm2 = nn.GRU(
+                    input_size=glove_embedding.embedding_dim,
+                    hidden_size=hidden_dim,
+                    batch_first=True,
+                    num_layers=num_layers,
+                    bidirectional=True,
+                )
+                self.fc1 = nn.Linear(hidden_dim * 2 * 4, hidden_dim)
+            else:
+                self.lstm2 = None
+                self.fc1 = nn.Linear(hidden_dim * 2, hidden_dim)
         else:
             self.lstm1 = None
             self.lstm2 = None
-            self.fc1 = nn.Linear(300 * 4, hidden_dim)
+            if self.num_inputs == 2:
+                self.fc1 = nn.Linear(300 * 4, hidden_dim)
+            else:
+                self.fc1 = nn.Linear(300, hidden_dim)
         # two inputs, and bidirectional
         self.dropout = nn.Dropout(p=self.drop_prob)
         self.fc2 = nn.Linear(hidden_dim, num_classes)
         self.relu = nn.ReLU()
 
     def forward(self, input1, input2, lengths1, lengths2):
+        if input2 is None and lengths2 is None:
+            pooled = self.pool_input(
+                input_ids=input1,
+                lengths=lengths1,
+            )
+        else:
+            pooled = self.pool_double_input(
+                input1=input1,
+                input2=input2,
+                lengths1=lengths1,
+                lengths2=lengths2,
+            )
+
+        pooled = self.fc1(self.relu(pooled))
+        pooled = self.dropout(pooled)
+        logits = self.fc2(self.relu(pooled))
+        return logits, pooled  # Follow PTT format of returning tuple
+
+    def pool_double_input(self, input1, input2, lengths1, lengths2):
         embeddings1 = self.glove_embedding(input1)
         lstm_out1 = self.get_lstm_output_v2(self.lstm1, embeddings1, lengths1)
         pooled1 = self.masked_average(lstm_out1, lengths1)
@@ -170,11 +199,13 @@ class GloveLSTMModelBase(nn.Module):
         pooled2 = self.masked_average(lstm_out2, lengths2)
 
         pooled = torch.cat([pooled1, pooled2, pooled1-pooled2, pooled1*pooled2], dim=1)
+        return pooled
 
-        pooled = self.fc1(self.relu(pooled))
-        pooled = self.dropout(pooled)
-        logits = self.fc2(self.relu(pooled))
-        return logits, None  # Follow PTT format of returning tuple
+    def pool_input(self, input_ids, lengths):
+        embeddings = self.glove_embedding(input_ids)
+        lstm_out = self.get_lstm_output_v2(self.lstm1, embeddings, lengths)
+        pooled = self.masked_average(lstm_out, lengths)
+        return pooled
 
     @classmethod
     def get_lstm_output(cls, lstm, embeddings, lengths):
@@ -237,9 +268,37 @@ class GloveLSTMModel(nn.Module):
     def modify_input(cls, input_ids, token_type_ids, attention_mask):
         input_ids_arr = input_ids.cpu().numpy()
         segment_ids_arr = (attention_mask + token_type_ids).cpu().numpy()
-        assert segment_ids_arr.max() == 2
+        num_segments = segment_ids_arr.max()
+        if num_segments == 1:
+            return cls.modify_input_single(
+                input_ids_arr=input_ids_arr,
+                segment_ids_arr=segment_ids_arr,
+                device=input_ids.device,
+            )
+        elif num_segments == 2:
+            return cls.modify_input_double(
+                input_ids_arr=input_ids_arr,
+                segment_ids_arr=segment_ids_arr,
+                device=input_ids.device,
+            )
+        else:
+            raise RuntimeError()
+
+    @classmethod
+    def modify_input_single(cls, input_ids_arr, segment_ids_arr, device):
         batch_size = input_ids_arr.shape[0]
-        device = input_ids.device
+
+        input_ls = []
+        for i in range(batch_size):
+            input_ls.append(input_ids_arr[i][segment_ids_arr[i] == 1])
+
+        padded, lengths = get_padded_ids(input_ls)
+        input_tensor = torch.tensor(padded).long().to(device)
+        return input_tensor, None, lengths, None
+
+    @classmethod
+    def modify_input_double(cls, input_ids_arr, segment_ids_arr, device):
+        batch_size = input_ids_arr.shape[0]
 
         input1_ls = []
         input2_ls = []

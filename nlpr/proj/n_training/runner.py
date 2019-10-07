@@ -242,7 +242,7 @@ class NTrainingRunner(BaseRunner):
                     log_writer=sub_log_writer,
                 )
                 val_examples = self.task.get_val_examples()
-                metarunner.train_val_save_every(
+                mrunner = metarunner.MetaRunner(
                     runner=runner,
                     train_examples=runner_train_examples,
                     # quick and dirty
@@ -257,6 +257,7 @@ class NTrainingRunner(BaseRunner):
                     load_best_model=True,
                     log_writer=self.log_writer,
                 )
+                mrunner.train_val_save_every()
                 logits = runner.run_test(self.unlabeled_examples)
                 runner_save_memory(runner)
             logits_ls.append(logits)

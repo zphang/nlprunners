@@ -160,6 +160,8 @@ def main(args):
         if args.do_test:
             raise NotImplementedError()
 
+    initialization.write_done(args.output_dir)
+
 
 if __name__ == "__main__":
     main(args=RunConfiguration.run_cli_json_prepend())

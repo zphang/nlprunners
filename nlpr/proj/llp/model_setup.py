@@ -1,3 +1,5 @@
+import torch
+
 import nlpr.shared.model_setup as shared_model_setup
 import nlpr.shared.model_resolution as shared_model_resolution
 import nlpr.proj.llp.modeling as llp_modeling
@@ -27,14 +29,26 @@ def setup_model(model_type, task, llp_embedding_dim,
     return model_wrapper
 
 
-def load_model(model: llp_modeling.LlpModel, state_dict, load_mode):
+def load_model(model: llp_modeling.LlpModel, state_dict, model_load_mode):
     # todo: port to constant
-    if load_mode == "ptt_only":
+    if model_load_mode == "ptt_only":
         shared_model_setup.safe_load_model(
             model=model.ptt_model,
             state_dict=state_dict,
         )
-    elif load_mode == "all":
+    elif model_load_mode == "all":
         model.load_state_dict(state_dict)
+    elif model_load_mode == "no_load":
+        pass
     else:
-        raise KeyError(load_mode)
+        raise KeyError(model_load_mode)
+
+
+def load_model_path(model, model_path, model_load_mode):
+    if model_load_mode == "no_load":
+        return
+    load_model(
+        model=model,
+        state_dict=torch.load(model_path),
+        model_load_mode=model_load_mode,
+    )

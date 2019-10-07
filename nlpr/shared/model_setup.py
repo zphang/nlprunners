@@ -6,6 +6,7 @@ import transformers
 from nlpr.shared.model_resolution import ModelArchitectures
 import nlpr.shared.modeling.glove_lstm as glove_lstm_modeling
 from nlpr.tasks.lib.shared import TaskTypes
+import nlpr.tasks as tasks
 
 
 class ModelWrapper:
@@ -86,10 +87,25 @@ def glove_lstm_setup(config_path, tokenizer_path, task):
         verbose=True,
     )
     glove_embedding = glove_lstm_modeling.GloVeEmbeddingModule(glove)
+
+    # Task hack
+    if isinstance(task, tasks.ColaTask):
+        num_inputs = 1
+    elif isinstance(task, (tasks.BoolQTask,
+                           tasks.MnliTask,
+                           tasks.MrpcTask,
+                           tasks.QnliTask,
+                           tasks.QqpTask,
+                           tasks.RteTask)):
+        num_inputs = 2
+    else:
+        raise KeyError(task.__class__)
+
     glove_model_base = glove_lstm_modeling.GloveLSTMModelBase(
         hidden_dim=config.hidden_dim,
         num_layers=config.num_layers,
         num_classes=num_labels,
+        num_inputs=num_inputs,
         glove_embedding=glove_embedding,
         drop_prob=config.drop_prob,
     )
@@ -136,9 +152,11 @@ def simple_load_model(model, state_dict, model_load_mode, verbose=True):
 
 
 def simple_load_model_path(model, model_path, model_load_mode, verbose=True):
-    return simple_load_model(
+    if model_load_mode == "no_load":
+        return
+    simple_load_model(
         model=model,
-        state_dict=torch.load(model_path) if model_load_mode != "no_load" else None,
+        state_dict=torch.load(model_path),
         model_load_mode=model_load_mode,
         verbose=verbose
     )

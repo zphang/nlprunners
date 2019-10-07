@@ -43,8 +43,7 @@ class ModelArchitectures(Enum):
         elif isinstance(ptt_model, ptt.BertPreTrainedModel) \
                 and ptt_model.__class__.__name__.startswith("Robert"):
             return cls.ROBERTA
-        elif isinstance(ptt_model, glove_lstm_modeling.GloveLSTMModel) \
-                and ptt_model.__class__.__name__.startswith("Robert"):
+        elif isinstance(ptt_model, glove_lstm_modeling.GloveLSTMModel):
             return cls.GLOVE_LSTM
         else:
             raise KeyError(str(ptt_model))

@@ -109,16 +109,18 @@ def main(args):
             model_type=args.model_type,
             task_type=task.TASK_TYPE,
         )
-        model_wrapper = adapters_model_setup.setup_adapter_model(
+        model_wrapper = model_setup.simple_model_setup(
             model_type=args.model_type,
             model_class_spec=model_class_spec,
             config_path=args.model_config_path,
             tokenizer_path=args.model_tokenizer_path,
+            task=task,
         )
         adapters.load_non_adapter_base_weights(
             model=model_wrapper.model,
             state_dict=torch.load(args.model_path)
         )
+        adapters.add_adapters(model_wrapper.model, adapter_config=adapters.AdapterConfig())
         model_wrapper.model.to(quick_init_out.device)
 
     train_examples = task.get_train_examples()

@@ -96,10 +96,10 @@ def main(args):
             config_path=args.model_config_path,
             tokenizer_path=args.model_tokenizer_path,
         )
-        llp_model_setup.load_model(
+        llp_model_setup.load_model_path(
             model=model_wrapper.model,
-            state_dict=torch.load(args.model_path),
-            load_mode=args.model_load_mode,
+            model_path=args.model_path,
+            model_load_mode=args.model_load_mode,
         )
         model_wrapper.model.to(quick_init_out.device)
 

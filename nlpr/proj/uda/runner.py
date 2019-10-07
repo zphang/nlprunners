@@ -165,6 +165,7 @@ class UDARunner(BaseRunner):
                 train_global_state=train_global_state,
             )
             yield batch_triplet, train_global_state
+        train_global_state.step_epoch()
 
     def run_train_step(self, batch_triplet,
                        train_global_state: TrainGlobalState):

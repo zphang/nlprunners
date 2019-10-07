@@ -10,6 +10,7 @@ from typing import Any
 
 import nlpr.shared.log_info as log_info
 
+import pyutils.io as io
 import zproto.zlogv1 as zlog
 
 
@@ -81,9 +82,8 @@ def init_seed(given_seed, n_gpu, verbose=True):
 
 
 def init_output_dir(output_dir, force_overwrite):
-    if not force_overwrite \
-            and (os.path.exists(output_dir) and os.listdir(output_dir)):
-        raise ValueError("Output directory ({}) already exists and is not empty.".format(output_dir))
+    if not force_overwrite and is_done(output_dir):
+        raise RuntimeError(f"'{output_dir}' run is already done, and not forcing overwrite")
     os.makedirs(output_dir, exist_ok=True)
 
 
@@ -104,3 +104,11 @@ def get_seed(seed):
         return int(np.random.randint(0, 2**32 - 1))
     else:
         return seed
+
+
+def write_done(output_dir):
+    io.write_file("DONE", os.path.join(output_dir, "DONE"))
+
+
+def is_done(output_dir):
+    return os.path.exists(os.path.join(output_dir, "DONE"))
