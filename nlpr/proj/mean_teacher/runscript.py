@@ -95,10 +95,10 @@ def main(args):
             tokenizer_path=args.model_tokenizer_path,
             task=task,
         )
-        model_setup.simple_load_model(
+        model_setup.simple_load_model_path(
             model=model_wrapper.model,
             model_load_mode=args.model_load_mode,
-            state_dict=torch.load(args.model_path)
+            model_path=args.model_path,
         )
         model_wrapper.model.to(quick_init_out.device)
         teacher_model_wrapper = mean_teacher_runner.create_teacher(model_wrapper)

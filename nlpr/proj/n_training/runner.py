@@ -81,11 +81,10 @@ class RunnerCreator:
                 tokenizer_path=self.model_tokenizer_path,
                 task=self.task,
             )
-            model_setup.simple_load_model(
+            model_setup.simple_load_model_path(
                 model=model_wrapper.model,
                 model_load_mode=self.model_load_mode,
-                state_dict=torch.load(self.model_path),
-                verbose=self.verbose,
+                model_path=self.model_path,
             )
             model_wrapper.model.to(self.device)
         optimizer_scheduler = model_setup.create_optimizer(
