@@ -9,6 +9,7 @@ import nlpr.shared.torch_utils as torch_utils
 import nlpr.shared.model_resolution as model_resolution
 
 import pyutils.io as io
+import pyutils.datastructures as datastructures
 
 DEFAULT_ADAPTER_SIZE = 64
 DEFAULT_ADAPTER_INITIALIZER_RANGE = 0.0002
@@ -262,10 +263,10 @@ class BertSelfOutputWithMultiAdapters(nn.Module):
 
 
 def add_multi_adapters(model, sub_module_name_list, adapter_config,
-                       do_weighted_softmax=True, share_weights=False):
+                       do_weighted_softmax=True, num_weight_sets: int = 1):
     modified_layers = {}
+    model_architecture = model_resolution.ModelArchitectures.from_ptt_model(model)
     for p_name, p_module, c_name, c_module in torch_utils.get_parent_child_module_list(model):
-        model_architecture = model_resolution.ModelArchitectures.from_ptt_model(model)
         if model_architecture in [model_resolution.ModelArchitectures.BERT,
                                   model_resolution.ModelArchitectures.ROBERTA]:
             if isinstance(c_module, modeling_bert.BertOutput):
@@ -289,9 +290,20 @@ def add_multi_adapters(model, sub_module_name_list, adapter_config,
         else:
             raise KeyError(model_architecture)
 
-    if share_weights:
+    if model_architecture in [model_resolution.ModelArchitectures.BERT,
+                              model_resolution.ModelArchitectures.ROBERTA]:
+        num_per_layer = 2
+    else:
+        raise KeyError(model_architecture)
+
+    if num_weight_sets == -1:
+        num_weight_sets = len(modified_layers) // num_per_layer
+    assert len(modified_layers) % (num_per_layer * num_weight_sets) == 0
+
+    layers_sets = datastructures.partition_list(list(modified_layers.items()), num_weight_sets)
+    for layer_set in layers_sets:
         shared_weighted_sum = None
-        for modified_module in modified_layers.values():
+        for _, modified_module in layer_set:
             if shared_weighted_sum is None:
                 shared_weighted_sum = modified_module.weighted_sum
             else:

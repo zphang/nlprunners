@@ -68,7 +68,7 @@ class RunConfiguration(zconf.RunConfig):
 
     # Multi Adapters
     adapter_weights_path = zconf.attr(type=str, required=True)
-    adapter_share_weights = zconf.attr(type=int, default=1)
+    num_weight_sets = zconf.attr(type=int, default=1)
 
 
 def main(args):
@@ -99,7 +99,7 @@ def main(args):
         model=model_wrapper.model,
         sub_module_name_list=list(adapter_weights_dict.keys()),
         adapter_config=adapters.AdapterConfig(),
-        share_weights=bool(args.adapter_share_weights),
+        num_weight_sets=args.num_weight_sets,
     )
     adapters.load_multi_adapter_weights(
         model=model_wrapper.model,
