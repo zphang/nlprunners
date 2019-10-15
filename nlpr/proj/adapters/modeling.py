@@ -6,6 +6,9 @@ from dataclasses import dataclass
 
 import transformers.modeling_bert as modeling_bert
 import nlpr.shared.torch_utils as torch_utils
+import nlpr.shared.model_resolution as model_resolution
+
+import pyutils.io as io
 
 DEFAULT_ADAPTER_SIZE = 64
 DEFAULT_ADAPTER_INITIALIZER_RANGE = 0.0002
@@ -109,20 +112,25 @@ class BertSelfOutputWithAdapters(nn.Module):
 def add_adapters(model, adapter_config):
     modified = {}
     for p_name, p_module, c_name, c_module in torch_utils.get_parent_child_module_list(model):
-        if isinstance(c_module, modeling_bert.BertOutput):
-            new_module = BertOutputWithAdapters.from_original(
-                old_module=c_module,
-                adapter_config=adapter_config,
-            )
-            setattr(p_module, c_name, new_module)
-            modified[f"{p_name}.{c_name}"] = new_module
-        elif isinstance(c_module, modeling_bert.BertSelfOutput):
-            new_module = BertSelfOutputWithAdapters.from_original(
-                old_module=c_module,
-                adapter_config=adapter_config,
-            )
-            setattr(p_module, c_name, new_module)
-            modified[f"{p_name}.{c_name}"] = new_module
+        model_architecture = model_resolution.ModelArchitectures.from_ptt_model(model)
+        if model_architecture in [model_resolution.ModelArchitectures.BERT,
+                                  model_resolution.ModelArchitectures.ROBERTA]:
+            if isinstance(c_module, modeling_bert.BertOutput):
+                new_module = BertOutputWithAdapters.from_original(
+                    old_module=c_module,
+                    adapter_config=adapter_config,
+                )
+                setattr(p_module, c_name, new_module)
+                modified[f"{p_name}.{c_name}"] = new_module
+            elif isinstance(c_module, modeling_bert.BertSelfOutput):
+                new_module = BertSelfOutputWithAdapters.from_original(
+                    old_module=c_module,
+                    adapter_config=adapter_config,
+                )
+                setattr(p_module, c_name, new_module)
+                modified[f"{p_name}.{c_name}"] = new_module
+        else:
+            raise KeyError(model_architecture)
     return modified
 
 
@@ -222,10 +230,15 @@ class BertSelfOutputWithMultiAdapters(nn.Module):
 
     @classmethod
     def from_original(cls, old_module, sub_module_name_list,
-                      adapter_config: AdapterConfig, do_weighted_softmax=True):
+                      adapter_config: AdapterConfig,
+                      do_weighted_softmax=True,
+                      include_base=True):
         assert isinstance(old_module, modeling_bert.BertSelfOutput)
-        adapter_dict = {"base": torch_utils.IdentityModule()}
-        layer_norm_dict = {"base": old_module.LayerNorm}
+        adapter_dict = {}
+        layer_norm_dict = {}
+        if include_base:
+            adapter_dict["base"] = torch_utils.IdentityModule()
+            layer_norm_dict["base"] = old_module.LayerNorm
         for name in sub_module_name_list:
             adapter_dict[name] = Adapter(
                 hidden_size=old_module.dense.out_features,
@@ -250,36 +263,65 @@ class BertSelfOutputWithMultiAdapters(nn.Module):
 
 def add_multi_adapters(model, sub_module_name_list, adapter_config,
                        do_weighted_softmax=True, share_weights=False):
-    modified = {}
+    modified_layers = {}
     for p_name, p_module, c_name, c_module in torch_utils.get_parent_child_module_list(model):
-        if isinstance(c_module, modeling_bert.BertOutput):
-            new_module = BertOutputWithMultiAdapters.from_original(
-                old_module=c_module,
-                sub_module_name_list=sub_module_name_list,
-                adapter_config=adapter_config,
-                do_weighted_softmax=do_weighted_softmax,
-            )
-            setattr(p_module, c_name, new_module)
-            modified[f"{p_name}.{c_name}"] = new_module
-        elif isinstance(c_module, modeling_bert.BertSelfOutput):
-            new_module = BertSelfOutputWithMultiAdapters.from_original(
-                old_module=c_module,
-                sub_module_name_list=sub_module_name_list,
-                adapter_config=adapter_config,
-                do_weighted_softmax=do_weighted_softmax,
-            )
-            setattr(p_module, c_name, new_module)
-            modified[f"{p_name}.{c_name}"] = new_module
+        model_architecture = model_resolution.ModelArchitectures.from_ptt_model(model)
+        if model_architecture in [model_resolution.ModelArchitectures.BERT,
+                                  model_resolution.ModelArchitectures.ROBERTA]:
+            if isinstance(c_module, modeling_bert.BertOutput):
+                new_module = BertOutputWithMultiAdapters.from_original(
+                    old_module=c_module,
+                    sub_module_name_list=sub_module_name_list,
+                    adapter_config=adapter_config,
+                    do_weighted_softmax=do_weighted_softmax,
+                )
+                setattr(p_module, c_name, new_module)
+                modified_layers[f"{p_name}.{c_name}"] = new_module
+            elif isinstance(c_module, modeling_bert.BertSelfOutput):
+                new_module = BertSelfOutputWithMultiAdapters.from_original(
+                    old_module=c_module,
+                    sub_module_name_list=sub_module_name_list,
+                    adapter_config=adapter_config,
+                    do_weighted_softmax=do_weighted_softmax,
+                )
+                setattr(p_module, c_name, new_module)
+                modified_layers[f"{p_name}.{c_name}"] = new_module
+        else:
+            raise KeyError(model_architecture)
 
     if share_weights:
         shared_weighted_sum = None
-        for modified_module in modified.values():
+        for modified_module in modified_layers.values():
             if shared_weighted_sum is None:
                 shared_weighted_sum = modified_module.weighted_sum
             else:
                 modified_module.weighted_sum = shared_weighted_sum
 
-    return modified
+    return modified_layers
+
+
+def load_multi_adapter_weights(model, modified_layers: dict, adapter_weights_dict):
+    for adapter_set_name, weights_dict in adapter_weights_dict.items():
+        model_architecture = model_resolution.ModelArchitectures.from_ptt_model(model)
+        if model_architecture in [model_resolution.ModelArchitectures.BERT,
+                                  model_resolution.ModelArchitectures.ROBERTA]:
+            for name, module in modified_layers.items():
+                module_state_dict = module.state_dict()
+                module_state_dict[f"layer_norm_dict.{adapter_set_name}.weight"] = \
+                    weights_dict[f"{name}.LayerNorm.weight"]
+                module_state_dict[f"layer_norm_dict.{adapter_set_name}.bias"] = \
+                    weights_dict[f"{name}.LayerNorm.bias"]
+                module_state_dict[f"adapter_dict.{adapter_set_name}.down_project.weight"] = \
+                    weights_dict[f"{name}.adapter.down_project.weight"]
+                module_state_dict[f"adapter_dict.{adapter_set_name}.down_project.bias"] = \
+                    weights_dict[f"{name}.adapter.down_project.bias"]
+                module_state_dict[f"adapter_dict.{adapter_set_name}.up_project.weight"] = \
+                    weights_dict[f"{name}.adapter.up_project.weight"]
+                module_state_dict[f"adapter_dict.{adapter_set_name}.up_project.bias"] = \
+                    weights_dict[f"{name}.adapter.up_project.bias"]
+                module.load_state_dict(module_state_dict)
+        else:
+            raise KeyError(model_architecture)
 
 
 def load_non_adapter_base_weights(model, state_dict):
@@ -305,3 +347,33 @@ def get_adapter_params(model):
                 for k, v in sub_module.named_parameters()
             ]
     return adapter_params
+
+
+def get_multi_adapter_weight_params(model):
+    weight_params = []
+    for name, param in model.named_parameters():
+        if "weighted_sum" in name:
+            weight_params.append((name, param))
+    return weight_params
+
+
+def get_multi_adapter_weight_dict(modified_layers, simplify_name=True):
+    result = {}
+    for i, (name, layer) in enumerate(modified_layers.items()):
+        if simplify_name:
+            name = f"layer_{i:02d}"
+        weights = F.softmax(layer.weighted_sum.weights.data.clone(), dim=-1).cpu().numpy()
+        names = layer.weighted_sum.name_list
+        result[name] = dict(zip(names, weights))
+    return result
+
+
+def load_adapter_weights_dict(path_dict):
+    return {
+        name: torch.load(path, map_location="cpu")
+        for name, path in path_dict.items()
+    }
+
+
+def load_adapter_weights_dict_path(path):
+    return load_adapter_weights_dict(io.read_json(path))
