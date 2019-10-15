@@ -101,6 +101,8 @@ class MetaRunner:
                     train_dataloader=train_dataloader,
                     train_global_state=self.train_global_state,
                     verbose=self.verbose):
+                self.inject_at_step()
+
                 if self.should_save_func(self.train_global_state):
                     save_model_with_metadata(
                         model=self.model,
@@ -126,6 +128,8 @@ class MetaRunner:
             if self.full_break:
                 break
 
+            self.inject_at_epoch()
+
         # End of training eval
         self.eval_save()
 
@@ -141,6 +145,12 @@ class MetaRunner:
             "best_val_state": self.best_val_state,
             "val_state_history": self.val_state_history,
         }
+
+    def inject_at_step(self):
+        pass
+
+    def inject_at_epoch(self):
+        pass
 
     def eval_save(self):
         val_result = self.runner.run_val(self.val_examples)
