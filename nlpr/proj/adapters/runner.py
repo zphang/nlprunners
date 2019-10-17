@@ -1,7 +1,7 @@
 import pandas as pd
 
 import nlpr.shared.metarunner as metarunner
-import nlpr.proj.adapters.modeling as adapters_modeling
+import nlpr.proj.adapters.multi_adapter_modeling as multi_adapter_modeling
 
 
 class AdapterMetarunner(metarunner.MetaRunner):
@@ -14,7 +14,7 @@ class AdapterMetarunner(metarunner.MetaRunner):
         formatted_weights = {
             layer_name: pd.Series(weights).to_dict()
             for layer_name, weights
-            in adapters_modeling.get_multi_adapter_weight_dict(self.modified_layers).items()
+            in multi_adapter_modeling.get_multi_adapter_weight_dict(self.modified_layers).items()
         }
 
         self.log_writer.write_entry("weights", {

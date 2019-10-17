@@ -85,23 +85,27 @@ class AmazonPolarityTask(Task):
     LABEL_BIMAP = labels_to_bimap(LABELS)
 
     def get_train_examples(self):
+        return self.read_examples(self.train_path, set_type="train")
+
+    def get_val_examples(self):
+        return self.read_examples(self.val_path, set_type="val")
+
+    def get_test_examples(self):
+        raise NotImplementedError()
+
+    @classmethod
+    def read_examples(cls, path, set_type):
         df = pd.read_csv(
-            self.train_path,
+            path,
             header=None,
             names=["label", "title", "text"],
         )
         examples = [
             Example(
-                guid=f"train-{i}",
+                guid=f"{set_type}-{i}",
                 input_text=row["text"],
                 label=row["label"],
             )
             for i, row in df.iterrows()
         ]
         return examples
-
-    def get_val_examples(self):
-        raise NotImplementedError()
-
-    def get_test_examples(self):
-        raise NotImplementedError()

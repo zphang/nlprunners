@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import List
 
 from .shared import (
-    read_json_lines, Task, single_sentence_featurize, TaskTypes,
+    read_json_lines, Task, double_sentence_featurize, TaskTypes
 )
 from ..core import BaseExample, BaseTokenizedExample, BaseDataRow, BatchMixin, labels_to_bimap
 
@@ -11,27 +11,31 @@ from ..core import BaseExample, BaseTokenizedExample, BaseDataRow, BatchMixin, l
 @dataclass
 class Example(BaseExample):
     guid: str
-    input_text: str
+    input_premise: str
+    input_hypothesis: str
     label: str
 
     def tokenize(self, tokenizer):
         return TokenizedExample(
             guid=self.guid,
-            input_text=tokenizer.tokenize(self.input_text),
-            label_id=IMDBTask.LABEL_BIMAP.a[self.label],
+            input_premise=tokenizer.tokenize(self.input_premise),
+            input_hypothesis=tokenizer.tokenize(self.input_hypothesis),
+            label_id=MnliTask.LABEL_BIMAP.a[self.label],
         )
 
 
 @dataclass
 class TokenizedExample(BaseTokenizedExample):
     guid: str
-    input_text: List
+    input_premise: List
+    input_hypothesis: List
     label_id: int
 
     def featurize(self, tokenizer, feat_spec):
-        return single_sentence_featurize(
+        return double_sentence_featurize(
             guid=self.guid,
-            input_tokens=self.input_text,
+            input_tokens_a=self.input_premise,
+            input_tokens_b=self.input_hypothesis,
             label_id=self.label_id,
             tokenizer=tokenizer,
             feat_spec=feat_spec,
@@ -71,14 +75,14 @@ class Batch(BatchMixin):
         )
 
 
-class IMDBTask(Task):
+class MnliTask(Task):
     Example = Example
     TokenizedExample = Example
     DataRow = DataRow
     Batch = Batch
 
     TASK_TYPE = TaskTypes.CLASSIFICATION
-    LABELS = ["neg", "pos"]
+    LABELS = ["contradiction", "entailment", "neutral"]
     LABEL_BIMAP = labels_to_bimap(LABELS)
 
     def get_train_examples(self):
@@ -88,7 +92,7 @@ class IMDBTask(Task):
         return self._create_examples(lines=read_json_lines(self.val_path), set_type="val")
 
     def get_test_examples(self):
-        raise NotImplementedError()
+        return self._create_examples(lines=read_json_lines(self.test_path), set_type="test")
 
     @classmethod
     def _create_examples(cls, lines, set_type):
@@ -96,7 +100,8 @@ class IMDBTask(Task):
         for (i, line) in enumerate(lines):
             examples.append(Example(
                 guid="%s-%s" % (set_type, i),
-                input_text=line["input_text"],
-                label=line["label"],
+                input_premise=line["text_a"],
+                input_hypothesis=line["text_b"],
+                label=line["label"] if set_type != "test" else cls.LABELS[-1],
             ))
         return examples
