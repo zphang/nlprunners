@@ -1,3 +1,4 @@
+from nlpr.tasks.lib.anli import AnliTask
 from nlpr.tasks.lib.commitmentbank import CommitmentBankTask
 from nlpr.tasks.lib.copa import CopaTask
 from nlpr.tasks.lib.multirc import MultiRCTask
@@ -25,6 +26,7 @@ from pyutils.io import read_json
 
 
 TASK_DICT = {
+    "anli": AnliTask,
     "cb": CommitmentBankTask,
     "copa": CopaTask,
     "mrc": MultiRCTask,

@@ -125,20 +125,22 @@ def build_featurization_spec(model_type, max_seq_length):
 MODEL_CLASS_DICT = {
     ModelArchitectures.BERT: {
         TaskTypes.CLASSIFICATION: ptt.BertForSequenceClassification,
-        TaskTypes.REGRESSION: ptt.BertForSequenceClassification,  # ptt is weird
+        TaskTypes.REGRESSION: models.BertForSequenceRegression,  # ptt is weird
         TaskTypes.SPAN_COMPARISON_CLASSIFICATION: models.BertForSpanComparisonClassification,
+        TaskTypes.MULTIPLE_CHOICE: models.BertForMultipleChoice,
     },
     ModelArchitectures.XLNET: {
         TaskTypes.CLASSIFICATION: ptt.XLNetForSequenceClassification,
-        TaskTypes.REGRESSION: ptt.XLNetForSequenceClassification,  # ptt is weird
+        TaskTypes.REGRESSION: None,  # ptt is weird
     },
     ModelArchitectures.XLM: {
         TaskTypes.CLASSIFICATION: ptt.XLMForSequenceClassification,
-        TaskTypes.REGRESSION: ptt.XLMForSequenceClassification,  # ptt is weird
+        TaskTypes.REGRESSION: None,  # ptt is weird
     },
     ModelArchitectures.ROBERTA: {
         TaskTypes.CLASSIFICATION: ptt.RobertaForSequenceClassification,
         TaskTypes.REGRESSION: ptt.RobertaForSequenceClassification,  # ptt is weird
+        TaskTypes.MULTIPLE_CHOICE: models.RoBertaForMultipleChoice,
     },
     ModelArchitectures.GLOVE_LSTM: {
         TaskTypes.CLASSIFICATION: glove_lstm_modeling.GloveLSTMForSequenceClassification,

@@ -27,7 +27,9 @@ class BaseEvaluation:
 
 def compute_task_metrics(task, logits, examples):
     # Todo: move logic to task?
-    if isinstance(task, tasks.BoolQTask):
+    if isinstance(task, tasks.AmazonPolarityTask):
+        return SimpleAccuracyEval.from_logits(task, logits, examples)
+    elif isinstance(task, tasks.BoolQTask):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.CommitmentBankTask):
         return CommitmentBankEval.from_logits(task, logits, examples)
@@ -60,13 +62,17 @@ def compute_task_metrics(task, logits, examples):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.WSCTask):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
+    if isinstance(task, tasks.YelpPolarityTask):
+        return SimpleAccuracyEval.from_logits(task, logits, examples)
     else:
         raise KeyError(task)
 
 
 def compute_task_metrics_from_classification_preds(task, preds, examples):
     # Todo: move logic to task?
-    if isinstance(task, tasks.BoolQTask):
+    if isinstance(task, tasks.AmazonPolarityTask):
+        return SimpleAccuracyEval.from_preds(task, preds, examples)
+    elif isinstance(task, tasks.BoolQTask):
         return SimpleAccuracyEval.from_preds(task, preds, examples)
     elif isinstance(task, tasks.CommitmentBankTask):
         return CommitmentBankEval.from_preds(task, preds, examples)
@@ -95,6 +101,8 @@ def compute_task_metrics_from_classification_preds(task, preds, examples):
     elif isinstance(task, tasks.WiCTask):
         return SimpleAccuracyEval.from_preds(task, preds, examples)
     elif isinstance(task, tasks.WSCTask):
+        return SimpleAccuracyEval.from_preds(task, preds, examples)
+    if isinstance(task, tasks.YelpPolarityTask):
         return SimpleAccuracyEval.from_preds(task, preds, examples)
     else:
         raise KeyError(task)

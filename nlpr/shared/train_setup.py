@@ -45,6 +45,8 @@ def resolve_loss_function(task_type: TaskTypes):
         return nn.MSELoss()
     elif task_type == TaskTypes.SPAN_COMPARISON_CLASSIFICATION:
         return nn.CrossEntropyLoss()
+    if task_type == TaskTypes.MULTIPLE_CHOICE:
+        return nn.CrossEntropyLoss()
     else:
         raise KeyError(task_type)
 
