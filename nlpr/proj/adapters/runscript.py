@@ -1,8 +1,6 @@
 import os
 import torch
 
-import transformers as ptt
-
 import zconf
 
 import nlpr.shared.initialization as initialization
@@ -16,34 +14,6 @@ import nlpr.proj.simple.runner as simple_runner
 import nlpr.shared.metarunner as metarunner
 import nlpr.proj.adapters.modeling as adapters
 import nlpr.proj.adapters.model_setup as adapters_model_setup
-
-
-def get_adapter_named_parameters(model):
-    # Todo: Refactor
-    named_parameters = adapters.get_adapter_params(model)
-    model_arch = model_resolution.ModelArchitectures.from_ptt_model(model)
-    if model_arch == model_resolution.ModelArchitectures.BERT:
-        add_ls = [
-            "bert.pooler.dense.weight",
-            "bert.pooler.dense.bias",
-            "classifier.weight",
-            "classifier.bias",
-        ]
-    elif model_arch == model_resolution.ModelArchitectures.ROBERTA:
-        add_ls = [
-            "roberta.pooler.dense.weight",
-            "roberta.pooler.dense.bias",
-            "classifier.dense.weight",
-            "classifier.dense.bias",
-            "classifier.dense.weight",
-            "classifier.dense.bias",
-        ]
-    else:
-        raise KeyError()
-    full_named_parameters_dict = dict(model.named_parameters())
-    for name in add_ls:
-        named_parameters.append((name, full_named_parameters_dict[name]))
-    return named_parameters
 
 
 @zconf.run_config
@@ -140,7 +110,7 @@ def main(args):
         n_gpu=quick_init_out.n_gpu,
     )
     loss_criterion = train_setup.resolve_loss_function(task_type=task.TASK_TYPE)
-    named_parameters = get_adapter_named_parameters(model_wrapper.model)
+    named_parameters = adapters_model_setup.get_adapter_named_parameters(model_wrapper.model)
     optimizer_scheduler = model_setup.create_optimizer_from_params(
         named_parameters=named_parameters,
         learning_rate=args.learning_rate,
