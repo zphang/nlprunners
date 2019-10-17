@@ -13,6 +13,7 @@ import nlpr.tasks.evaluate as evaluate
 import nlpr.proj.simple.runner as simple_runner
 import nlpr.shared.metarunner as metarunner
 import nlpr.proj.adapters.modeling as adapters
+import nlpr.proj.adapters.multi_adapter_modeling as multi_adapters
 import nlpr.proj.adapters.model_setup as adapters_model_setup
 import nlpr.proj.adapters.runner as adapters_runner
 
@@ -68,7 +69,9 @@ class RunConfiguration(zconf.RunConfig):
 
     # Multi Adapters
     adapter_weights_path = zconf.attr(type=str, required=True)
-    num_weight_sets = zconf.attr(type=int, default=1)
+    adapter_num_weight_sets = zconf.attr(type=int, default=1)
+    adapter_include_base = zconf.attr(type=int, default=1)
+    adapter_include_flex = zconf.attr(type=int, default=0)
 
 
 def main(args):
@@ -94,14 +97,18 @@ def main(args):
         model_load_mode=args.model_load_mode,
         model_path=args.model_path,
     )
-    adapter_weights_dict = adapters.load_adapter_weights_dict_path(args.adapter_weights_path)
-    modified_layers = adapters.add_multi_adapters(
+    adapter_weights_dict = multi_adapters.load_adapter_weights_dict_path(args.adapter_weights_path)
+    sub_module_name_list = list(adapter_weights_dict.keys())
+    if args.adapter_include_flex:
+        sub_module_name_list.append("flex")
+    modified_layers = multi_adapters.add_multi_adapters(
         model=model_wrapper.model,
-        sub_module_name_list=list(adapter_weights_dict.keys()),
+        sub_module_name_list=sub_module_name_list,
         adapter_config=adapters.AdapterConfig(),
-        num_weight_sets=args.num_weight_sets,
+        include_base=args.adapter_include_base,
+        num_weight_sets=args.adapter_num_weight_sets,
     )
-    adapters.load_multi_adapter_weights(
+    multi_adapters.load_multi_adapter_weights(
         model=model_wrapper.model,
         modified_layers=modified_layers,
         adapter_weights_dict=adapter_weights_dict,
@@ -109,8 +116,10 @@ def main(args):
     model_wrapper.model.to(quick_init_out.device)
     named_parameters = (
         adapters_model_setup.get_head_named_parameters(model_wrapper.model)
-        + adapters.get_multi_adapter_weight_params(model_wrapper.model)
+        + multi_adapters.get_multi_adapter_weight_params(model_wrapper.model)
     )
+    if args.adapter_include_flex:
+        named_parameters += multi_adapters.get_multi_adapter_adapter_params_dict(modified_layers)["flex"]
 
     train_examples = task.get_train_examples()
     train_examples, _ = train_setup.maybe_subsample_train(
