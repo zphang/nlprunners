@@ -27,7 +27,9 @@ class BaseEvaluation:
 
 def compute_task_metrics(task, logits, examples):
     # Todo: move logic to task?
-    if isinstance(task, tasks.AmazonPolarityTask):
+    if isinstance(task, tasks.AnliTask):
+        return SimpleAccuracyEval.from_logits(task, logits, examples)
+    elif isinstance(task, tasks.AmazonPolarityTask):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.BoolQTask):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
@@ -70,7 +72,9 @@ def compute_task_metrics(task, logits, examples):
 
 def compute_task_metrics_from_classification_preds(task, preds, examples):
     # Todo: move logic to task?
-    if isinstance(task, tasks.AmazonPolarityTask):
+    if isinstance(task, tasks.AnliTask):
+        return SimpleAccuracyEval.from_preds(task, preds, examples)
+    elif isinstance(task, tasks.AmazonPolarityTask):
         return SimpleAccuracyEval.from_preds(task, preds, examples)
     elif isinstance(task, tasks.BoolQTask):
         return SimpleAccuracyEval.from_preds(task, preds, examples)

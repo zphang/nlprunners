@@ -144,12 +144,9 @@ class DataRow(BaseDataRow):
 
 @dataclass
 class Batch(BatchMixin):
-    input_ids1: torch.Tensor
-    input_mask1: torch.Tensor
-    segment_ids1: torch.Tensor
-    input_ids2: torch.Tensor
-    input_mask2: torch.Tensor
-    segment_ids2: torch.Tensor
+    input_ids: torch.Tensor
+    input_mask: torch.Tensor
+    segment_ids: torch.Tensor
     label_ids: torch.Tensor
     tokens1: list
     tokens2: list
@@ -157,12 +154,18 @@ class Batch(BatchMixin):
     @classmethod
     def from_data_rows(cls, data_row_ls):
         return Batch(
-            input_ids1=torch.tensor([f.input_ids1 for f in data_row_ls], dtype=torch.long),
-            input_mask1=torch.tensor([f.input_mask1 for f in data_row_ls], dtype=torch.long),
-            segment_ids1=torch.tensor([f.segment_ids1 for f in data_row_ls], dtype=torch.long),
-            input_ids2=torch.tensor([f.input_ids2 for f in data_row_ls], dtype=torch.long),
-            input_mask2=torch.tensor([f.input_mask2 for f in data_row_ls], dtype=torch.long),
-            segment_ids2=torch.tensor([f.segment_ids2 for f in data_row_ls], dtype=torch.long),
+            input_ids=torch.tensor([
+                [f.input_ids1, f.input_ids2]
+                for f in data_row_ls
+            ], dtype=torch.long),
+            input_mask=torch.tensor([
+                [f.input_mask1, f.input_mask2]
+                for f in data_row_ls
+            ], dtype=torch.long),
+            segment_ids=torch.tensor([
+                [f.segment_ids1, f.segment_ids2]
+                for f in data_row_ls
+            ], dtype=torch.long),
             label_ids=torch.tensor([f.label_id for f in data_row_ls], dtype=torch.long),
             tokens1=[f.tokens1 for f in data_row_ls],
             tokens2=[f.tokens2 for f in data_row_ls],

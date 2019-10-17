@@ -46,6 +46,7 @@ def forward_batch_delegate(model: nn.Module, batch, task_type: TaskTypes, omit_l
             labels=batch.label_ids if not omit_label_ids else None,
         )
     elif task_type == TaskTypes.MULTIPLE_CHOICE:
+        """
         assert hasattr(model, "num_choices")
         input_set_list = []
         # Todo: huge hack. Expose as method?
@@ -59,6 +60,12 @@ def forward_batch_delegate(model: nn.Module, batch, task_type: TaskTypes, omit_l
             input_set_list=input_set_list,
             labels=batch.label_ids if not omit_label_ids else None,
         )
+        """
+        return forward_batch_basic(
+            model=model,
+            batch=batch,
+            omit_label_ids=omit_label_ids,
+        )
     else:
         raise KeyError(task_type)
 
@@ -70,6 +77,8 @@ def compute_loss_from_model_output(logits, loss_criterion, batch, task_type: Tas
     elif task_type == TaskTypes.REGRESSION:
         loss = loss_criterion(logits.squeeze(-1), batch.label)
     elif task_type == TaskTypes.SPAN_COMPARISON_CLASSIFICATION:
+        loss = loss_criterion(logits, batch.label_ids)
+    elif task_type == TaskTypes.MULTIPLE_CHOICE:
         loss = loss_criterion(logits, batch.label_ids)
     else:
         raise KeyError(task_type)

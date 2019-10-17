@@ -140,7 +140,7 @@ MODEL_CLASS_DICT = {
     ModelArchitectures.ROBERTA: {
         TaskTypes.CLASSIFICATION: ptt.RobertaForSequenceClassification,
         TaskTypes.REGRESSION: ptt.RobertaForSequenceClassification,  # ptt is weird
-        TaskTypes.MULTIPLE_CHOICE: models.RoBertaForMultipleChoice,
+        TaskTypes.MULTIPLE_CHOICE: ptt.RobertaForMultipleChoice,
     },
     ModelArchitectures.GLOVE_LSTM: {
         TaskTypes.CLASSIFICATION: glove_lstm_modeling.GloveLSTMForSequenceClassification,
