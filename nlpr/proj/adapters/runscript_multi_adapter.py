@@ -176,7 +176,7 @@ def main(args):
     )
     if args.do_train:
         val_examples = task.get_val_examples()
-        adapters_runner.AdapterMetarunner(
+        adapters_runner.AdapterMetaRunner(
             runner=runner,
             train_examples=train_examples,
             val_examples=val_examples[:args.partial_eval_number],  # quick and dirty

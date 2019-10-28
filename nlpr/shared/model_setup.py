@@ -227,20 +227,32 @@ def create_optimizer_from_params(named_parameters, learning_rate, t_total, warmu
             if any(nd in n for nd in no_decay):
                 print(f"  {n}")
 
-    named_parameters = [
+    used_named_parameters = [
         (n, p)
         for n, p in named_parameters
         if p.requires_grad
+        and 'weighted_sum.weights' not in n
+    ]
+    weighted_sum_params = [
+        (n, p)
+        for n, p in named_parameters
+        if p.requires_grad
+        and 'weighted_sum.weights' in n
     ]
 
     optimizer_grouped_parameters = [
         {
-            'params': [p for n, p in named_parameters if not any(nd in n for nd in no_decay)],
+            'params': [p for n, p in used_named_parameters if not any(nd in n for nd in no_decay)],
             'weight_decay': 0.01,
         },
         {
-            'params': [p for n, p in named_parameters if any(nd in n for nd in no_decay)],
+            'params': [p for n, p in used_named_parameters if any(nd in n for nd in no_decay)],
             'weight_decay': 0.0,
+        },
+        {
+            'params': [p for n, p in weighted_sum_params],
+            'weight_decay': 0.0,
+            'lr': 0.01,
         }
     ]
     # print("REQ", [n for n, p in named_parameters if not any(nd in n for nd in no_decay)])

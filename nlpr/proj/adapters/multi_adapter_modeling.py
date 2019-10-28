@@ -57,11 +57,14 @@ class BertOutputWithMultiAdapters(nn.Module):
         return combined_hidden_states
 
     @classmethod
-    def from_original(cls, old_module, sub_module_name_list,
-                      adapter_config: adapters_modeling.AdapterConfig,
-                      do_weighted_softmax=True,
-                      include_base=True,
-                      ):
+    def from_original(
+        cls,
+        old_module,
+        sub_module_name_list,
+        adapter_config: adapters_modeling.AdapterConfig,
+        do_weighted_softmax=True,
+        include_base=True,
+    ):
         assert isinstance(old_module, modeling_bert.BertOutput)
         adapter_dict = {}
         layer_norm_dict = {}
@@ -113,10 +116,14 @@ class BertSelfOutputWithMultiAdapters(nn.Module):
         return combined_hidden_states
 
     @classmethod
-    def from_original(cls, old_module, sub_module_name_list,
-                      adapter_config: adapters_modeling.AdapterConfig,
-                      do_weighted_softmax=True,
-                      include_base=True):
+    def from_original(
+        cls,
+        old_module,
+        sub_module_name_list,
+        adapter_config: adapters_modeling.AdapterConfig,
+        do_weighted_softmax=True,
+        include_base=True,
+    ):
         assert isinstance(old_module, modeling_bert.BertSelfOutput)
         adapter_dict = {}
         layer_norm_dict = {}
@@ -151,10 +158,13 @@ def add_multi_adapters(model, sub_module_name_list, adapter_config,
                        num_weight_sets: int = 1):
     modified_layers = {}
     model_architecture = model_resolution.ModelArchitectures.from_ptt_model(model)
+
     for p_name, p_module, c_name, c_module in torch_utils.get_parent_child_module_list(model):
         if model_architecture in [model_resolution.ModelArchitectures.BERT,
                                   model_resolution.ModelArchitectures.ROBERTA]:
+            # Drop "roberta." or "bert."
             if isinstance(c_module, modeling_bert.BertOutput):
+                p_name = p_name.split(".", 1)[1]
                 new_module = BertOutputWithMultiAdapters.from_original(
                     old_module=c_module,
                     sub_module_name_list=sub_module_name_list,
@@ -165,6 +175,7 @@ def add_multi_adapters(model, sub_module_name_list, adapter_config,
                 setattr(p_module, c_name, new_module)
                 modified_layers[f"{p_name}.{c_name}"] = new_module
             elif isinstance(c_module, modeling_bert.BertSelfOutput):
+                p_name = p_name.split(".", 1)[1]
                 new_module = BertSelfOutputWithMultiAdapters.from_original(
                     old_module=c_module,
                     sub_module_name_list=sub_module_name_list,
@@ -200,8 +211,16 @@ def add_multi_adapters(model, sub_module_name_list, adapter_config,
 
 
 def load_multi_adapter_weights(model, modified_layers: dict, adapter_weights_dict):
+    """
+    encoder_name_dict = {
+        model_resolution.ModelArchitectures.BERT: "bert",
+        model_resolution.ModelArchitectures.ROBERTA: "roberta",
+    }
+    """
+
     for adapter_set_name, weights_dict in adapter_weights_dict.items():
         model_architecture = model_resolution.ModelArchitectures.from_ptt_model(model)
+        # encoder_name = encoder_name_dict[model_architecture]
         if model_architecture in [model_resolution.ModelArchitectures.BERT,
                                   model_resolution.ModelArchitectures.ROBERTA]:
             for name, module in modified_layers.items():

@@ -65,7 +65,6 @@ def get_roberta_head_parameter_names(model):
         raise KeyError(type(model))
 
 
-
 def get_head_named_parameters(model):
     head_parameter_names = get_head_parameter_names(model)
     full_named_parameters_dict = dict(model.named_parameters())

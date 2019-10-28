@@ -127,7 +127,7 @@ MODEL_CLASS_DICT = {
         TaskTypes.CLASSIFICATION: ptt.BertForSequenceClassification,
         TaskTypes.REGRESSION: models.BertForSequenceRegression,  # ptt is weird
         TaskTypes.SPAN_COMPARISON_CLASSIFICATION: models.BertForSpanComparisonClassification,
-        TaskTypes.MULTIPLE_CHOICE: models.BertForMultipleChoice,
+        TaskTypes.MULTIPLE_CHOICE: ptt.BertForMultipleChoice,
     },
     ModelArchitectures.XLNET: {
         TaskTypes.CLASSIFICATION: ptt.XLNetForSequenceClassification,
