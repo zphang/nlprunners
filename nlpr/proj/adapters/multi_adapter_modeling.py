@@ -67,7 +67,7 @@ class MultiAdapter(nn.Module):
 
     def forward(self, hidden_states, input_tensor):
         hidden_states_dict = {}
-        for k in self.adapter_dict:
+        for k in self.sub_module_name_list:
             sub_hidden_states = self.adapter_dict[k](hidden_states)
             sub_hidden_states = self.layer_norm_dict[k](sub_hidden_states + input_tensor)
             hidden_states_dict[k] = sub_hidden_states
@@ -83,9 +83,11 @@ class MultiAdapter(nn.Module):
                include_base=True):
         adapter_dict = {}
         layer_norm_dict = {}
+        sub_module_name_list = sub_module_name_list.copy()
         if include_base:
             adapter_dict["base"] = torch_utils.IdentityModule()
             layer_norm_dict["base"] = old_parent_module.LayerNorm
+            sub_module_name_list.append("base")
         for name in sub_module_name_list:
             adapter_dict[name] = adapters_modeling.Adapter(
                 hidden_size=old_parent_module.dense.out_features,
@@ -107,7 +109,7 @@ class MultiAdapter(nn.Module):
         )
 
 
-class FusedAdapter(nn.Module):
+class FusedAdapters(nn.Module):
     def __init__(self,
                  module_name_list,
                  stacked_down_project,
@@ -130,6 +132,7 @@ class FusedAdapter(nn.Module):
         self.k_dim = up_project_weight.shape[0]
 
     def forward(self, hidden_states):
+        batch_size, seq_len, _ = hidden_states.shape
         # input: [batch_size, seq_len, input_dim]
         # output: [batch_size, seq_len, k, input_dim]
         down_projected = self.stacked_down_project(hidden_states)
@@ -139,7 +142,7 @@ class FusedAdapter(nn.Module):
         # => [batch_size, seq_len, adapter_dim]
 
         activated = activated \
-            .view(self.batch_size, self.seq_len, self.k_dim, self.adapter_dim)\
+            .view(batch_size, seq_len, self.k_dim, self.adapter_dim)\
             .permute(2, 0, 1, 3)
         # => [k_dim, batch_size, seq_len, adapter_dim]
 
@@ -178,7 +181,7 @@ class FusedAdapter(nn.Module):
     def load_weights(self, adapter_dict):
         a_dim = self.adapter_dim
 
-        for i, name in range(self.module_name_list):
+        for i, name in enumerate(self.module_name_list):
             adapter = adapter_dict[name]
             self.stacked_down_project.weight.data[a_dim * i:a_dim * (i + 1), :] = \
                 adapter.down_project.weight.data
@@ -200,6 +203,19 @@ class FusedAdapter(nn.Module):
         return fused_adapter
 
 
+def create_fused_layer_norms(layer_norm_dict, module_name_list):
+    dim_size = list(layer_norm_dict.values())[0].normalized_shape[0]
+    num_modules = len(layer_norm_dict)
+    fused_layer_norm = nn.LayerNorm((num_modules, dim_size))
+    for i, k in enumerate(module_name_list):
+        layer_norm = layer_norm_dict[k]
+        fused_layer_norm.weight.data[i] = layer_norm.weight.data
+        fused_layer_norm.bias.data[i] = layer_norm.bias.data
+    fused_layer_norm.weight.data = fused_layer_norm.weight.data.contiguous()
+    fused_layer_norm.bias.data = fused_layer_norm.bias.data.contiguous()
+    return fused_layer_norm
+
+
 class MultiAdapterOptimized(nn.Module):
     def __init__(self, weighted_sum, adapter_dict, layer_norm_dict,
                  sub_module_name_list=None):
@@ -218,6 +234,8 @@ class MultiAdapterOptimized(nn.Module):
         for i, (k, layer_norm) in enumerate(self.layer_norm_dict.items()):
             self.fused_layer_norm.weight.data[i] = layer_norm.weight.data
             self.fused_layer_norm.bias.data[i] = layer_norm.bias.data
+        self.fused_layer_norm.weight.data = self.fused_layer_norm.weight.data.contiguous()
+        self.fused_layer_norm.bias.data = self.fused_layer_norm.bias.data.contiguous()
 
     def forward(self, hidden_states, input_tensor):
         hidden_states_ls = []
