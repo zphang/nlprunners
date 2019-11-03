@@ -1,4 +1,5 @@
 from nlpr.tasks.lib.anli import AnliTask
+from nlpr.tasks.lib.amazon import AmazonPolarityTask
 from nlpr.tasks.lib.commitmentbank import CommitmentBankTask
 from nlpr.tasks.lib.copa import CopaTask
 from nlpr.tasks.lib.multirc import MultiRCTask
@@ -6,9 +7,9 @@ from nlpr.tasks.lib.rte import RteTask
 from nlpr.tasks.lib.wic import WiCTask
 from nlpr.tasks.lib.wsc import WSCTask
 from nlpr.tasks.lib.yelp import YelpPolarityTask
-from nlpr.tasks.lib.amazon import AmazonPolarityTask
-from nlpr.tasks.lib.mnli import MnliTask
 from nlpr.tasks.lib.imdb import IMDBTask
+from nlpr.tasks.lib.maskedwiki import MaskedWikiTask
+from nlpr.tasks.lib.mnli import MnliTask
 from nlpr.tasks.lib.mrpc import MrpcTask
 from nlpr.tasks.lib.cola import ColaTask
 from nlpr.tasks.lib.boolq import BoolQTask
@@ -48,6 +49,7 @@ TASK_DICT = {
     "sst": SstTask,
     "stsb": StsbTask,
     "wnli": WnliTask,
+    "masked_wiki": MaskedWikiTask,
 }
 
 

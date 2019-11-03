@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import csv
 import json
-from typing import List
+from typing import List, NamedTuple
 from enum import Enum
 
 from dataclasses import dataclass
@@ -14,6 +16,7 @@ class TaskTypes(Enum):
     REGRESSION = 2
     SPAN_COMPARISON_CLASSIFICATION = 3
     MULTIPLE_CHOICE = 4
+    SPAN_CHOICE_PROB_TASK = 5
     UNDEFINED = -1
 
 
@@ -36,6 +39,17 @@ class Task:
     @property
     def test_path(self):
         return self.path_dict["test"]
+
+
+class Span(NamedTuple):
+    start: int
+    end: int  # Use exclusive end, for consistency
+
+    def add(self, i: int) -> Span:
+        return Span(start=self.start + i, end=self.end + i)
+
+    def to_slice(self):
+        return slice(*self)
 
 
 @dataclass

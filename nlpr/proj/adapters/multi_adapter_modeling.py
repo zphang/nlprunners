@@ -13,25 +13,91 @@ import pyutils.io as io
 
 
 class WeightedSum(nn.Module):
-    def __init__(self, name_list, do_softmax=True):
+    def __init__(self, name_list, mode="softmax"):
         super().__init__()
         self.name_list = name_list
-        self.do_softmax = do_softmax
+        self.mode = mode
 
         self.num = len(self.name_list)
-        self.weights = nn.Parameter(torch.ones(self.num) / self.num)
+
+        if mode == "softmax":
+            init_values = torch.ones(self.num) / self.num
+        elif mode == "gates":
+            init_values = torch.zeros(self.num)
+        elif mode == "weights":
+            init_values = torch.ones(self.num)
+        else:
+            raise KeyError(self.mode)
+
+        self.weights = nn.Parameter(init_values)
         self.name2idx = dict(zip(self.name_list, range(self.num)))
 
     def forward(self, x_dict):
-        if self.do_softmax:
-            weights = F.softmax(self.weights * 10, dim=0)
-        else:
-            weights = self.weights
+        weights = self.compute_weights()
         weighted_sum = torch.stack([
             weights[self.name2idx[k]] * x
             for k, x in x_dict.items()
         ], dim=0).sum(dim=0)
         return weighted_sum
+
+    def compute_weights(self):
+        if self.mode == "softmax":
+            weights = F.softmax(self.weights, dim=0)
+        elif self.mode == "gates":
+            weights = F.sigmoid(self.weights)
+        elif self.mode == "weights":
+            weights = self.weights
+        else:
+            raise KeyError(self.mode)
+        return weights
+
+
+class MultiAdapter(nn.Module):
+    def __init__(self, weighted_sum, adapter_dict, layer_norm_dict):
+        super(MultiAdapter, self).__init__()
+        self.weighted_sum = weighted_sum
+        self.adapter_dict = adapter_dict
+        self.layer_norm_dict = layer_norm_dict
+
+    def forward(self, hidden_states, input_tensor):
+        hidden_states_dict = {}
+        for k in self.adapter_dict:
+            sub_hidden_states = self.adapter_dict[k](hidden_states)
+            sub_hidden_states = self.layer_norm_dict[k](sub_hidden_states + input_tensor)
+            hidden_states_dict[k] = sub_hidden_states
+        combined_hidden_states = self.weighted_sum(hidden_states_dict)
+        return combined_hidden_states
+
+    @classmethod
+    def create(cls,
+               old_parent_module,
+               sub_module_name_list,
+               adapter_config: adapters_modeling.AdapterConfig,
+               mode="softmax",
+               include_base=True):
+        adapter_dict = {}
+        layer_norm_dict = {}
+        if include_base:
+            adapter_dict["base"] = torch_utils.IdentityModule()
+            layer_norm_dict["base"] = old_parent_module.LayerNorm
+        for name in sub_module_name_list:
+            adapter_dict[name] = adapters_modeling.Adapter(
+                hidden_size=old_parent_module.dense.out_features,
+                adapter_config=adapter_config,
+            )
+            layer_norm_dict[name] = modeling_bert.BertLayerNorm(
+                normalized_shape=old_parent_module.LayerNorm.normalized_shape,
+                eps=old_parent_module.LayerNorm.eps,
+            )
+        weighted_sum = WeightedSum(
+            name_list=list(adapter_dict.keys()),
+            mode=mode,
+        )
+        return cls(
+            weighted_sum=weighted_sum,
+            adapter_dict=adapter_dict,
+            layer_norm_dict=layer_norm_dict,
+        )
 
 
 class BertOutputWithMultiAdapters(nn.Module):
@@ -52,8 +118,8 @@ class BertOutputWithMultiAdapters(nn.Module):
             sub_hidden_states = self.adapter_dict[k](hidden_states)
             sub_hidden_states = self.layer_norm_dict[k](sub_hidden_states + input_tensor)
             hidden_states_dict[k] = sub_hidden_states
-
         combined_hidden_states = self.weighted_sum(hidden_states_dict)
+
         return combined_hidden_states
 
     @classmethod
@@ -62,7 +128,7 @@ class BertOutputWithMultiAdapters(nn.Module):
         old_module,
         sub_module_name_list,
         adapter_config: adapters_modeling.AdapterConfig,
-        do_weighted_softmax=True,
+        mode="softmax",
         include_base=True,
     ):
         assert isinstance(old_module, modeling_bert.BertOutput)
@@ -82,7 +148,7 @@ class BertOutputWithMultiAdapters(nn.Module):
             )
         weighted_sum = WeightedSum(
             name_list=list(adapter_dict.keys()),
-            do_softmax=do_weighted_softmax,
+            mode=mode,
         )
         return cls(
             dense=old_module.dense,
@@ -121,7 +187,7 @@ class BertSelfOutputWithMultiAdapters(nn.Module):
         old_module,
         sub_module_name_list,
         adapter_config: adapters_modeling.AdapterConfig,
-        do_weighted_softmax=True,
+        mode="softmax",
         include_base=True,
     ):
         assert isinstance(old_module, modeling_bert.BertSelfOutput)
@@ -141,7 +207,7 @@ class BertSelfOutputWithMultiAdapters(nn.Module):
             )
         weighted_sum = WeightedSum(
             name_list=list(adapter_dict.keys()),
-            do_softmax=do_weighted_softmax,
+            mode=mode,
         )
         return cls(
             dense=old_module.dense,
@@ -153,7 +219,7 @@ class BertSelfOutputWithMultiAdapters(nn.Module):
 
 
 def add_multi_adapters(model, sub_module_name_list, adapter_config,
-                       do_weighted_softmax=True,
+                       mode="softmax",
                        include_base=True,
                        num_weight_sets: int = 1):
     modified_layers = {}
@@ -169,7 +235,7 @@ def add_multi_adapters(model, sub_module_name_list, adapter_config,
                     old_module=c_module,
                     sub_module_name_list=sub_module_name_list,
                     adapter_config=adapter_config,
-                    do_weighted_softmax=do_weighted_softmax,
+                    mode=mode,
                     include_base=include_base,
                 )
                 setattr(p_module, c_name, new_module)
@@ -180,7 +246,7 @@ def add_multi_adapters(model, sub_module_name_list, adapter_config,
                     old_module=c_module,
                     sub_module_name_list=sub_module_name_list,
                     adapter_config=adapter_config,
-                    do_weighted_softmax=do_weighted_softmax,
+                    mode=mode,
                     include_base=include_base,
                 )
                 setattr(p_module, c_name, new_module)
@@ -271,7 +337,7 @@ def get_multi_adapter_weight_dict(modified_layers, simplify_name=True):
     for i, (name, layer) in enumerate(modified_layers.items()):
         if simplify_name:
             name = f"layer_{i:02d}"
-        weights = F.softmax(layer.weighted_sum.weights.data.clone(), dim=-1).cpu().numpy()
+        weights = layer.weighted_sum.compute_weights().data.clone().cpu().numpy()
         names = layer.weighted_sum.name_list
         result[name] = dict(zip(names, weights))
     return result

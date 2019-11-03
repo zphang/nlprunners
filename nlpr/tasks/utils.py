@@ -1,3 +1,4 @@
+import math
 import numpy as np
 
 
@@ -87,3 +88,30 @@ def get_tokens_start_end(sent, char_span_start, char_span_end, tokenizer):
     front_span_tokens = tokenizer.tokenize(sent[:char_span_end])
     span_tokens_start, span_tokens_end = len(front_tokens), len(front_span_tokens)
     return span_tokens_start, span_tokens_end
+
+
+def random_splits(full_data_list, length_dict, mode="count", seed=1234):
+    rng = np.random.RandomState()
+    if mode == "count":
+        pass
+    elif mode == "fraction":
+        length_dict = {
+            k: math.ceil(v * len(full_data_list))
+            for k, v in length_dict.items()
+        }
+    else:
+        raise KeyError(mode)
+    total_lengths = sum(length_dict.values())
+    assert total_lengths < len(full_data_list)
+    shuffled_index = np.arange(len(full_data_list))
+    rng.shuffle(shuffled_index)
+    curr = 0
+    result = {}
+    for k, length in length_dict.items():
+        result[k] = [
+            full_data_list[i]
+            for i in shuffled_index[curr: curr + length]
+        ]
+        curr += length
+    assert curr == total_lengths
+    return result

@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 
 import transformers as ptt
+import transformers.modeling_roberta as modeling_roberta
+
 from torch.nn import CrossEntropyLoss, MSELoss
 from nlpr.tasks.lib.shared import TaskTypes
 from nlpr.ext.allennlp import SelfAttentiveSpanExtractor
@@ -142,3 +144,37 @@ class BertForSpanComparisonClassification(ptt.BertPreTrainedModel):
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
             outputs = (loss,) + outputs
         return outputs  # (loss), logits, (hidden_states), (attentions)
+
+
+class RobertaForSpanChoiceProb(ptt.BertPreTrainedModel):
+    def __init__(self, config):
+        super(RobertaForSpanChoiceProb, self).__init__(config)
+
+        self.roberta = ptt.RobertaModel(config)
+        self.lm_head = modeling_roberta.RobertaLMHead(config)
+
+        self.init_weights()
+        self.tie_weights()
+
+    def forward(self,
+                input_ids_1, token_type_ids_1, attention_mask_1,
+                input_ids_2, token_type_ids_2, attention_mask_2,
+                span_1, span_2,
+                labels=None):
+        prediction_scores_1 = self.get_prediction_scores(
+            input_ids=input_ids_1,
+            token_type_ids=token_type_ids_1,
+            attention_mask=attention_mask_1,
+        )
+
+    def get_prediction_scores(self, input_ids, token_type_ids, attention_mask):
+        outputs = self.roberta(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=None,
+            head_mask=None,
+        )
+        sequence_output = outputs[0]
+        prediction_scores = self.lm_head(sequence_output)
+        return prediction_scores
