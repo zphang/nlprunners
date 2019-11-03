@@ -56,8 +56,8 @@ class MultiAdapter(nn.Module):
     def __init__(self, weighted_sum, adapter_dict, layer_norm_dict):
         super(MultiAdapter, self).__init__()
         self.weighted_sum = weighted_sum
-        self.adapter_dict = adapter_dict
-        self.layer_norm_dict = layer_norm_dict
+        self.adapter_dict = nn.ModuleDict(adapter_dict)
+        self.layer_norm_dict = nn.ModuleDict(layer_norm_dict)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states_dict = {}
@@ -101,26 +101,20 @@ class MultiAdapter(nn.Module):
 
 
 class BertOutputWithMultiAdapters(nn.Module):
-    def __init__(self, dense, adapter_dict, layer_norm_dict, weighted_sum, dropout):
+    def __init__(self, dense, multi_adapter, dropout):
         super(BertOutputWithMultiAdapters, self).__init__()
         self.dense = dense
-        self.adapter_dict = nn.ModuleDict(adapter_dict)
-        self.layer_norm_dict = nn.ModuleDict(layer_norm_dict)
-        self.weighted_sum = weighted_sum
+        self.multi_adapter = multi_adapter
         self.dropout = dropout
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-
-        hidden_states_dict = {}
-        for k in self.adapter_dict:
-            sub_hidden_states = self.adapter_dict[k](hidden_states)
-            sub_hidden_states = self.layer_norm_dict[k](sub_hidden_states + input_tensor)
-            hidden_states_dict[k] = sub_hidden_states
-        combined_hidden_states = self.weighted_sum(hidden_states_dict)
-
-        return combined_hidden_states
+        hidden_states = self.multi_adapter(
+            hidden_states=hidden_states,
+            input_tensor=input_tensor,
+        )
+        return hidden_states
 
     @classmethod
     def from_original(
@@ -132,54 +126,35 @@ class BertOutputWithMultiAdapters(nn.Module):
         include_base=True,
     ):
         assert isinstance(old_module, modeling_bert.BertOutput)
-        adapter_dict = {}
-        layer_norm_dict = {}
-        if include_base:
-            adapter_dict["base"] = torch_utils.IdentityModule()
-            layer_norm_dict["base"] = old_module.LayerNorm
-        for name in sub_module_name_list:
-            adapter_dict[name] = adapters_modeling.Adapter(
-                hidden_size=old_module.dense.out_features,
-                adapter_config=adapter_config,
-            )
-            layer_norm_dict[name] = modeling_bert.BertLayerNorm(
-                normalized_shape=old_module.LayerNorm.normalized_shape,
-                eps=old_module.LayerNorm.eps,
-            )
-        weighted_sum = WeightedSum(
-            name_list=list(adapter_dict.keys()),
+        multi_adapter = MultiAdapter.create(
+            old_parent_module=old_module,
+            sub_module_name_list=sub_module_name_list,
+            adapter_config=adapter_config,
             mode=mode,
+            include_base=include_base,
         )
         return cls(
             dense=old_module.dense,
-            adapter_dict=adapter_dict,
-            layer_norm_dict=layer_norm_dict,
-            weighted_sum=weighted_sum,
+            multi_adapter=multi_adapter,
             dropout=old_module.dropout,
         )
 
 
 class BertSelfOutputWithMultiAdapters(nn.Module):
-    def __init__(self, dense, adapter_dict, layer_norm_dict, weighted_sum, dropout):
+    def __init__(self, dense, multi_adapter, dropout):
         super(BertSelfOutputWithMultiAdapters, self).__init__()
         self.dense = dense
-        self.adapter_dict = nn.ModuleDict(adapter_dict)
-        self.layer_norm_dict = nn.ModuleDict(layer_norm_dict)
-        self.weighted_sum = weighted_sum
+        self.multi_adapter = multi_adapter
         self.dropout = dropout
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-
-        hidden_states_dict = {}
-        for k in self.adapter_dict:
-            sub_hidden_states = self.adapter_dict[k](hidden_states)
-            sub_hidden_states = self.layer_norm_dict[k](sub_hidden_states + input_tensor)
-            hidden_states_dict[k] = sub_hidden_states
-
-        combined_hidden_states = self.weighted_sum(hidden_states_dict)
-        return combined_hidden_states
+        hidden_states = self.multi_adapter(
+            hidden_states=hidden_states,
+            input_tensor=input_tensor,
+        )
+        return hidden_states
 
     @classmethod
     def from_original(
@@ -191,29 +166,16 @@ class BertSelfOutputWithMultiAdapters(nn.Module):
         include_base=True,
     ):
         assert isinstance(old_module, modeling_bert.BertSelfOutput)
-        adapter_dict = {}
-        layer_norm_dict = {}
-        if include_base:
-            adapter_dict["base"] = torch_utils.IdentityModule()
-            layer_norm_dict["base"] = old_module.LayerNorm
-        for name in sub_module_name_list:
-            adapter_dict[name] = adapters_modeling.Adapter(
-                hidden_size=old_module.dense.out_features,
-                adapter_config=adapter_config,
-            )
-            layer_norm_dict[name] = modeling_bert.BertLayerNorm(
-                normalized_shape=old_module.LayerNorm.normalized_shape,
-                eps=old_module.LayerNorm.eps,
-            )
-        weighted_sum = WeightedSum(
-            name_list=list(adapter_dict.keys()),
+        multi_adapter = MultiAdapter.create(
+            old_parent_module=old_module,
+            sub_module_name_list=sub_module_name_list,
+            adapter_config=adapter_config,
             mode=mode,
+            include_base=include_base,
         )
         return cls(
             dense=old_module.dense,
-            adapter_dict=adapter_dict,
-            layer_norm_dict=layer_norm_dict,
-            weighted_sum=weighted_sum,
+            multi_adapter=multi_adapter,
             dropout=old_module.dropout,
         )
 
@@ -239,7 +201,7 @@ def add_multi_adapters(model, sub_module_name_list, adapter_config,
                     include_base=include_base,
                 )
                 setattr(p_module, c_name, new_module)
-                modified_layers[f"{p_name}.{c_name}"] = new_module
+                modified_layers[f"{p_name}.{c_name}"] = new_module.multi_adapter
             elif isinstance(c_module, modeling_bert.BertSelfOutput):
                 p_name = p_name.split(".", 1)[1]
                 new_module = BertSelfOutputWithMultiAdapters.from_original(
@@ -250,7 +212,7 @@ def add_multi_adapters(model, sub_module_name_list, adapter_config,
                     include_base=include_base,
                 )
                 setattr(p_module, c_name, new_module)
-                modified_layers[f"{p_name}.{c_name}"] = new_module
+                modified_layers[f"{p_name}.{c_name}"] = new_module.multi_adapter
         else:
             raise KeyError(model_architecture)
 
