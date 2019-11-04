@@ -72,6 +72,7 @@ class RunConfiguration(zconf.RunConfig):
     adapter_num_weight_sets = zconf.attr(type=int, default=1)
     adapter_include_base = zconf.attr(type=int, default=1)
     adapter_include_flex = zconf.attr(type=int, default=0)
+    adapter_use_optimized = zconf.attr(type=int, default=0)
 
 
 def main(args):
@@ -99,14 +100,14 @@ def main(args):
     )
     adapter_weights_dict = multi_adapters.load_adapter_weights_dict_path(args.adapter_weights_path)
     sub_module_name_list = list(adapter_weights_dict.keys())
-    if args.adapter_include_flex:
-        sub_module_name_list.append("flex")
     modified_layers = multi_adapters.add_multi_adapters(
         model=model_wrapper.model,
         sub_module_name_list=sub_module_name_list,
         adapter_config=adapters.AdapterConfig(),
         include_base=args.adapter_include_base,
+        include_flex=args.adapter_include_flex,
         num_weight_sets=args.adapter_num_weight_sets,
+        use_optimized=args.adapter_use_optimized,
     )
     multi_adapters.load_multi_adapter_weights(
         model=model_wrapper.model,

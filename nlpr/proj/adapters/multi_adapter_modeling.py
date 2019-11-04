@@ -76,10 +76,15 @@ class MultiAdapter(nn.Module):
                sub_module_name_list,
                adapter_config: adapters_modeling.AdapterConfig,
                mode="softmax",
-               include_base=True):
+               include_base=True,
+               include_flex=True):
         adapter_dict = {}
         layer_norm_dict = {}
         sub_module_name_list = sub_module_name_list.copy()
+        if include_flex:
+            adapter_dict["flex"] = torch_utils.IdentityModule()
+            layer_norm_dict["flex"] = old_parent_module.LayerNorm
+            sub_module_name_list.append("flex")
         if include_base:
             adapter_dict["base"] = torch_utils.IdentityModule()
             layer_norm_dict["base"] = old_parent_module.LayerNorm
@@ -283,16 +288,16 @@ class MultiAdapterOptimized(nn.Module):
         # Other
         other_hidden_states_ls = []
         if self.has_flex:
-            sub_hidden_states = self.unfused_adapter_dict["flex"](hidden_states).unsqueeze(-2)
+            sub_hidden_states = self.unfused_adapter_dict["flex"](hidden_states)
             sub_hidden_states = self.unfused_layer_norm_dict["flex"](
-                sub_hidden_states, input_tensor
-            )
+                sub_hidden_states + input_tensor
+            ).unsqueeze(-2)
             other_hidden_states_ls.append(sub_hidden_states)
         if self.has_base:
-            sub_hidden_states = self.unfused_adapter_dict["base"](hidden_states).unsqueeze(-2)
+            sub_hidden_states = self.unfused_adapter_dict["base"](hidden_states)
             sub_hidden_states = self.unfused_layer_norm_dict["base"](
-                sub_hidden_states, input_tensor
-            )
+                sub_hidden_states + input_tensor
+            ).unsqueeze(-2)
             other_hidden_states_ls.append(sub_hidden_states)
 
         if other_hidden_states_ls:
@@ -311,7 +316,7 @@ class MultiAdapterOptimized(nn.Module):
                adapter_config: adapters_modeling.AdapterConfig,
                mode="softmax",
                include_base=True,
-               include_flex=True,
+               include_flex=False,
                ):
         unfused_adapter_dict = {}
         unfused_layer_norm_dict = {}
@@ -377,15 +382,28 @@ class BertOutputWithMultiAdapters(nn.Module):
         adapter_config: adapters_modeling.AdapterConfig,
         mode="softmax",
         include_base=True,
+        include_flex=False,
+        use_optimized=False,
     ):
         assert isinstance(old_module, modeling_bert.BertOutput)
-        multi_adapter = MultiAdapter.create(
-            old_parent_module=old_module,
-            sub_module_name_list=sub_module_name_list,
-            adapter_config=adapter_config,
-            mode=mode,
-            include_base=include_base,
-        )
+        if use_optimized:
+            multi_adapter = MultiAdapterOptimized.create(
+                old_parent_module=old_module,
+                sub_module_name_list=sub_module_name_list,
+                adapter_config=adapter_config,
+                mode=mode,
+                include_base=include_base,
+                include_flex=include_flex,
+            )
+        else:
+            multi_adapter = MultiAdapter.create(
+                old_parent_module=old_module,
+                sub_module_name_list=sub_module_name_list,
+                adapter_config=adapter_config,
+                mode=mode,
+                include_base=include_base,
+                include_flex=include_flex,
+            )
         return cls(
             dense=old_module.dense,
             multi_adapter=multi_adapter,
@@ -417,15 +435,28 @@ class BertSelfOutputWithMultiAdapters(nn.Module):
         adapter_config: adapters_modeling.AdapterConfig,
         mode="softmax",
         include_base=True,
+        include_flex=False,
+        use_optimized=False,
     ):
         assert isinstance(old_module, modeling_bert.BertSelfOutput)
-        multi_adapter = MultiAdapter.create(
-            old_parent_module=old_module,
-            sub_module_name_list=sub_module_name_list,
-            adapter_config=adapter_config,
-            mode=mode,
-            include_base=include_base,
-        )
+        if use_optimized:
+            multi_adapter = MultiAdapterOptimized.create(
+                old_parent_module=old_module,
+                sub_module_name_list=sub_module_name_list,
+                adapter_config=adapter_config,
+                mode=mode,
+                include_base=include_base,
+                include_flex=include_flex,
+            )
+        else:
+            multi_adapter = MultiAdapter.create(
+                old_parent_module=old_module,
+                sub_module_name_list=sub_module_name_list,
+                adapter_config=adapter_config,
+                mode=mode,
+                include_base=include_base,
+                include_flex=include_flex,
+            )
         return cls(
             dense=old_module.dense,
             multi_adapter=multi_adapter,
@@ -435,8 +466,9 @@ class BertSelfOutputWithMultiAdapters(nn.Module):
 
 def add_multi_adapters(model, sub_module_name_list, adapter_config,
                        mode="softmax",
-                       include_base=True,
-                       num_weight_sets: int = 1):
+                       include_base=True, include_flex=False,
+                       num_weight_sets: int = 1,
+                       use_optimized=False):
     modified_layers = {}
     model_architecture = model_resolution.ModelArchitectures.from_ptt_model(model)
 
@@ -452,6 +484,8 @@ def add_multi_adapters(model, sub_module_name_list, adapter_config,
                     adapter_config=adapter_config,
                     mode=mode,
                     include_base=include_base,
+                    include_flex=include_flex,
+                    use_optimized=use_optimized,
                 )
                 setattr(p_module, c_name, new_module)
                 modified_layers[f"{p_name}.{c_name}"] = new_module.multi_adapter
@@ -463,6 +497,8 @@ def add_multi_adapters(model, sub_module_name_list, adapter_config,
                     adapter_config=adapter_config,
                     mode=mode,
                     include_base=include_base,
+                    include_flex=include_flex,
+                    use_optimized=use_optimized,
                 )
                 setattr(p_module, c_name, new_module)
                 modified_layers[f"{p_name}.{c_name}"] = new_module.multi_adapter
@@ -501,7 +537,7 @@ def load_multi_adapter_weights(model, modified_layers: dict, adapter_weights_dic
     model_architecture = model_resolution.ModelArchitectures.from_ptt_model(model)
     if model_architecture in [model_resolution.ModelArchitectures.BERT,
                               model_resolution.ModelArchitectures.ROBERTA]:
-        first_module = modified_layers[0]
+        first_module = list(modified_layers.values())[0]
         if isinstance(first_module, MultiAdapter):
             for adapter_set_name, weights_dict in adapter_weights_dict.items():
                 for name, module in modified_layers.items():
@@ -522,13 +558,15 @@ def load_multi_adapter_weights(model, modified_layers: dict, adapter_weights_dic
         elif isinstance(first_module, MultiAdapterOptimized):
             for name, module in modified_layers.items():
                 module_state_dict = module.state_dict()
-                # 1. Just add base and flex
+                # 1. Just add base and flex (Wait, we have nothing to load for those
+                """
                 for adapter_set_name in module.unfused_adapter_dict:
                     assert adapter_set_name in ["base", "flex"]
                     module_state_dict[f"layer_norm_dict.{adapter_set_name}.weight"] = \
                         adapter_weights_dict[adapter_set_name][f"{name}.LayerNorm.weight"]
                     module_state_dict[f"layer_norm_dict.{adapter_set_name}.bias"] = \
                         adapter_weights_dict[adapter_set_name][f"{name}.LayerNorm.bias"]
+                """
 
                 # 2. Fused Adapters
                 module_state_dict[f"fused_adapters.stacked_down_project.weight"] = torch.cat([
@@ -546,17 +584,18 @@ def load_multi_adapter_weights(model, modified_layers: dict, adapter_weights_dic
                 module_state_dict[f"fused_adapters.up_project_bias"] = torch.stack([
                     adapter_weights_dict[module_name][f"{name}.adapter.up_project.bias"]
                     for module_name in module.fused_name_list
-                ], dim=0).unsqueeze(0).unsqueeze(1)
+                ], dim=0).unsqueeze(1).unsqueeze(1)
 
                 # 3. Fused LayerNorm
                 module_state_dict[f"fused_layer_norms.weight"] = torch.stack([
                     adapter_weights_dict[module_name][f"{name}.LayerNorm.weight"]
                     for module_name in module.fused_name_list
                 ], dim=0)
-                module_state_dict[f"fused_layer_norms.bias"] = torch.cat([
+                module_state_dict[f"fused_layer_norms.bias"] = torch.stack([
                     adapter_weights_dict[module_name][f"{name}.LayerNorm.bias"]
                     for module_name in module.fused_name_list
                 ], dim=0)
+                module.load_state_dict(module_state_dict)
         else:
             raise KeyError(type(first_module))
     else:
@@ -572,18 +611,41 @@ def get_multi_adapter_weight_params(model):
 
 
 def get_multi_adapter_adapter_params_dict(modified_layers):
-    adapter_params_dict = {}
+    first_modified = list(modified_layers.values())[0]
+    adapter_params_dict = {
+        k: []
+        for k in first_modified.weighted_sum.name_list
+    }
     for layer_name, layer in modified_layers.items():
-        for adapter_set_name, adapter in layer.adapter_dict.items():
-            if adapter_set_name == "base":
-                continue
-            if adapter_set_name not in adapter_params_dict:
-                adapter_params_dict[adapter_set_name] = []
-            for name, param in adapter.named_parameters():
+        if isinstance(layer, MultiAdapter):
+            for name, param in layer.adapter_dict.named_parameters():
+                adapter_set_name = name.split(".")[0]
                 adapter_params_dict[adapter_set_name].append((
-                    f"{layer_name}.adapter_dict.{adapter_set_name}.{name}",
-                    param,
+                    f"{layer_name}.multi_adapter.adapter_dict.{name}",
+                    param
                 ))
+            for name, param in layer.layer_norm_dict.named_parameters():
+                adapter_set_name = name.split(".")[0]
+                adapter_params_dict[adapter_set_name].append((
+                    f"{layer_name}.multi_adapter.layer_norm_dict.{name}",
+                    param
+                ))
+        elif isinstance(layer, MultiAdapterOptimized):
+            # Only unfused
+            for name, param in layer.unfused_adapter_dict.named_parameters():
+                adapter_set_name = name.split(".")[0]
+                adapter_params_dict[adapter_set_name].append((
+                    f"{layer_name}.multi_adapter.unfused_adapter_dict.{name}",
+                    param
+                ))
+            for name, param in layer.unfused_layer_norm_dict.named_parameters():
+                adapter_set_name = name.split(".")[0]
+                adapter_params_dict[adapter_set_name].append((
+                    f"{layer_name}.multi_adapter.unfused_layer_norm_dict.{name}",
+                    param
+                ))
+        else:
+            raise KeyError(type(layer))
     return adapter_params_dict
 
 
