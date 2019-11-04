@@ -17,6 +17,10 @@ class AdapterConfig:
     adapter_size: int = DEFAULT_ADAPTER_SIZE
     adapter_initializer_range: float = DEFAULT_ADAPTER_INITIALIZER_RANGE
 
+    def get_activation(self):
+        return modeling_bert.ACT2FN[self.hidden_act] \
+            if isinstance(self.hidden_act, str) else self.hidden_act
+
 
 class Adapter(nn.Module):
     def __init__(self, hidden_size: int, adapter_config: AdapterConfig):
@@ -28,8 +32,7 @@ class Adapter(nn.Module):
             self.hidden_size,
             self.adapter_config.adapter_size,
         )
-        self.activation = modeling_bert.ACT2FN[self.adapter_config.hidden_act] \
-            if isinstance(self.adapter_config.hidden_act, str) else self.adapter_config.hidden_act
+        self.activation = adapter_config.get_activation()
         self.up_project = nn.Linear(self.adapter_config.adapter_size, self.hidden_size)
         self.init_weights()
 

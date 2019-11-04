@@ -30,13 +30,9 @@ class WeightedSum(nn.Module):
             raise KeyError(self.mode)
 
         self.weights = nn.Parameter(init_values)
-        self.name2idx = dict(zip(self.name_list, range(self.num)))
 
     def forward(self, x_dict):
-        stacked_x = torch.stack([
-            x_dict[k]
-            for k in self.name_list
-        ], dim=-2)
+        stacked_x = torch.stack([x_dict[k] for k in self.name_list], dim=-2)
         weights = self.compute_weights().view(1, 1, -1, 1)
         weighted_sum = (stacked_x * weights).sum(-2)
         return weighted_sum
@@ -155,7 +151,25 @@ class FusedAdapters(nn.Module):
         return final
 
     @classmethod
-    def create(cls, adapter_dict, module_name_list=None):
+    def create(cls, module_name_list, input_dim, adapter_config: adapters_modeling.AdapterConfig):
+        k = len(module_name_list)
+        # Linear: input_dim -> (k * adapter_dim)
+        stacked_down_project = nn.Linear(input_dim, k * adapter_config.adapter_size)
+        activation = adapter_config.get_activation()
+        # weight dim: k, 1, adapter_dim, input_dim (yes this is weird)
+        up_project_weight = nn.Parameter(torch.randn(k, 1, adapter_config.adapter_size, input_dim))
+        # bias dim: k, 1, 1, input_dim
+        up_project_bias = nn.Parameter(torch.randn(k, 1, 1, input_dim))
+        return cls(
+            module_name_list=module_name_list,
+            stacked_down_project=stacked_down_project,
+            activation=activation,
+            up_project_weight=up_project_weight,
+            up_project_bias=up_project_bias,
+        )
+
+    @classmethod
+    def create_from_dict(cls, adapter_dict, module_name_list=None):
         first_adapter = list(adapter_dict.values())[0]
         input_dim = first_adapter.hidden_size
         adapter_dim = first_adapter.adapter_config.adapter_size
@@ -194,8 +208,8 @@ class FusedAdapters(nn.Module):
         self.up_project_bias.data = self.up_project_bias.data.contiguous()
 
     @classmethod
-    def create_and_load_weights(cls, adapter_dict, module_name_list=None):
-        fused_adapter = cls.create(
+    def create_and_load_weights_from_dict(cls, adapter_dict, module_name_list=None):
+        fused_adapter = cls.create_from_dict(
             adapter_dict=adapter_dict,
             module_name_list=module_name_list,
         )
@@ -203,49 +217,91 @@ class FusedAdapters(nn.Module):
         return fused_adapter
 
 
-def create_fused_layer_norms(layer_norm_dict, module_name_list):
-    dim_size = list(layer_norm_dict.values())[0].normalized_shape[0]
-    num_modules = len(layer_norm_dict)
-    fused_layer_norm = nn.LayerNorm((num_modules, dim_size))
-    for i, k in enumerate(module_name_list):
-        layer_norm = layer_norm_dict[k]
-        fused_layer_norm.weight.data[i] = layer_norm.weight.data
-        fused_layer_norm.bias.data[i] = layer_norm.bias.data
-    fused_layer_norm.weight.data = fused_layer_norm.weight.data.contiguous()
-    fused_layer_norm.bias.data = fused_layer_norm.bias.data.contiguous()
-    return fused_layer_norm
+class FusedLayerNorm(nn.LayerNorm):
+    def __init__(self, module_name_list, dim_size, eps=1e-5, elementwise_affine=True):
+        self.module_name_list = module_name_list
+        self.num_modules = len(module_name_list)
+        self.dim_size = dim_size
+        super().__init__(
+            normalized_shape=(self.num_modules, dim_size),
+            eps=eps,
+            elementwise_affine=elementwise_affine
+        )
+
+    @classmethod
+    def create_from_dict(cls, layer_norm_dict, module_name_list=None):
+        if module_name_list is None:
+            module_name_list = list(module_name_list.keys())
+        dim_size = list(layer_norm_dict.values())[0].normalized_shape[0]
+        fused_layer_norm = cls(
+            module_name_list=module_name_list,
+            dim_size=dim_size,
+        )
+        for i, k in enumerate(module_name_list):
+            layer_norm = layer_norm_dict[k]
+            fused_layer_norm.weight.data[i] = layer_norm.weight.data
+            fused_layer_norm.bias.data[i] = layer_norm.bias.data
+        fused_layer_norm.weight.data = fused_layer_norm.weight.data.contiguous()
+        fused_layer_norm.bias.data = fused_layer_norm.bias.data.contiguous()
+        return fused_layer_norm
 
 
 class MultiAdapterOptimized(nn.Module):
-    def __init__(self, weighted_sum, adapter_dict, layer_norm_dict,
-                 sub_module_name_list=None):
+    def __init__(self,
+                 weighted_sum: WeightedSum,
+                 fused_adapters: FusedAdapters,
+                 fused_layer_norms: FusedLayerNorm,
+                 unfused_adapter_dict,
+                 unfused_layer_norm_dict):
         super(MultiAdapterOptimized, self).__init__()
         self.weighted_sum = weighted_sum
-        self.adapter_dict = nn.ModuleDict(adapter_dict)
-        self.layer_norm_dict = layer_norm_dict
-        if sub_module_name_list is not None:
-            self.sub_module_name_list = sub_module_name_list
-        else:
-            self.sub_module_name_list = list(adapter_dict.keys())
+        self.fused_adapters = fused_adapters
+        self.fused_layer_norms = fused_layer_norms
+        self.unfused_adapter_dict = nn.ModuleDict(unfused_adapter_dict)
+        self.unfused_layer_norm_dict = nn.ModuleDict(unfused_layer_norm_dict)
 
-        dim_size = list(layer_norm_dict.values())[0].normalized_shape[0]
-        num_modules = len(layer_norm_dict)
-        self.fused_layer_norm = nn.LayerNorm((num_modules, dim_size))
-        for i, (k, layer_norm) in enumerate(self.layer_norm_dict.items()):
-            self.fused_layer_norm.weight.data[i] = layer_norm.weight.data
-            self.fused_layer_norm.bias.data[i] = layer_norm.bias.data
-        self.fused_layer_norm.weight.data = self.fused_layer_norm.weight.data.contiguous()
-        self.fused_layer_norm.bias.data = self.fused_layer_norm.bias.data.contiguous()
+        self.fused_name_list = fused_adapters.module_name_list
+        assert self.fused_name_list == fused_layer_norms.module_name_list
+        self.has_flex = "flex" in unfused_adapter_dict
+        self.has_base = "base" in unfused_adapter_dict
+        self.full_name_list = self.weighted_sum.name_list
+
+        # Do order check
+        checking_order = fused_adapters.module_name_list[:]
+        if self.has_flex:
+            checking_order.append("flex")
+        if self.has_base:
+            checking_order.append("base")
+        assert checking_order == self.full_name_list
 
     def forward(self, hidden_states, input_tensor):
-        hidden_states_ls = []
-        for k in self.module_name_ls:
-            hidden_states_ls.append(self.adapter_dict[k](hidden_states))
-        stacked_hidden_states = torch.stack(hidden_states_ls, dim=-2)
-        broadcast_input_tensor = input_tensor.unsqueeze(-2)
-        hidden_states = self.fused_layer_norm(broadcast_input_tensor + stacked_hidden_states)
+
+        # Fused
+        fused_hidden_states = self.fused_adapters(hidden_states)
+        fused_hidden_states = self.fused_layer_norms(fused_hidden_states + input_tensor.unsqueeze(-2))
+
+        # Other
+        other_hidden_states_ls = []
+        if self.has_flex:
+            sub_hidden_states = self.unfused_adapter_dict["flex"](hidden_states).unsqueeze(-2)
+            sub_hidden_states = self.unfused_layer_norm_dict["flex"](
+                sub_hidden_states, input_tensor
+            )
+            other_hidden_states_ls.append(sub_hidden_states)
+        if self.has_base:
+            sub_hidden_states = self.unfused_adapter_dict["base"](hidden_states).unsqueeze(-2)
+            sub_hidden_states = self.unfused_layer_norm_dict["base"](
+                sub_hidden_states, input_tensor
+            )
+            other_hidden_states_ls.append(sub_hidden_states)
+
+        if other_hidden_states_ls:
+            final_hidden_states = torch.cat([fused_hidden_states] + other_hidden_states_ls, dim=-2)
+        else:
+            final_hidden_states = fused_hidden_states
+
         weights = self.weighted_sum.compute_weights().view(1, 1, -1, 1)
-        hidden_states = (weights * hidden_states).sum(-2)
+        hidden_states = (weights * final_hidden_states).sum(-2)
         return hidden_states
 
     @classmethod
@@ -254,29 +310,46 @@ class MultiAdapterOptimized(nn.Module):
                sub_module_name_list,
                adapter_config: adapters_modeling.AdapterConfig,
                mode="softmax",
-               include_base=True):
-        adapter_dict = {}
-        layer_norm_dict = {}
-        if include_base:
-            adapter_dict["base"] = torch_utils.IdentityModule()
-            layer_norm_dict["base"] = old_parent_module.LayerNorm
-        for name in sub_module_name_list:
-            adapter_dict[name] = adapters_modeling.Adapter(
+               include_base=True,
+               include_flex=True,
+               ):
+        unfused_adapter_dict = {}
+        unfused_layer_norm_dict = {}
+        full_sub_module_name_list = sub_module_name_list.copy()
+        if include_flex:
+            unfused_adapter_dict["flex"] = adapters_modeling.Adapter(
                 hidden_size=old_parent_module.dense.out_features,
                 adapter_config=adapter_config,
             )
-            layer_norm_dict[name] = modeling_bert.BertLayerNorm(
+            unfused_layer_norm_dict["flex"] = modeling_bert.BertLayerNorm(
                 normalized_shape=old_parent_module.LayerNorm.normalized_shape,
                 eps=old_parent_module.LayerNorm.eps,
             )
+            full_sub_module_name_list.append("flex")
+        if include_base:
+            unfused_adapter_dict["base"] = torch_utils.IdentityModule()
+            unfused_layer_norm_dict["base"] = old_parent_module.LayerNorm
+            full_sub_module_name_list.append("base")
         weighted_sum = WeightedSum(
-            name_list=list(adapter_dict.keys()),
+            name_list=full_sub_module_name_list,
             mode=mode,
+        )
+        fused_adapters = FusedAdapters.create(
+            module_name_list=sub_module_name_list,
+            input_dim=old_parent_module.dense.out_features,
+            adapter_config=adapter_config,
+        )
+        fused_layer_norms = FusedLayerNorm(
+            module_name_list=sub_module_name_list,
+            dim_size=old_parent_module.LayerNorm.normalized_shape[0],
+            eps=old_parent_module.LayerNorm.eps,
         )
         return cls(
             weighted_sum=weighted_sum,
-            adapter_dict=adapter_dict,
-            layer_norm_dict=layer_norm_dict,
+            fused_adapters=fused_adapters,
+            fused_layer_norms=fused_layer_norms,
+            unfused_adapter_dict=unfused_adapter_dict,
+            unfused_layer_norm_dict=unfused_layer_norm_dict,
         )
 
 
@@ -425,31 +498,69 @@ def load_multi_adapter_weights(model, modified_layers: dict, adapter_weights_dic
         model_resolution.ModelArchitectures.ROBERTA: "roberta",
     }
     """
-
-    for adapter_set_name, weights_dict in adapter_weights_dict.items():
-        model_architecture = model_resolution.ModelArchitectures.from_ptt_model(model)
-        # encoder_name = encoder_name_dict[model_architecture]
-        if model_architecture in [model_resolution.ModelArchitectures.BERT,
-                                  model_resolution.ModelArchitectures.ROBERTA]:
+    model_architecture = model_resolution.ModelArchitectures.from_ptt_model(model)
+    if model_architecture in [model_resolution.ModelArchitectures.BERT,
+                              model_resolution.ModelArchitectures.ROBERTA]:
+        first_module = modified_layers[0]
+        if isinstance(first_module, MultiAdapter):
+            for adapter_set_name, weights_dict in adapter_weights_dict.items():
+                for name, module in modified_layers.items():
+                    module_state_dict = module.state_dict()
+                    module_state_dict[f"layer_norm_dict.{adapter_set_name}.weight"] = \
+                        weights_dict[f"{name}.LayerNorm.weight"]
+                    module_state_dict[f"layer_norm_dict.{adapter_set_name}.bias"] = \
+                        weights_dict[f"{name}.LayerNorm.bias"]
+                    module_state_dict[f"adapter_dict.{adapter_set_name}.down_project.weight"] = \
+                        weights_dict[f"{name}.adapter.down_project.weight"]
+                    module_state_dict[f"adapter_dict.{adapter_set_name}.down_project.bias"] = \
+                        weights_dict[f"{name}.adapter.down_project.bias"]
+                    module_state_dict[f"adapter_dict.{adapter_set_name}.up_project.weight"] = \
+                        weights_dict[f"{name}.adapter.up_project.weight"]
+                    module_state_dict[f"adapter_dict.{adapter_set_name}.up_project.bias"] = \
+                        weights_dict[f"{name}.adapter.up_project.bias"]
+                    module.load_state_dict(module_state_dict)
+        elif isinstance(first_module, MultiAdapterOptimized):
             for name, module in modified_layers.items():
                 module_state_dict = module.state_dict()
-                """
-                module_state_dict[f"layer_norm_dict.{adapter_set_name}.weight"] = \
-                    weights_dict[f"{name}.LayerNorm.weight"]
-                module_state_dict[f"layer_norm_dict.{adapter_set_name}.bias"] = \
-                    weights_dict[f"{name}.LayerNorm.bias"]
-                """
-                module_state_dict[f"adapter_dict.{adapter_set_name}.down_project.weight"] = \
-                    weights_dict[f"{name}.adapter.down_project.weight"]
-                module_state_dict[f"adapter_dict.{adapter_set_name}.down_project.bias"] = \
-                    weights_dict[f"{name}.adapter.down_project.bias"]
-                module_state_dict[f"adapter_dict.{adapter_set_name}.up_project.weight"] = \
-                    weights_dict[f"{name}.adapter.up_project.weight"]
-                module_state_dict[f"adapter_dict.{adapter_set_name}.up_project.bias"] = \
-                    weights_dict[f"{name}.adapter.up_project.bias"]
-                module.load_state_dict(module_state_dict)
+                # 1. Just add base and flex
+                for adapter_set_name in module.unfused_adapter_dict:
+                    assert adapter_set_name in ["base", "flex"]
+                    module_state_dict[f"layer_norm_dict.{adapter_set_name}.weight"] = \
+                        adapter_weights_dict[adapter_set_name][f"{name}.LayerNorm.weight"]
+                    module_state_dict[f"layer_norm_dict.{adapter_set_name}.bias"] = \
+                        adapter_weights_dict[adapter_set_name][f"{name}.LayerNorm.bias"]
+
+                # 2. Fused Adapters
+                module_state_dict[f"fused_adapters.stacked_down_project.weight"] = torch.cat([
+                    adapter_weights_dict[module_name][f"{name}.adapter.down_project.weight"]
+                    for module_name in module.fused_name_list
+                ], dim=0)
+                module_state_dict[f"fused_adapters.stacked_down_project.bias"] = torch.cat([
+                    adapter_weights_dict[module_name][f"{name}.adapter.down_project.bias"]
+                    for module_name in module.fused_name_list
+                ], dim=0)
+                module_state_dict[f"fused_adapters.up_project_weight"] = torch.stack([
+                    adapter_weights_dict[module_name][f"{name}.adapter.up_project.weight"].t()
+                    for module_name in module.fused_name_list
+                ], dim=0).unsqueeze(1)
+                module_state_dict[f"fused_adapters.up_project_bias"] = torch.stack([
+                    adapter_weights_dict[module_name][f"{name}.adapter.up_project.bias"]
+                    for module_name in module.fused_name_list
+                ], dim=0).unsqueeze(0).unsqueeze(1)
+
+                # 3. Fused LayerNorm
+                module_state_dict[f"fused_layer_norms.weight"] = torch.stack([
+                    adapter_weights_dict[module_name][f"{name}.LayerNorm.weight"]
+                    for module_name in module.fused_name_list
+                ], dim=0)
+                module_state_dict[f"fused_layer_norms.bias"] = torch.cat([
+                    adapter_weights_dict[module_name][f"{name}.LayerNorm.bias"]
+                    for module_name in module.fused_name_list
+                ], dim=0)
         else:
-            raise KeyError(model_architecture)
+            raise KeyError(type(first_module))
+    else:
+        raise KeyError(model_architecture)
 
 
 def get_multi_adapter_weight_params(model):
