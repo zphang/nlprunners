@@ -72,6 +72,7 @@ class RunConfiguration(zconf.RunConfig):
     adapter_num_weight_sets = zconf.attr(type=int, default=1)
     adapter_include_base = zconf.attr(type=int, default=1)
     adapter_include_flex = zconf.attr(type=int, default=0)
+    adapter_ft_mode = zconf.attr(type=str, default="weights")
     adapter_use_optimized = zconf.attr(type=int, default=0)
 
 

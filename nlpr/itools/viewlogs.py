@@ -43,9 +43,14 @@ def qplot_multi(data_df, n_cols, figsize=None, return_plots=False, smooth=None):
         return fig, flat_axes
 
 
-def get_latest_log(path, verbose=False):
-    latest_fol_name = sorted(next(os.walk(path))[1])[-1]
-    chosen_path = os.path.join(path, latest_fol_name)
+def get_latest_log_path(base_path):
+    latest_fol_name = sorted(next(os.walk(base_path))[1])[-1]
+    chosen_path = os.path.join(base_path, latest_fol_name)
+    return chosen_path
+
+
+def get_latest_log(base_path, verbose=False):
+    chosen_path = get_latest_log_path(base_path)
     if verbose:
         print(chosen_path)
     return zlogv1.load_log(chosen_path)

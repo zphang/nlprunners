@@ -33,8 +33,17 @@ def plot_single(lines_ax, bars_ax, loaded, layer_key, color_srs):
     bars_ax.grid()
 
 
-def plot_all(loaded, color_srs):
-    layer_keys = loaded[0]["weights"].keys()
+def plot_all(loaded, color_srs, compute_keys=False):
+    if compute_keys:
+        seen = set()
+        layer_keys = []
+        for k, v in loaded[0]["weights"].items():
+            hashed = str(v)
+            if hashed not in seen:
+                layer_keys.append(k)
+            seen.add(hashed)
+    else:
+        layer_keys = loaded[0]["weights"].keys()
     num_sets = len(layer_keys)
     if num_sets == 4:
         fig, axes = plt.subplots(2, 4, figsize=(16, 6))
