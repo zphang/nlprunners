@@ -69,7 +69,14 @@ class MultiAdapter(nn.Module):
             sub_hidden_states = self.layer_norm_dict[k](sub_hidden_states + input_tensor)
             hidden_states_dict[k] = sub_hidden_states
         combined_hidden_states = self.weighted_sum(hidden_states_dict)
-        return combined_hidden_states
+
+        if "flex" in self.adapter_dict:
+            h = self.adapter_dict["flex"](combined_hidden_states)
+            final_hidden_states = self.layer_norm_dict["flex"](combined_hidden_states + h)
+        else:
+            final_hidden_states = combined_hidden_states
+
+        return final_hidden_states
 
     @classmethod
     def create(cls,
@@ -78,14 +85,20 @@ class MultiAdapter(nn.Module):
                adapter_config: adapters_modeling.AdapterConfig,
                mode="softmax",
                include_base=True,
-               include_flex=True):
+               include_flex=False):
         adapter_dict = {}
         layer_norm_dict = {}
         sub_module_name_list = sub_module_name_list.copy()
         if include_flex:
-            adapter_dict["flex"] = torch_utils.IdentityModule()
-            layer_norm_dict["flex"] = old_parent_module.LayerNorm
-            sub_module_name_list.append("flex")
+            adapter_dict["flex"] = adapters_modeling.Adapter(
+                hidden_size=old_parent_module.dense.out_features,
+                adapter_config=adapter_config,
+            )
+            layer_norm_dict["flex"] = modeling_bert.BertLayerNorm(
+                normalized_shape=old_parent_module.LayerNorm.normalized_shape,
+                eps=old_parent_module.LayerNorm.eps,
+            )
+            # Don't add `flex` to sub_module_name_list
         if include_base:
             adapter_dict["base"] = torch_utils.IdentityModule()
             layer_norm_dict["base"] = old_parent_module.LayerNorm
@@ -281,19 +294,12 @@ class MultiAdapterOptimized(nn.Module):
         assert checking_order == self.full_name_list
 
     def forward(self, hidden_states, input_tensor):
-
         # Fused
         fused_hidden_states = self.fused_adapters(hidden_states)
         fused_hidden_states = self.fused_layer_norms(fused_hidden_states + input_tensor.unsqueeze(-2))
 
         # Other
         other_hidden_states_ls = []
-        if self.has_flex:
-            sub_hidden_states = self.unfused_adapter_dict["flex"](hidden_states)
-            sub_hidden_states = self.unfused_layer_norm_dict["flex"](
-                sub_hidden_states + input_tensor
-            ).unsqueeze(-2)
-            other_hidden_states_ls.append(sub_hidden_states)
         if self.has_base:
             sub_hidden_states = self.unfused_adapter_dict["base"](hidden_states)
             sub_hidden_states = self.unfused_layer_norm_dict["base"](
@@ -302,13 +308,20 @@ class MultiAdapterOptimized(nn.Module):
             other_hidden_states_ls.append(sub_hidden_states)
 
         if other_hidden_states_ls:
-            final_hidden_states = torch.cat([fused_hidden_states] + other_hidden_states_ls, dim=-2)
+            all_hidden_states = torch.cat([fused_hidden_states] + other_hidden_states_ls, dim=-2)
         else:
-            final_hidden_states = fused_hidden_states
+            all_hidden_states = fused_hidden_states
 
         weights = self.weighted_sum.compute_weights().view(1, 1, -1, 1)
-        hidden_states = (weights * final_hidden_states).sum(-2)
-        return hidden_states
+        combined_hidden_states = (weights * all_hidden_states).sum(-2)
+
+        if self.has_flex:
+            h = self.unfused_adapter_dict["flex"](combined_hidden_states)
+            final_hidden_states = self.unfused_layer_norm_dict["flex"](combined_hidden_states + h)
+        else:
+            final_hidden_states = combined_hidden_states
+
+        return final_hidden_states
 
     @classmethod
     def create(cls,
@@ -331,7 +344,7 @@ class MultiAdapterOptimized(nn.Module):
                 normalized_shape=old_parent_module.LayerNorm.normalized_shape,
                 eps=old_parent_module.LayerNorm.eps,
             )
-            full_sub_module_name_list.append("flex")
+            # Don't add `flex` to full_sub_module_name_list
         if include_base:
             unfused_adapter_dict["base"] = torch_utils.IdentityModule()
             unfused_layer_norm_dict["base"] = old_parent_module.LayerNorm
