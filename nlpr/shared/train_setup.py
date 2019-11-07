@@ -21,7 +21,7 @@ def get_train_schedule(num_train_examples,
     train_batch_size = per_gpu_train_batch_size * max(1, n_gpu)
     steps_per_epoch = int(np.ceil(num_train_examples / train_batch_size))
 
-    if max_steps > 0:
+    if max_steps is not None and max_steps > 0:
         t_total = max_steps
         num_train_epochs = max_steps // (steps_per_epoch // gradient_accumulation_steps) + 1
     else:

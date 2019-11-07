@@ -131,7 +131,7 @@ def main(args):
         adapter_weights_dict=adapter_weights_dict,
     )
     model_wrapper.model.to(quick_init_out.device)
-    named_parameters = multi_adapters.get_tunable_parameters(
+    tunable_parameters = multi_adapters.get_tunable_parameters(
         model=model_wrapper.model,
         modified_layers=modified_layers,
         ft_mode=args.adapter_ft_mode,
@@ -155,7 +155,7 @@ def main(args):
     )
     loss_criterion = train_setup.resolve_loss_function(task_type=task.TASK_TYPE)
     optimizer_scheduler = model_setup.create_optimizer_from_params(
-        named_parameters=named_parameters,
+        named_parameters=tunable_parameters,
         learning_rate=args.learning_rate,
         t_total=train_schedule.t_total,
         warmup_steps=args.warmup_steps,

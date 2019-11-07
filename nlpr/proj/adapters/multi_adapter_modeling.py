@@ -61,16 +61,18 @@ class MultiAdapter(nn.Module):
             self.sub_module_name_list = sub_module_name_list
         else:
             self.sub_module_name_list = list(adapter_dict.keys())
+        self.weighted_module_name_list = list_exclude(self.sub_module_name_list, to_exclude=["flex"])
+        self.has_flex = "flex" in self.adapter_dict
 
     def forward(self, hidden_states, input_tensor):
         hidden_states_dict = {}
-        for k in self.sub_module_name_list:
+        for k in self.weighted_module_name_list:
             sub_hidden_states = self.adapter_dict[k](hidden_states)
             sub_hidden_states = self.layer_norm_dict[k](sub_hidden_states + input_tensor)
             hidden_states_dict[k] = sub_hidden_states
         combined_hidden_states = self.weighted_sum(hidden_states_dict)
 
-        if "flex" in self.adapter_dict:
+        if self.has_flex:
             h = self.adapter_dict["flex"](combined_hidden_states)
             final_hidden_states = self.layer_norm_dict["flex"](combined_hidden_states + h)
         else:
@@ -98,7 +100,7 @@ class MultiAdapter(nn.Module):
                 normalized_shape=old_parent_module.LayerNorm.normalized_shape,
                 eps=old_parent_module.LayerNorm.eps,
             )
-            # Don't add `flex` to sub_module_name_list
+            sub_module_name_list.append("flex")
         if include_base:
             adapter_dict["base"] = torch_utils.IdentityModule()
             layer_norm_dict["base"] = old_parent_module.LayerNorm
@@ -113,7 +115,7 @@ class MultiAdapter(nn.Module):
                 eps=old_parent_module.LayerNorm.eps,
             )
         weighted_sum = WeightedSum(
-            name_list=sub_module_name_list,
+            name_list=list_exclude(sub_module_name_list, to_exclude=["flex"]),
             mode=mode,
         )
         return cls(
@@ -283,15 +285,15 @@ class MultiAdapterOptimized(nn.Module):
         assert self.fused_name_list == fused_layer_norms.module_name_list
         self.has_flex = "flex" in unfused_adapter_dict
         self.has_base = "base" in unfused_adapter_dict
-        self.full_name_list = self.weighted_sum.name_list
+        self.sub_module_name_list = []
+        self.weighted_module_name_list = self.weighted_sum.name_list
+        self.full_module_name_list = self.weighted_module_name_list + (["flex"] if self.has_flex else [])
 
-        # Do order check
+        # Do order check for weights
         checking_order = fused_adapters.module_name_list[:]
-        if self.has_flex:
-            checking_order.append("flex")
         if self.has_base:
             checking_order.append("base")
-        assert checking_order == self.full_name_list
+        assert checking_order == self.weighted_module_name_list
 
     def forward(self, hidden_states, input_tensor):
         # Fused
@@ -344,13 +346,13 @@ class MultiAdapterOptimized(nn.Module):
                 normalized_shape=old_parent_module.LayerNorm.normalized_shape,
                 eps=old_parent_module.LayerNorm.eps,
             )
-            # Don't add `flex` to full_sub_module_name_list
+            full_sub_module_name_list.append("flex")
         if include_base:
             unfused_adapter_dict["base"] = torch_utils.IdentityModule()
             unfused_layer_norm_dict["base"] = old_parent_module.LayerNorm
             full_sub_module_name_list.append("base")
         weighted_sum = WeightedSum(
-            name_list=full_sub_module_name_list,
+            name_list=list_exclude(full_sub_module_name_list, to_exclude=["flex"]),
             mode=mode,
         )
         fused_adapters = FusedAdapters.create(
@@ -626,10 +628,18 @@ def get_multi_adapter_weight_params(model):
 
 def get_multi_adapter_adapter_params_dict(modified_layers):
     first_modified = list(modified_layers.values())[0]
-    adapter_params_dict = {
-        k: []
-        for k in first_modified.weighted_sum.name_list
-    }
+
+    if isinstance(first_modified, MultiAdapter):
+        adapter_params_dict = {
+            k: []
+            for k in first_modified.full_module_name_list
+        }
+    elif isinstance(first_modified, MultiAdapterOptimized):
+        adapter_params_dict = {"fused": []}
+        for k in first_modified.unfused_adapter_dict:
+            adapter_params_dict[k] = []
+    else:
+        raise KeyError(type(first_modified))
     for layer_name, layer in modified_layers.items():
         if isinstance(layer, MultiAdapter):
             for name, param in layer.adapter_dict.named_parameters():
@@ -645,7 +655,7 @@ def get_multi_adapter_adapter_params_dict(modified_layers):
                     param
                 ))
         elif isinstance(layer, MultiAdapterOptimized):
-            # Only unfused
+            # Unfused
             for name, param in layer.unfused_adapter_dict.named_parameters():
                 adapter_set_name = name.split(".")[0]
                 adapter_params_dict[adapter_set_name].append((
@@ -656,6 +666,17 @@ def get_multi_adapter_adapter_params_dict(modified_layers):
                 adapter_set_name = name.split(".")[0]
                 adapter_params_dict[adapter_set_name].append((
                     f"{layer_name}.multi_adapter.unfused_layer_norm_dict.{name}",
+                    param
+                ))
+            # Fused
+            for name, param in layer.fused_adapters.named_parameters():
+                adapter_params_dict["fused"].append((
+                    f"{layer_name}.multi_adapter.fused_adapters.{name}",
+                    param
+                ))
+            for name, param in layer.fused_layer_norms.named_parameters():
+                adapter_params_dict["fused"].append((
+                    f"{layer_name}.multi_adapter.fused_layer_norms.{name}",
                     param
                 ))
         else:
@@ -687,9 +708,11 @@ def load_adapter_weights_dict_path(path):
 
 def get_tunable_parameters(model, modified_layers, ft_mode):
     if ft_mode == "base":
+        torch_utils.set_requires_grad(model.named_parameters(), value=False)
         torch_utils.set_requires_grad(adapters_model_setup.get_head_named_parameters(model), value=True)
         torch_utils.set_requires_grad(get_multi_adapter_weight_params(model), value=True)
     elif ft_mode == "flex":
+        torch_utils.set_requires_grad(model.named_parameters(), value=False)
         torch_utils.set_requires_grad(adapters_model_setup.get_head_named_parameters(model), value=True)
         torch_utils.set_requires_grad(get_multi_adapter_weight_params(model), value=True)
         torch_utils.set_requires_grad(get_multi_adapter_adapter_params_dict(modified_layers)["flex"], value=True)
@@ -701,4 +724,9 @@ def get_tunable_parameters(model, modified_layers, ft_mode):
         torch_utils.set_requires_grad(model.named_parameters(), value=True)
     else:
         raise KeyError(ft_mode)
-    return model.named_parameters()
+    tunable_parameters = [(n, p) for n, p in model.named_parameters() if p.requires_grad]
+    return tunable_parameters
+
+
+def list_exclude(ls, to_exclude):
+    return [x for x in ls if x not in to_exclude]

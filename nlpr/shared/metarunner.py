@@ -113,14 +113,15 @@ class MetaRunner:
                 if self.should_eval_func(self.train_global_state):
                     self.eval_save()
 
-                if self.train_schedule.max_steps != -1 and \
+                if self.train_schedule.max_steps is not None and \
+                        self.train_schedule.max_steps != -1 and \
                         self.train_global_state.global_step >= self.train_schedule.max_steps:
-                    full_break = True
+                    self.full_break = True
 
                 if compare_steps_max_steps(
                         step=self.train_global_state.global_step,
                         max_steps=self.train_schedule.max_steps):
-                    full_break = True
+                    self.full_break = True
 
                 if self.full_break:
                     break

@@ -203,6 +203,7 @@ def save_model_with_metadata(model: nn.Module, metadata: dict, output_dir: str, 
 
 def compare_steps_max_steps(step, max_steps):
     return (
-        max_steps != -1
+        max_steps is not None
+        and max_steps != -1
         and step >= max_steps
     )
