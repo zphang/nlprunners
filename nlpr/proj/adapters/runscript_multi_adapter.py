@@ -14,7 +14,6 @@ import nlpr.proj.simple.runner as simple_runner
 import nlpr.shared.metarunner as metarunner
 import nlpr.proj.adapters.modeling as adapters
 import nlpr.proj.adapters.multi_adapter_modeling as multi_adapters
-import nlpr.proj.adapters.model_setup as adapters_model_setup
 import nlpr.proj.adapters.runner as adapters_runner
 
 
@@ -52,7 +51,7 @@ class RunConfiguration(zconf.RunConfig):
     # === Training Learning Parameters === #
     learning_rate = zconf.attr(default=1e-5, type=float)
     num_train_epochs = zconf.attr(default=3, type=int)
-    max_steps = zconf.attr(default=-1, type=int)  ## Change to None
+    max_steps = zconf.attr(default=None, type=int)
     adam_epsilon = zconf.attr(default=1e-8, type=float)
     max_grad_norm = zconf.attr(default=1.0, type=float)
     warmup_steps = zconf.attr(default=None, type=int)
@@ -70,10 +69,26 @@ class RunConfiguration(zconf.RunConfig):
     # Multi Adapters
     adapter_weights_path = zconf.attr(type=str, required=True)
     adapter_num_weight_sets = zconf.attr(type=int, default=1)
-    adapter_include_base = zconf.attr(type=int, default=1)
-    adapter_include_flex = zconf.attr(type=int, default=0)
     adapter_ft_mode = zconf.attr(type=str, default="weights")
     adapter_use_optimized = zconf.attr(type=int, default=0)
+    adapter_include_base = zconf.attr(default=None)
+    adapter_include_flex = zconf.attr(default=None)
+
+    def _post_init(self):
+        if self.adapter_ft_mode == "base":
+            self.adapter_include_base = True
+            self.adapter_include_flex = False
+        elif self.adapter_ft_mode == "flex":
+            self.adapter_include_base = False
+            self.adapter_include_flex = True
+        elif self.adapter_ft_mode == "base_ft":
+            self.adapter_include_base = True
+            self.adapter_include_flex = False
+        elif self.adapter_ft_mode == "full_ft":
+            self.adapter_include_base = True
+            self.adapter_include_flex = False
+        else:
+            raise KeyError(self.adapter_ft_mode)
 
 
 def main(args):
@@ -116,12 +131,11 @@ def main(args):
         adapter_weights_dict=adapter_weights_dict,
     )
     model_wrapper.model.to(quick_init_out.device)
-    named_parameters = (
-        adapters_model_setup.get_head_named_parameters(model_wrapper.model)
-        + multi_adapters.get_multi_adapter_weight_params(model_wrapper.model)
+    named_parameters = multi_adapters.get_tunable_parameters(
+        model=model_wrapper.model,
+        modified_layers=modified_layers,
+        ft_mode=args.adapter_ft_mode,
     )
-    if args.adapter_include_flex:
-        named_parameters += multi_adapters.get_multi_adapter_adapter_params_dict(modified_layers)["flex"]
 
     train_examples = task.get_train_examples()
     train_examples, _ = train_setup.maybe_subsample_train(
