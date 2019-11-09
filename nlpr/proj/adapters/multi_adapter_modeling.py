@@ -63,6 +63,7 @@ class MultiAdapter(nn.Module):
             self.sub_module_name_list = list(adapter_dict.keys())
         self.weighted_module_name_list = list_exclude(self.sub_module_name_list, to_exclude=["flex"])
         self.has_flex = "flex" in self.adapter_dict
+        self.full_module_name_list = sub_module_name_list
 
     def forward(self, hidden_states, input_tensor):
         hidden_states_dict = {}
@@ -74,7 +75,7 @@ class MultiAdapter(nn.Module):
 
         if self.has_flex:
             h = self.adapter_dict["flex"](combined_hidden_states)
-            final_hidden_states = self.layer_norm_dict["flex"](combined_hidden_states + h)
+            final_hidden_states = self.layer_norm_dict["flex"](h + input_tensor)
         else:
             final_hidden_states = combined_hidden_states
 
@@ -319,7 +320,9 @@ class MultiAdapterOptimized(nn.Module):
 
         if self.has_flex:
             h = self.unfused_adapter_dict["flex"](combined_hidden_states)
-            final_hidden_states = self.unfused_layer_norm_dict["flex"](combined_hidden_states + h)
+            final_hidden_states = self.unfused_layer_norm_dict["flex"](
+                h + input_tensor
+            )
         else:
             final_hidden_states = combined_hidden_states
 
@@ -718,7 +721,8 @@ def get_tunable_parameters(model, modified_layers, ft_mode):
         torch_utils.set_requires_grad(get_multi_adapter_adapter_params_dict(modified_layers)["flex"], value=True)
     elif ft_mode == "base_ft":
         torch_utils.set_requires_grad(model.named_parameters(), value=True)
-        for adapter_params in get_multi_adapter_adapter_params_dict(modified_layers):
+        all_adapter_params_dict = get_multi_adapter_adapter_params_dict(modified_layers)
+        for _, adapter_params in all_adapter_params_dict.items():
             torch_utils.set_requires_grad(adapter_params, value=False)
     elif ft_mode == "full_ft":
         torch_utils.set_requires_grad(model.named_parameters(), value=True)
