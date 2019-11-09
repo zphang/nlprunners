@@ -317,6 +317,10 @@ class GloveLSTMForSequenceClassification(GloveLSTMModel):
     pass
 
 
+class GloveLSTMForSequenceRegression(GloveLSTMModel):
+    pass
+
+
 def get_padded_ids(token_id_ls_ls):
     zeros = np.zeros((len(token_id_ls_ls), max(map(len, token_id_ls_ls))), dtype=int)
     lengths = []

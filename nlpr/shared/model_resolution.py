@@ -144,7 +144,7 @@ MODEL_CLASS_DICT = {
     },
     ModelArchitectures.GLOVE_LSTM: {
         TaskTypes.CLASSIFICATION: glove_lstm_modeling.GloveLSTMForSequenceClassification,
-        TaskTypes.REGRESSION: None,
+        TaskTypes.REGRESSION: glove_lstm_modeling.GloveLSTMForSequenceRegression,
     },
 }
 

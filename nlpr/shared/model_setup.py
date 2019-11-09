@@ -83,6 +83,8 @@ def glove_lstm_setup(config_path, tokenizer_path, task):
     config = glove_lstm_modeling.GloveLSTMConfig.from_json(config_path)
     if task.TASK_TYPE == TaskTypes.CLASSIFICATION:
         num_labels = len(task.LABELS)
+    elif task.TASK_TYPE == TaskTypes.REGRESSION:
+        num_labels = 1
     else:
         raise KeyError(task.TASK_TYPE)
     glove = glove_lstm_modeling.GloVeEmbeddings.read_glove(
@@ -100,7 +102,8 @@ def glove_lstm_setup(config_path, tokenizer_path, task):
                            tasks.MrpcTask,
                            tasks.QnliTask,
                            tasks.QqpTask,
-                           tasks.RteTask)):
+                           tasks.RteTask,
+                           tasks.SstTask)):
         num_inputs = 2
     else:
         raise KeyError(task.__class__)
