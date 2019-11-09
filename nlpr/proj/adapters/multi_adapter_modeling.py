@@ -5,9 +5,9 @@ import torch.nn.functional as F
 import transformers.modeling_bert as modeling_bert
 
 import nlpr.proj.adapters.modeling as adapters_modeling
-import nlpr.proj.adapters.model_setup as adapters_model_setup
 import nlpr.shared.model_resolution as model_resolution
 import nlpr.shared.torch_utils as torch_utils
+import nlpr.shared.train_setup as train_setup
 
 import pyutils.datastructures as datastructures
 import pyutils.io as io
@@ -712,11 +712,11 @@ def load_adapter_weights_dict_path(path):
 def get_tunable_parameters(model, modified_layers, ft_mode):
     if ft_mode == "base":
         torch_utils.set_requires_grad(model.named_parameters(), value=False)
-        torch_utils.set_requires_grad(adapters_model_setup.get_head_named_parameters(model), value=True)
+        torch_utils.set_requires_grad(train_setup.get_head_named_parameters(model), value=True)
         torch_utils.set_requires_grad(get_multi_adapter_weight_params(model), value=True)
     elif ft_mode == "flex":
         torch_utils.set_requires_grad(model.named_parameters(), value=False)
-        torch_utils.set_requires_grad(adapters_model_setup.get_head_named_parameters(model), value=True)
+        torch_utils.set_requires_grad(train_setup.get_head_named_parameters(model), value=True)
         torch_utils.set_requires_grad(get_multi_adapter_weight_params(model), value=True)
         torch_utils.set_requires_grad(get_multi_adapter_adapter_params_dict(modified_layers)["flex"], value=True)
     elif ft_mode == "base_ft":

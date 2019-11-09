@@ -3,6 +3,7 @@ import transformers as ptt
 import nlpr.shared.model_resolution as model_resolution
 import nlpr.proj.adapters.modeling as adapters
 import nlpr.shared.modeling.models as models
+import nlpr.shared.train_setup as train_setup
 
 
 def get_head_parameter_names(model):
@@ -65,16 +66,7 @@ def get_roberta_head_parameter_names(model):
         raise KeyError(type(model))
 
 
-def get_head_named_parameters(model):
-    head_parameter_names = get_head_parameter_names(model)
-    full_named_parameters_dict = dict(model.named_parameters())
-    return [
-        (param_name, full_named_parameters_dict[param_name])
-        for param_name in head_parameter_names
-    ]
-
-
 def get_adapter_named_parameters(model):
     # Todo: Refactor
     named_parameters = adapters.get_adapter_params(model)
-    return named_parameters + get_head_named_parameters(model)
+    return named_parameters + train_setup.get_head_named_parameters(model)
