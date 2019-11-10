@@ -319,10 +319,18 @@ class MultiAdapterOptimized(nn.Module):
         combined_hidden_states = (weights * all_hidden_states).sum(-2)
 
         if self.has_flex:
+            """
             h = self.unfused_adapter_dict["flex"](combined_hidden_states)
             final_hidden_states = self.unfused_layer_norm_dict["flex"](
                 h + input_tensor
             )
+            """
+            """
+            final_hidden_states = self.unfused_layer_norm_dict["flex"](
+                combined_hidden_states
+            )
+            """
+            final_hidden_states = self.unfused_adapter_dict["flex"](combined_hidden_states)
         else:
             final_hidden_states = combined_hidden_states
 

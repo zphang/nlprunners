@@ -66,7 +66,7 @@ class RunConfiguration(zconf.RunConfig):
 
     # Head
     head_epochs = zconf.attr(default=1, type=int)
-    head_max_steps = zconf.attr(default=10000, type=int)
+    head_max_steps = zconf.attr(default=1000, type=int)
 
 
 def main(args):
