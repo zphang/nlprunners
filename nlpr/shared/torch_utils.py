@@ -60,6 +60,6 @@ class IdentityModule(nn.Module):
             return inputs
 
 
-def set_requires_grad(named_parameters, value):
+def set_requires_grad(named_parameters, requires_grad):
     for name, param in named_parameters:
-        param.requires_grad = value
+        param.requires_grad = requires_grad

@@ -719,21 +719,21 @@ def load_adapter_weights_dict_path(path):
 
 def get_tunable_parameters(model, modified_layers, ft_mode):
     if ft_mode == "base":
-        torch_utils.set_requires_grad(model.named_parameters(), value=False)
-        torch_utils.set_requires_grad(train_setup.get_head_named_parameters(model), value=True)
-        torch_utils.set_requires_grad(get_multi_adapter_weight_params(model), value=True)
+        torch_utils.set_requires_grad(model.named_parameters(), requires_grad=False)
+        torch_utils.set_requires_grad(train_setup.get_head_named_parameters(model), requires_grad=True)
+        torch_utils.set_requires_grad(get_multi_adapter_weight_params(model), requires_grad=True)
     elif ft_mode == "flex":
-        torch_utils.set_requires_grad(model.named_parameters(), value=False)
-        torch_utils.set_requires_grad(train_setup.get_head_named_parameters(model), value=True)
-        torch_utils.set_requires_grad(get_multi_adapter_weight_params(model), value=True)
-        torch_utils.set_requires_grad(get_multi_adapter_adapter_params_dict(modified_layers)["flex"], value=True)
+        torch_utils.set_requires_grad(model.named_parameters(), requires_grad=False)
+        torch_utils.set_requires_grad(train_setup.get_head_named_parameters(model), requires_grad=True)
+        torch_utils.set_requires_grad(get_multi_adapter_weight_params(model), requires_grad=True)
+        torch_utils.set_requires_grad(get_multi_adapter_adapter_params_dict(modified_layers)["flex"], requires_grad=True)
     elif ft_mode == "base_ft":
-        torch_utils.set_requires_grad(model.named_parameters(), value=True)
+        torch_utils.set_requires_grad(model.named_parameters(), requires_grad=True)
         all_adapter_params_dict = get_multi_adapter_adapter_params_dict(modified_layers)
         for _, adapter_params in all_adapter_params_dict.items():
-            torch_utils.set_requires_grad(adapter_params, value=False)
+            torch_utils.set_requires_grad(adapter_params, requires_grad=False)
     elif ft_mode == "full_ft":
-        torch_utils.set_requires_grad(model.named_parameters(), value=True)
+        torch_utils.set_requires_grad(model.named_parameters(), requires_grad=True)
     else:
         raise KeyError(ft_mode)
     tunable_parameters = [(n, p) for n, p in model.named_parameters() if p.requires_grad]
