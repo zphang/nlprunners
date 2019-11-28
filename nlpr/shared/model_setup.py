@@ -95,15 +95,15 @@ def glove_lstm_setup(config_path, tokenizer_path, task):
     glove_embedding = glove_lstm_modeling.GloVeEmbeddingModule(glove)
 
     # Task hack
-    if isinstance(task, tasks.ColaTask):
+    if isinstance(task, (tasks.ColaTask,
+                         tasks.SstTask)):
         num_inputs = 1
     elif isinstance(task, (tasks.BoolQTask,
                            tasks.MnliTask,
                            tasks.MrpcTask,
                            tasks.QnliTask,
                            tasks.QqpTask,
-                           tasks.RteTask,
-                           tasks.SstTask)):
+                           tasks.RteTask)):
         num_inputs = 2
     else:
         raise KeyError(task.__class__)

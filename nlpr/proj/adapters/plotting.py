@@ -31,9 +31,10 @@ def plot_single(lines_ax, bars_ax, loaded, layer_key, color_srs):
     lines_ax.set_xlim(plot_df.index[0], plot_df.index[-1] + 1)
     plot_df.iloc[-1].plot(kind="barh", ax=bars_ax, color=color_srs[plot_df.columns].values)
     bars_ax.grid()
+    bars_ax.invert_yaxis()
 
 
-def plot_all(loaded, color_srs, compute_keys=False):
+def plot_all(loaded, color_srs, compute_keys=False, figsize=None):
     if compute_keys:
         seen = set()
         layer_keys = []
@@ -46,7 +47,8 @@ def plot_all(loaded, color_srs, compute_keys=False):
         layer_keys = loaded[0]["weights"].keys()
     num_sets = len(layer_keys)
     if num_sets == 4:
-        fig, axes = plt.subplots(2, 4, figsize=(16, 6))
+
+        fig, axes = plt.subplots(2, 4, figsize=(16, 6) if not figsize else figsize)
         layer_keys = list(loaded[0]["weights"].keys())
         axes = [
             [axes[0][0], axes[0][1]],
@@ -59,7 +61,7 @@ def plot_all(loaded, color_srs, compute_keys=False):
             ax1.set_title(layer_keys[i])
         plt.tight_layout()
     elif num_sets == 1:
-        fig, axes = plt.subplots(1, 2, figsize=(8, 3))
+        fig, axes = plt.subplots(1, 2, figsize=(8, 3) if not figsize else figsize)
         ax1, ax2 = axes
         plot_single(ax1, ax2, loaded, list(layer_keys)[0], color_srs)
         plt.tight_layout()

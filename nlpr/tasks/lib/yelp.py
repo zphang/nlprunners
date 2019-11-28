@@ -1,9 +1,10 @@
-import os
 import pandas as pd
 
 import torch
 from dataclasses import dataclass
 from typing import List
+
+import pyutils.io as io
 
 from .shared import (
     Task, single_sentence_featurize, TaskTypes,
@@ -95,17 +96,23 @@ class YelpPolarityTask(Task):
 
     @classmethod
     def read_examples(cls, path, set_type):
-        df = pd.read_csv(
-            path,
-            header=None,
-            names=["label", "text"],
-        )
+        if path.endswith(".csv"):
+            df = pd.read_csv(
+                path,
+                header=None,
+                names=["label", "text"],
+            )
+            iterator = df.iterrows()
+        elif path.endswith(".jsonl"):
+            iterator = enumerate(io.read_jsonl(path))
+        else:
+            raise RuntimeError(path)
         examples = [
             Example(
                 guid=f"{set_type}-{i}",
                 input_text=row["text"],
                 label=row["label"],
             )
-            for i, row in df.iterrows()
+            for i, row in iterator
         ]
         return examples
