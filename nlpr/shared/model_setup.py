@@ -40,6 +40,23 @@ def simple_model_setup(model_type, model_class_spec, config_path, tokenizer_path
 
 
 def simple_ptt_model_setup(model_type, model_class_spec, config_path, tokenizer_path, task):
+    model = get_model(
+        model_class_spec=model_class_spec,
+        config_path=config_path,
+        task=task,
+    )
+    tokenizer = get_tokenizer(
+        model_type=model_type,
+        model_class_spec=model_class_spec,
+        tokenizer_path=tokenizer_path,
+    )
+    return ModelWrapper(
+        model=model,
+        tokenizer=tokenizer,
+    )
+
+
+def get_model(model_class_spec, config_path, task):
     # Todo: Major refactor for task configs
     config = model_class_spec.config_class.from_json_file(config_path)
     if task.TASK_TYPE == TaskTypes.CLASSIFICATION:
@@ -56,8 +73,12 @@ def simple_ptt_model_setup(model_type, model_class_spec, config_path, tokenizer_
     else:
         raise KeyError(task.TASK_TYPE)
 
-    model_arch = ModelArchitectures.from_model_type(model_type)
     model = model_class_spec.model_class(config)
+    return model
+
+
+def get_tokenizer(model_type, model_class_spec, tokenizer_path):
+    model_arch = ModelArchitectures.from_model_type(model_type)
     if model_arch in [ModelArchitectures.BERT]:
         if "-cased" in model_type:
             do_lower_case = False
@@ -73,10 +94,7 @@ def simple_ptt_model_setup(model_type, model_class_spec, config_path, tokenizer_
     tokenizer = model_class_spec.tokenizer_class.from_pretrained(
         tokenizer_path, do_lower_case=do_lower_case,
     )
-    return ModelWrapper(
-        model=model,
-        tokenizer=tokenizer,
-    )
+    return tokenizer
 
 
 def glove_lstm_setup(config_path, tokenizer_path, task):
