@@ -1,4 +1,5 @@
 import glob
+import numpy as np
 import os
 import tqdm
 
@@ -14,6 +15,28 @@ from nlpr.tasks.lib.shared import TaskTypes
 
 TASK_EXCLUSION_LS = ["wic", "wsc"]
 MODEL_NAME_LS = ["bert-base-uncased", "bert-large-uncased", "roberta-base", "roberta-large"]
+
+
+def random_choose(ls, num, rng=None, replace=True):
+    if rng is None:
+        rng = np.random
+    return [ls[i] for i in rng.choice(len(ls), num, replace=replace)]
+
+
+def write_truncated_config(config_base_path, output_base_path):
+    path_ls = sorted(glob.glob(os.path.join(config_base_path, "*/base_config.json")))
+    for path in tqdm.tqdm(path_ls):
+        config = io.read_json(path)
+        data = io.read_jsonl(io.read_json(path)["paths"]["train"])
+        task_name = config["task"]
+        new_data_path = os.path.join(output_base_path, "task_data", f"{task_name}.json")
+        new_data = random_choose(data, 20, np.random.RandomState(1111))
+        new_config = {
+            "task": task_name,
+            "paths": {"train": new_data_path}
+        }
+        io.write_jsonl(new_data, new_data_path)
+        io.write_json(new_config, os.path.join(output_base_path, "task_configs", f"{task_name}.json"))
 
 
 def get_tokenizer_and_feat_spec(model_config):
@@ -113,8 +136,8 @@ def run_checks(base_path_1, base_path_2):
         print(model_name)
         for task_name in task_name_ls:
             total += 1
-            data1 = torch.load(model_path_1, f"{task_name}.p")
-            data2 = torch.load(model_path_2, f"{task_name}.p")
+            data1 = torch.load(os.path.join(model_path_1, f"{task_name}.p"))
+            data2 = torch.load(os.path.join(model_path_2, f"{task_name}.p"))
             if check_data_equal(data1, data2):
                 print(f"    {task_name}:", "OK")
             else:
