@@ -71,7 +71,7 @@ def get_tokenized_featurized(examples, tokenizer, feat_spec):
     }
 
 
-def write_out(model_config_base_path, task_config_base_path, output_base_path):
+def write_out(model_config_base_path, task_config_base_path, output_base_path, git_hash):
     task_config_path_dict = {
         os.path.split(path)[-1].replace(".json", ""): path
         for path in glob.glob(os.path.join(task_config_base_path, "*.json"))
@@ -94,6 +94,10 @@ def write_out(model_config_base_path, task_config_base_path, output_base_path):
                 output,
                 os.path.join(output_base_path, model_name, f"{task_name}.p"),
             )
+    io.write_json(
+        git_hash,
+        os.path.join(output_base_path, "git_hash")
+    )
 
 
 def check_equal(ex1, ex2):
