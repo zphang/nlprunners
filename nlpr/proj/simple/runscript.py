@@ -90,6 +90,7 @@ def main(args):
                 model=model_wrapper.model,
                 model_load_mode=args.model_load_mode,
                 model_path=args.model_path,
+                verbose=True,
             )
             model_wrapper.model.to(quick_init_out.device)
 

@@ -21,7 +21,8 @@ def simple_model_setup(model_type, model_class_spec, config_path, tokenizer_path
             ModelArchitectures.BERT,
             ModelArchitectures.XLNET,
             ModelArchitectures.XLM,
-            ModelArchitectures.ROBERTA]:
+            ModelArchitectures.ROBERTA,
+            ModelArchitectures.ALBERT]:
         return simple_ptt_model_setup(
             model_type=model_type,
             model_class_spec=model_class_spec,
@@ -87,7 +88,8 @@ def get_tokenizer(model_type, model_class_spec, tokenizer_path):
         else:
             raise RuntimeError(model_type)
     elif model_arch in [
-            ModelArchitectures.XLNET, ModelArchitectures.XLM, ModelArchitectures.ROBERTA]:
+            ModelArchitectures.XLNET, ModelArchitectures.XLM, ModelArchitectures.ROBERTA,
+            ModelArchitectures.ALBERT]:
         do_lower_case = False
     else:
         raise RuntimeError(model_type)
@@ -154,17 +156,27 @@ def safe_load_model(model, state_dict, max_miss_fraction=0.9, verbose=True):
             print(f"  {pname}")
     if total_mismatched / total_params > 1 - max_miss_fraction:
         raise RuntimeError(f"Mismatched {total_mismatched} out of {total_params} parameters")
+    return missed, unused
 
 
 def simple_load_model(model, state_dict, model_load_mode, verbose=True):
     if model_load_mode == "strict":
         model.load_state_dict(state_dict)
     elif model_load_mode == "safe":
-        safe_load_model(
-            model=model,
-            state_dict=state_dict,
-            verbose=verbose,
-        )
+        if ModelArchitectures.from_ptt_model(model) == ModelArchitectures.ALBERT:
+            # TODO: add safer check for ALBERT models
+            safe_load_model(
+                model=model,
+                state_dict=state_dict,
+                verbose=verbose,
+                max_miss_fraction=0.66,
+            )
+        else:
+            safe_load_model(
+                model=model,
+                state_dict=state_dict,
+                verbose=verbose,
+            )
     elif model_load_mode == "base_weights":
         model.load_state_dict(load_model_base_weights(
             model=model,
@@ -288,9 +300,8 @@ def create_optimizer_from_params(named_parameters, learning_rate, t_total, warmu
         t_total=t_total, warmup_steps=warmup_steps,
         warmup_proportion=warmup_proportion,
     )
-    scheduler = transformers.WarmupLinearSchedule(
-        optimizer, warmup_steps=warmup_steps, t_total=t_total
-    )
+    scheduler = transformers.get_linear_schedule_with_warmup(
+        optimizer, num_warmup_steps=warmup_steps, num_training_steps=t_total)
     optimizer_scheduler = OptimizerScheduler(
         optimizer=optimizer,
         scheduler=scheduler,

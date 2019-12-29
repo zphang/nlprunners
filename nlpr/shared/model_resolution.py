@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 import transformers as ptt
+import transformers.modeling_albert
 
 from nlpr.tasks.core import FeaturizationSpec
 from nlpr.tasks.lib.shared import TaskTypes
@@ -15,6 +16,7 @@ class ModelArchitectures(Enum):
     XLM = 3
     ROBERTA = 4
     GLOVE_LSTM = 5
+    ALBERT = 6
 
     @classmethod
     def from_model_type(cls, model_type):
@@ -26,6 +28,8 @@ class ModelArchitectures(Enum):
             return cls.XLM
         elif model_type.startswith("roberta-"):
             return cls.ROBERTA
+        elif model_type.startswith("albert-"):
+            return cls.ALBERT
         elif model_type == "glove_lstm":
             return cls.GLOVE_LSTM
         else:
@@ -45,6 +49,8 @@ class ModelArchitectures(Enum):
             return cls.ROBERTA
         elif isinstance(ptt_model, glove_lstm_modeling.GloveLSTMModel):
             return cls.GLOVE_LSTM
+        elif isinstance(ptt_model, transformers.modeling_albert.AlbertPreTrainedModel):
+            return cls.ALBERT
         else:
             raise KeyError(str(ptt_model))
 
@@ -118,6 +124,20 @@ def build_featurization_spec(model_type, max_seq_length):
         return glove_lstm_modeling.GloVeEmbeddings.get_feat_spec(
             max_seq_length=max_seq_length,
         )
+    elif model_arch == ModelArchitectures.ALBERT:
+        #
+        return FeaturizationSpec(
+            max_seq_length=max_seq_length,
+            cls_token_at_end=False,   # ?
+            pad_on_left=False,  # ok
+            cls_token_segment_id=0,  # ok
+            pad_token_segment_id=0,  # ok
+            pad_token_id=0,  # I think?
+            pad_token_mask_id=0,  # I think?
+            sequence_a_segment_id=0,   # I think?
+            sequence_b_segment_id=1,   # I think?
+            sep_token_extra=False,
+        )
     else:
         raise KeyError(model_arch)
 
@@ -145,6 +165,10 @@ MODEL_CLASS_DICT = {
     ModelArchitectures.GLOVE_LSTM: {
         TaskTypes.CLASSIFICATION: glove_lstm_modeling.GloveLSTMForSequenceClassification,
         TaskTypes.REGRESSION: glove_lstm_modeling.GloveLSTMForSequenceRegression,
+    },
+    ModelArchitectures.ALBERT: {
+        TaskTypes.CLASSIFICATION: ptt.AlbertForSequenceClassification,
+        TaskTypes.REGRESSION: ptt.AlbertForSequenceClassification,  # ptt is weird
     },
 }
 
@@ -185,6 +209,13 @@ def resolve_model_setup_classes(model_type, task_type):
             tokenizer_class=glove_lstm_modeling.GloVeEmbeddings,
             # TODO: resolve correct model
             model_class=MODEL_CLASS_DICT[ModelArchitectures.GLOVE_LSTM][task_type],
+        )
+    elif model_arch == ModelArchitectures.ALBERT:
+        model_class_spec = ModelClassSpec(
+            config_class=ptt.AlbertConfig,
+            tokenizer_class=ptt.AlbertTokenizer,
+            # TODO: resolve correct model
+            model_class=MODEL_CLASS_DICT[ModelArchitectures.ALBERT][task_type],
         )
     else:
         raise KeyError(model_arch)
