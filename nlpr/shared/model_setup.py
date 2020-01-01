@@ -7,6 +7,7 @@ from nlpr.shared.model_resolution import ModelArchitectures
 import nlpr.shared.modeling.glove_lstm as glove_lstm_modeling
 from nlpr.tasks.lib.shared import TaskTypes
 import nlpr.tasks as tasks
+from nlpr.ext.radam import RAdam
 
 
 class ModelWrapper:
@@ -235,20 +236,21 @@ class OptimizerScheduler:
 
 
 def create_optimizer(model, learning_rate, t_total, warmup_steps, warmup_proportion,
-                     adam_epsilon=1e-8, verbose=False):
+                     optimizer_epsilon=1e-8, optimizer_type="adam", verbose=False):
     return create_optimizer_from_params(
         named_parameters=list(model.named_parameters()),
         learning_rate=learning_rate,
         t_total=t_total,
         warmup_steps=warmup_steps,
         warmup_proportion=warmup_proportion,
-        adam_epsilon=adam_epsilon,
+        optimizer_epsilon=optimizer_epsilon,
+        optimizer_type=optimizer_type,
         verbose=verbose,
     )
 
 
 def create_optimizer_from_params(named_parameters, learning_rate, t_total, warmup_steps, warmup_proportion,
-                                 adam_epsilon=1e-8, verbose=False):
+                                 optimizer_epsilon=1e-8, optimizer_type="adam", verbose=False):
     # Prepare optimizer
     no_decay = [
         'bias',
@@ -293,9 +295,21 @@ def create_optimizer_from_params(named_parameters, learning_rate, t_total, warmu
     # print("REQ", [n for n, p in named_parameters if not any(nd in n for nd in no_decay)])
     # print("NOREQ", [n for n, p in named_parameters if any(nd in n for nd in no_decay)])
 
-    optimizer = transformers.AdamW(
-        optimizer_grouped_parameters, lr=learning_rate, eps=adam_epsilon
-    )
+    if optimizer_type == "adam":
+        if verbose:
+            print("Using AdamW")
+        optimizer = transformers.AdamW(
+            optimizer_grouped_parameters, lr=learning_rate, eps=optimizer_epsilon
+        )
+    elif optimizer_type == "radam":
+        if verbose:
+            print("Using RAdam")
+        optimizer = RAdam(
+            optimizer_grouped_parameters, lr=learning_rate, eps=optimizer_epsilon
+        )
+    else:
+        raise KeyError(optimizer_type)
+
     warmup_steps = resolve_warmup_steps(
         t_total=t_total, warmup_steps=warmup_steps,
         warmup_proportion=warmup_proportion,

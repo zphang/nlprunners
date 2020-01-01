@@ -50,6 +50,7 @@ class RunConfiguration(zconf.RunConfig):
     max_grad_norm = zconf.attr(default=1.0, type=float)
     warmup_steps = zconf.attr(default=None, type=int)
     warmup_proportion = zconf.attr(default=0.1, type=float)
+    optimizer_type = zconf.attr(default="adam", type=str)
 
     # Specialized config
     gradient_accumulation_steps = zconf.attr(default=1, type=int)
@@ -101,7 +102,7 @@ def main(args):
             model_config_path=args.model_config_path, model_tokenizer_path=args.model_tokenizer_path,
             model_load_mode=args.model_load_mode,
             learning_rate=args.learning_rate, warmup_steps=args.warmup_steps,
-            warmup_proportion=args.warmup_proportion,
+            warmup_proportion=args.warmup_proportion, optimizer_type=args.optimizer_type,
             train_batch_size=args.train_batch_size, eval_batch_size=args.eval_batch_size,
             num_train_epochs=args.num_train_epochs,
             max_steps=args.max_steps, gradient_accumulation_steps=args.gradient_accumulation_steps,

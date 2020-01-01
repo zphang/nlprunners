@@ -26,7 +26,7 @@ import zproto.zlogv1 as zlogv1
 class RunnerCreator:
     def __init__(self, task,
                  model_type, model_path, model_config_path, model_tokenizer_path, model_load_mode,
-                 learning_rate, warmup_steps, warmup_proportion,
+                 learning_rate, warmup_steps, warmup_proportion, optimizer_type,
                  train_batch_size, eval_batch_size, num_train_epochs, max_steps,
                  gradient_accumulation_steps, max_grad_norm, max_seq_length,
                  local_rank, fp16, fp16_opt_level, device, n_gpu,
@@ -41,6 +41,7 @@ class RunnerCreator:
         self.learning_rate = learning_rate
         self.warmup_steps = warmup_steps
         self.warmup_proportion = warmup_proportion
+        self.optimizer_type = optimizer_type
 
         self.train_batch_size = train_batch_size
         self.eval_batch_size = eval_batch_size
@@ -93,6 +94,7 @@ class RunnerCreator:
             t_total=train_schedule.t_total,
             warmup_steps=self.warmup_steps,
             warmup_proportion=self.warmup_proportion,
+            optimizer_type=self.optimizer_type,
             verbose=self.verbose,
         )
         model_setup.special_model_setup(

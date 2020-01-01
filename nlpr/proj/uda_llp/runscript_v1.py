@@ -58,6 +58,7 @@ class RunConfiguration(zconf.RunConfig):
     max_grad_norm = zconf.attr(default=1.0, type=float)
     warmup_steps = zconf.attr(default=None, type=int)
     warmup_proportion = zconf.attr(default=0.1, type=float)
+    optimizer_type = zconf.attr(default="adam", type=str)
 
     # Specialized config
     gradient_accumulation_steps = zconf.attr(default=1, type=int)
@@ -137,6 +138,7 @@ def main(args):
         t_total=train_schedule.t_total,
         warmup_steps=args.warmup_steps,
         warmup_proportion=args.warmup_proportion,
+        optimizer_type=args.optimizer_type,
         verbose=True,
     )
 
