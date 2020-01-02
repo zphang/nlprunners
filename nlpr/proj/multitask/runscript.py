@@ -207,9 +207,9 @@ def main(args):
                 for task_name, task in task_dict.items()
             }
             results = runner.run_val(val_examples_dict)
-            evaluate.write_val_results(
+            evaluate.write_metrics(
                 results=results,
-                output_dir=args.output_dir,
+                output_path=os.path.join(args.output_dir, "val_metrics.json"),
                 verbose=True,
             )
 

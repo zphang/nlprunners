@@ -126,30 +126,31 @@ class MultiTaskRunner(BaseRunner):
             task_name: self.run_single_val(
                 task_val_examples=task_val_examples,
                 task=self.task_dict[task_name],
+                model=self.model.model_dict[task_name],
                 loss_criterion=self.loss_criterion_dict[task_name],
                 verbose=verbose,
             )
             for task_name, task_val_examples in val_examples.items()
         }
-        average_major = evaluate.mean(
+        average_major = evaluate.mean([
             val_results["metrics"].major
-            for val_results in val_results_dict.items()
-        )
-        collated_val_results = {"logits": {}, "loss": {}, "major": evaluate.Metrics(major=average_major, minor={})}
+            for val_results in val_results_dict.values()
+        ])
+        collated_val_results = {"logits": {}, "loss": {}, "metrics": evaluate.Metrics(major=average_major, minor={})}
         for task_name, val_results in val_results_dict.items():
             collated_val_results["logits"][task_name] = val_results["logits"]
             collated_val_results["loss"][task_name] = val_results["loss"]
-            collated_val_results["major"].minor[task_name] = val_results["metrics"].minor.asdict()
+            collated_val_results["metrics"].minor[task_name] = val_results["metrics"].asdict()
         return collated_val_results
 
-    def run_single_val(self, task_val_examples, task, loss_criterion, verbose=True):
+    def run_single_val(self, task_val_examples, task, model, loss_criterion, verbose=True):
         return run_val(
             val_examples=task_val_examples,
             val_dataloader=self.get_single_eval_dataloader(
                 eval_examples=task_val_examples,
                 task=task,
             ),
-            model=self.model,
+            model=model,
             task=task,
             loss_criterion=loss_criterion,
             device=self.device,
