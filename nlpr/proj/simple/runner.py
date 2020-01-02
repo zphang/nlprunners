@@ -3,22 +3,20 @@ import numpy as np
 from dataclasses import dataclass
 
 import torch
-from torch.utils.data import DataLoader, SequentialSampler
 
 from pyutils.display import maybe_tqdm, maybe_trange
 
 from nlpr.shared.runner import (
     BaseRunner,
-    convert_examples_to_dataset,
-    HybridLoader,
     complex_backpropagate,
-    get_sampler,
     TrainGlobalState,
     optim_step_grad_accum,
+    run_val,
+    get_train_dataloader,
+    get_eval_dataloader,
 )
 from nlpr.shared.modeling.models import forward_batch_delegate, compute_loss_from_model_output
 from nlpr.shared.train_setup import TrainSchedule
-import nlpr.tasks.evaluate as evaluate
 from nlpr.shared.torch_utils import compute_pred_entropy_clean
 
 
@@ -50,7 +48,6 @@ class SimpleTaskRunner(BaseRunner):
         self.model = self.model_wrapper.model
 
     def run_train(self, train_examples, verbose=True):
-
         train_dataloader = self.get_train_dataloader(train_examples)
         train_global_state = TrainGlobalState()
 
@@ -129,45 +126,16 @@ class SimpleTaskRunner(BaseRunner):
         })
 
     def run_val(self, val_examples, verbose=True):
-        if not self.rparams.local_rank == -1:
-            return
-        self.model.eval()
-        val_dataloader = self.get_eval_dataloader(val_examples)
-        total_eval_loss = 0
-        nb_eval_steps, nb_eval_examples = 0, 0
-        all_logits = []
-        for step, (batch, batch_metadata) in enumerate(
-                maybe_tqdm(val_dataloader, desc="Evaluating (Val)", verbose=verbose)):
-            batch = batch.to(self.device)
-
-            with torch.no_grad():
-                logits = forward_batch_delegate(
-                    model=self.model,
-                    batch=batch,
-                    omit_label_ids=True,
-                    task_type=self.task.TASK_TYPE,
-                )[0]
-                tmp_eval_loss = compute_loss_from_model_output(
-                    logits=logits,
-                    loss_criterion=self.loss_criterion,
-                    batch=batch,
-                    task_type=self.task.TASK_TYPE,
-                )
-
-            logits = logits.detach().cpu().numpy()
-            total_eval_loss += tmp_eval_loss.mean().item()
-
-            nb_eval_examples += len(batch)
-            nb_eval_steps += 1
-            all_logits.append(logits)
-        eval_loss = total_eval_loss / nb_eval_steps
-        all_logits = np.concatenate(all_logits, axis=0)
-
-        return {
-            "logits": all_logits,
-            "loss": eval_loss,
-            "metrics": evaluate.compute_task_metrics(self.task, all_logits, val_examples),
-        }
+        return run_val(
+            val_examples=val_examples,
+            val_dataloader=self.get_eval_dataloader(val_examples),
+            model=self.model,
+            task=self.task,
+            loss_criterion=self.loss_criterion,
+            device=self.device,
+            local_rank=self.rparams.local_rank,
+            verbose=verbose,
+        )
 
     def run_test(self, test_examples, verbose=True):
         test_dataloader = self.get_eval_dataloader(test_examples)
@@ -190,45 +158,23 @@ class SimpleTaskRunner(BaseRunner):
         return all_logits
 
     def get_train_dataloader(self, train_examples, verbose=True):
-        dataset_with_metadata = convert_examples_to_dataset(
-            examples=train_examples,
-            feat_spec=self.rparams.feat_spec,
+        return get_train_dataloader(
+            train_examples=train_examples,
+            task=self.task,
             tokenizer=self.model_wrapper.tokenizer,
-            task=self.task,
-            verbose=verbose,
-        )
-        train_sampler = get_sampler(
-            dataset=dataset_with_metadata.dataset,
+            feat_spec=self.rparams.feat_spec,
             local_rank=self.rparams.local_rank,
-        )
-        train_dataloader = DataLoader(
-            dataset=dataset_with_metadata.dataset,
-            sampler=train_sampler,
-            batch_size=self.train_schedule.train_batch_size,
-        )
-        return HybridLoader(
-            dataloader=train_dataloader,
-            metadata=dataset_with_metadata.metadata,
-            task=self.task,
+            train_batch_size=self.train_schedule.train_batch_size,
+            verbose=verbose,
         )
 
     def get_eval_dataloader(self, eval_examples):
-        dataset_with_metadata = convert_examples_to_dataset(
-            examples=eval_examples,
-            feat_spec=self.rparams.feat_spec,
+        return get_eval_dataloader(
+            eval_examples=eval_examples,
+            task=self.task,
             tokenizer=self.model_wrapper.tokenizer,
-            task=self.task,
-        )
-        eval_sampler = SequentialSampler(dataset_with_metadata.dataset)
-        eval_dataloader = DataLoader(
-            dataset=dataset_with_metadata.dataset,
-            sampler=eval_sampler,
-            batch_size=self.rparams.eval_batch_size,
-        )
-        return HybridLoader(
-            dataloader=eval_dataloader,
-            metadata=dataset_with_metadata.metadata,
-            task=self.task,
+            feat_spec=self.rparams.feat_spec,
+            eval_batch_size=self.rparams.eval_batch_size,
         )
 
     def complex_backpropagate(self, loss):

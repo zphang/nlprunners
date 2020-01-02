@@ -54,6 +54,16 @@ class ModelArchitectures(Enum):
         else:
             raise KeyError(str(ptt_model))
 
+    @classmethod
+    def is_ptt_model_arch(cls, model_arch):
+        return model_arch in [
+            cls.BERT,
+            cls.XLNET,
+            cls.XLM,
+            cls.ROBERTA,
+            cls.ALBERT,
+        ]
+
 
 @dataclass
 class ModelClassSpec:

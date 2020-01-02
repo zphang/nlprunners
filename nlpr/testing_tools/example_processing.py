@@ -50,7 +50,7 @@ def get_tokenizer_and_feat_spec(model_config):
     )
     tokenizer = model_setup.get_tokenizer(
         model_type=model_config["model_type"],
-        model_class_spec=model_class_spec,
+        tokenizer_class=model_class_spec.tokenizer_class,
         tokenizer_path=model_config["model_tokenizer_path"],
     )
     return tokenizer, feat_spec

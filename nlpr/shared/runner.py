@@ -1,11 +1,12 @@
 import os
+import numpy as np
 
 from dataclasses import dataclass
 from typing import Dict, Union, NamedTuple
 
 import torch
 import torch.nn as nn
-from torch.utils.data import TensorDataset, RandomSampler, SequentialSampler
+from torch.utils.data import TensorDataset, RandomSampler, SequentialSampler, DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
 from pyutils.display import maybe_tqdm
@@ -14,7 +15,8 @@ import pyutils.io as io
 from nlpr.tasks.core import BatchMixin
 from nlpr.shared.pycore import ExtendedDataClassMixin
 from nlpr.shared.model_setup import OptimizerScheduler
-from nlpr.tasks.lib.shared import TaskTypes
+from nlpr.shared.modeling.models import forward_batch_delegate, compute_loss_from_model_output
+import nlpr.tasks.evaluate as evaluate
 
 
 class BaseRunner:
@@ -161,6 +163,95 @@ def get_sampler(dataset, local_rank, force_sequential=False):
         return RandomSampler(dataset)
     else:
         return DistributedSampler(dataset)
+
+
+def run_val(val_examples, val_dataloader,
+            model, task, loss_criterion,
+            device, local_rank, verbose):
+    if not local_rank == -1:
+        return
+    model.eval()
+    total_eval_loss = 0
+    nb_eval_steps, nb_eval_examples = 0, 0
+    all_logits = []
+    for step, (batch, batch_metadata) in enumerate(
+            maybe_tqdm(val_dataloader, desc="Evaluating (Val)", verbose=verbose)):
+        batch = batch.to(device)
+
+        with torch.no_grad():
+            logits = forward_batch_delegate(
+                model=model,
+                batch=batch,
+                omit_label_ids=True,
+                task_type=task.TASK_TYPE,
+            )[0]
+            tmp_eval_loss = compute_loss_from_model_output(
+                logits=logits,
+                loss_criterion=loss_criterion,
+                batch=batch,
+                task_type=task.TASK_TYPE,
+            )
+
+        logits = logits.detach().cpu().numpy()
+        total_eval_loss += tmp_eval_loss.mean().item()
+
+        nb_eval_examples += len(batch)
+        nb_eval_steps += 1
+        all_logits.append(logits)
+    eval_loss = total_eval_loss / nb_eval_steps
+    all_logits = np.concatenate(all_logits, axis=0)
+
+    return {
+        "logits": all_logits,
+        "loss": eval_loss,
+        "metrics": evaluate.compute_task_metrics(task, all_logits, val_examples),
+    }
+
+
+def get_train_dataloader(train_examples, task,
+                         tokenizer, feat_spec, local_rank, train_batch_size, verbose=True):
+    dataset_with_metadata = convert_examples_to_dataset(
+        examples=train_examples,
+        feat_spec=feat_spec,
+        tokenizer=tokenizer,
+        task=task,
+        verbose=verbose,
+    )
+    train_sampler = get_sampler(
+        dataset=dataset_with_metadata.dataset,
+        local_rank=local_rank,
+    )
+    train_dataloader = DataLoader(
+        dataset=dataset_with_metadata.dataset,
+        sampler=train_sampler,
+        batch_size=train_batch_size,
+    )
+    return HybridLoader(
+        dataloader=train_dataloader,
+        metadata=dataset_with_metadata.metadata,
+        task=task,
+    )
+
+
+def get_eval_dataloader(eval_examples, task,
+                        tokenizer, feat_spec, eval_batch_size):
+    dataset_with_metadata = convert_examples_to_dataset(
+        examples=eval_examples,
+        feat_spec=feat_spec,
+        tokenizer=tokenizer,
+        task=task,
+    )
+    eval_sampler = SequentialSampler(dataset_with_metadata.dataset)
+    eval_dataloader = DataLoader(
+        dataset=dataset_with_metadata.dataset,
+        sampler=eval_sampler,
+        batch_size=eval_batch_size,
+    )
+    return HybridLoader(
+        dataloader=eval_dataloader,
+        metadata=dataset_with_metadata.metadata,
+        task=task,
+    )
 
 
 def complex_backpropagate(loss, optimizer, model,

@@ -18,12 +18,7 @@ class ModelWrapper:
 
 def simple_model_setup(model_type, model_class_spec, config_path, tokenizer_path, task):
     model_arch = ModelArchitectures.from_model_type(model_type)
-    if model_arch in [
-            ModelArchitectures.BERT,
-            ModelArchitectures.XLNET,
-            ModelArchitectures.XLM,
-            ModelArchitectures.ROBERTA,
-            ModelArchitectures.ALBERT]:
+    if ModelArchitectures.is_ptt_model_arch(model_arch):
         return simple_ptt_model_setup(
             model_type=model_type,
             model_class_spec=model_class_spec,
@@ -49,7 +44,7 @@ def simple_ptt_model_setup(model_type, model_class_spec, config_path, tokenizer_
     )
     tokenizer = get_tokenizer(
         model_type=model_type,
-        model_class_spec=model_class_spec,
+        tokenizer_class=model_class_spec.tokenizer_class,
         tokenizer_path=tokenizer_path,
     )
     return ModelWrapper(
@@ -79,7 +74,7 @@ def get_model(model_class_spec, config_path, task):
     return model
 
 
-def get_tokenizer(model_type, model_class_spec, tokenizer_path):
+def get_tokenizer(model_type, tokenizer_class, tokenizer_path):
     model_arch = ModelArchitectures.from_model_type(model_type)
     if model_arch in [ModelArchitectures.BERT]:
         if "-cased" in model_type:
@@ -94,7 +89,7 @@ def get_tokenizer(model_type, model_class_spec, tokenizer_path):
         do_lower_case = False
     else:
         raise RuntimeError(model_type)
-    tokenizer = model_class_spec.tokenizer_class.from_pretrained(
+    tokenizer = tokenizer_class.from_pretrained(
         tokenizer_path, do_lower_case=do_lower_case,
     )
     return tokenizer
