@@ -1,28 +1,23 @@
-import collections as col
 import numpy as np
 from dataclasses import dataclass
 
 import torch
-from torch.utils.data import DataLoader, SequentialSampler
 
-from pyutils.display import maybe_tqdm, maybe_trange
+from pyutils.display import maybe_tqdm
 
 from nlpr.shared.runner import (
     BaseRunner,
-    convert_examples_to_dataset,
-    HybridLoader,
     complex_backpropagate,
-    get_sampler,
     TrainGlobalState,
     optim_step_grad_accum,
-    run_val,
     get_train_dataloader,
     get_eval_dataloader,
 )
-from nlpr.shared.modeling.models import forward_batch_delegate, compute_loss_from_model_output
+from nlpr.shared.modeling.models import compute_loss_from_model_output
 from nlpr.shared.train_setup import TrainSchedule
 import nlpr.tasks.evaluate as evaluate
 from nlpr.shared.torch_utils import compute_pred_entropy_clean
+from nlpr.proj.multitask.modeling import forward_batch_delegate
 
 
 @dataclass
@@ -93,10 +88,11 @@ class MultiTaskRunner(BaseRunner):
         batch = batch.to(self.device)
         task = self.task_dict[task_name]
         logits = forward_batch_delegate(
-            model=self.model.model_dict[task_name],
+            model=self.model,
             batch=batch,
             omit_label_ids=True,
             task_type=task.TASK_TYPE,
+            task_name=task_name,
         )[0]
         loss = compute_loss_from_model_output(
             logits=logits,
@@ -125,8 +121,8 @@ class MultiTaskRunner(BaseRunner):
         val_results_dict = {
             task_name: self.run_single_val(
                 task_val_examples=task_val_examples,
-                task=self.task_dict[task_name],
-                model=self.model.model_dict[task_name],
+                task_name=task_name,
+                model=self.model,
                 loss_criterion=self.loss_criterion_dict[task_name],
                 verbose=verbose,
             )
@@ -143,20 +139,51 @@ class MultiTaskRunner(BaseRunner):
             collated_val_results["metrics"].minor[task_name] = val_results["metrics"].asdict()
         return collated_val_results
 
-    def run_single_val(self, task_val_examples, task, model, loss_criterion, verbose=True):
-        return run_val(
-            val_examples=task_val_examples,
-            val_dataloader=self.get_single_eval_dataloader(
-                eval_examples=task_val_examples,
-                task=task,
-            ),
-            model=model,
+    def run_single_val(self, task_val_examples, task_name, model, loss_criterion, verbose=True):
+        task = self.task_dict[task_name]
+        val_dataloader = self.get_single_eval_dataloader(
+            eval_examples=task_val_examples,
             task=task,
-            loss_criterion=loss_criterion,
-            device=self.device,
-            local_rank=self.rparams.local_rank,
-            verbose=verbose,
         )
+        if not self.rparams.local_rank == -1:
+            return
+        model.eval()
+        total_eval_loss = 0
+        nb_eval_steps, nb_eval_examples = 0, 0
+        all_logits = []
+        for step, (batch, batch_metadata) in enumerate(
+                maybe_tqdm(val_dataloader, desc="Evaluating (Val)", verbose=verbose)):
+            batch = batch.to(self.device)
+
+            with torch.no_grad():
+                logits = forward_batch_delegate(
+                    model=model,
+                    batch=batch,
+                    omit_label_ids=True,
+                    task_type=task.TASK_TYPE,
+                    task_name=task_name,
+                )[0]
+                tmp_eval_loss = compute_loss_from_model_output(
+                    logits=logits,
+                    loss_criterion=loss_criterion,
+                    batch=batch,
+                    task_type=task.TASK_TYPE,
+                )
+
+            logits = logits.detach().cpu().numpy()
+            total_eval_loss += tmp_eval_loss.mean().item()
+
+            nb_eval_examples += len(batch)
+            nb_eval_steps += 1
+            all_logits.append(logits)
+        eval_loss = total_eval_loss / nb_eval_steps
+        all_logits = np.concatenate(all_logits, axis=0)
+
+        return {
+            "logits": all_logits,
+            "loss": eval_loss,
+            "metrics": evaluate.compute_task_metrics(task, all_logits, task_val_examples),
+        }
 
     def get_train_dataloader(self, train_examples, verbose=True):
         train_dataloader_dict = {

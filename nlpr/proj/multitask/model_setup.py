@@ -1,10 +1,9 @@
-import torch.nn as nn
-
 import pyutils
 
 import nlpr.shared.model_resolution as model_resolution
 import nlpr.shared.model_setup as model_setup
 from nlpr.shared.model_resolution import ModelArchitectures
+import nlpr.proj.multitask.modeling as multitask_modeling
 
 
 def setup_multitask_ptt_model(model_type, config_path, tokenizer_path, task_dict):
@@ -47,7 +46,7 @@ def setup_multitask_ptt_model(model_type, config_path, tokenizer_path, task_dict
             set_ptt_encoder(task_model, shared_ptt_encoder)
         model_dict[task_name] = task_model
 
-    multitask_model = MultiTaskModel(
+    multitask_model = multitask_modeling.MultiTaskModel(
         model_dict=model_dict,
         shared_ptt_encoder=shared_ptt_encoder,
     )
@@ -56,16 +55,6 @@ def setup_multitask_ptt_model(model_type, config_path, tokenizer_path, task_dict
         model=multitask_model,
         tokenizer=tokenizer,
     )
-
-
-class MultiTaskModel(nn.Module):
-    def __init__(self, model_dict, shared_ptt_encoder):
-        super().__init__()
-        self.model_dict = nn.ModuleDict(model_dict)
-        self.shared_ptt_encoder = shared_ptt_encoder
-
-    def forward(self, x):
-        raise NotImplementedError("Call direct model_dict")
 
 
 def _get_ptt_encoder_attr(ptt_model):

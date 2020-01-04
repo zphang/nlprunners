@@ -262,7 +262,7 @@ def complex_backpropagate(loss, optimizer, model,
         loss = loss / gradient_accumulation_steps
     if fp16:
         # noinspection PyUnresolvedReferences
-        import amp
+        from apex import amp
         with amp.scale_loss(loss, optimizer) as scaled_loss:
             scaled_loss.backward()
         torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), max_grad_norm)
