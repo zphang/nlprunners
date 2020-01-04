@@ -83,7 +83,7 @@ def write_out(model_config_base_path, task_config_base_path, output_base_path, m
         for task_name, task_config_path in tqdm.tqdm(task_config_path_dict.items(), total=len(task_config_path_dict)):
             if task_name in TASK_EXCLUSION_LS:
                 continue
-            task = tasks.create_task_from_config_path(config_path=task_config_path)
+            task = tasks.create_task_from_config_path(config_path=task_config_path, verbose=True)
             examples = task.get_train_examples()
             output = get_tokenized_featurized(
                 examples=examples,

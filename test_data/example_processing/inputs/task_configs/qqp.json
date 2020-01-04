@@ -1,0 +1,6 @@
+{
+  "task": "qqp",
+  "paths": {
+    "train": "../task_data/qqp.json"
+  }
+}

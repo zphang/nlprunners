@@ -1,0 +1,6 @@
+{
+  "task": "cola",
+  "paths": {
+    "train": "../task_data/cola.json"
+  }
+}

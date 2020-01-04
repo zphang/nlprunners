@@ -1,0 +1,20 @@
+{"premise": "The woman had an infection.", "choice1": "She took antibiotics.", "choice2": "She washed her hands.", "question": "effect", "label": 0, "idx": 311}
+{"premise": "The woman was wrongly convicted for the crime.", "choice1": "The jury was fair.", "choice2": "She was framed.", "question": "cause", "label": 1, "idx": 229}
+{"premise": "The scientist conducted an experiment.", "choice1": "She validated her theory.", "choice2": "She fabricated her data.", "question": "effect", "label": 0, "idx": 337}
+{"premise": "The print on the brochure was tiny.", "choice1": "The man put his glasses on.", "choice2": "The man retrieved a pen from his pocket.", "question": "effect", "label": 0, "idx": 396}
+{"premise": "My breath smelled of garlic.", "choice1": "I wiped my mouth.", "choice2": "I brushed my teeth.", "question": "effect", "label": 1, "idx": 162}
+{"premise": "The young woman was denied entrance into the bar.", "choice1": "Her friends stood her up.", "choice2": "She forgot her ID.", "question": "cause", "label": 1, "idx": 180}
+{"premise": "The parents recognized their daughter's creativity.", "choice1": "They taught her how to ride a bike.", "choice2": "They encouraged her to become an artist.", "question": "effect", "label": 1, "idx": 152}
+{"premise": "I drank a cup of coffee.", "choice1": "My yawning ceased.", "choice2": "I nodded off to sleep.", "question": "effect", "label": 0, "idx": 276}
+{"premise": "The skier slipped on the slope.", "choice1": "She dropped her ski poles.", "choice2": "She hit a patch of ice.", "question": "cause", "label": 1, "idx": 395}
+{"premise": "My feet were blistered.", "choice1": "I went hiking.", "choice2": "I went swimming.", "question": "cause", "label": 0, "idx": 270}
+{"premise": "The leader received praise.", "choice1": "He fought poverty.", "choice2": "He raised taxes.", "question": "cause", "label": 0, "idx": 264}
+{"premise": "The print on the brochure was tiny.", "choice1": "The man put his glasses on.", "choice2": "The man retrieved a pen from his pocket.", "question": "effect", "label": 0, "idx": 396}
+{"premise": "The family postponed the barbeque.", "choice1": "The forecast called for storms.", "choice2": "It was a holiday weekend.", "question": "cause", "label": 0, "idx": 242}
+{"premise": "The police closed the investigation.", "choice1": "They apprehended the suspect.", "choice2": "The victim recovered.", "question": "cause", "label": 0, "idx": 342}
+{"premise": "Air pollution in the city worsened.", "choice1": "Factories increased their production.", "choice2": "Factories shut down.", "question": "cause", "label": 0, "idx": 392}
+{"premise": "The pharmaceutical company recalled the drug.", "choice1": "Users reported dangerous side effects.", "choice2": "Users got refills on their prescriptions.", "question": "cause", "label": 0, "idx": 105}
+{"premise": "The woman presented her brother with a gift.", "choice1": "Her brother refused to accept the gift.", "choice2": "Her brother unwrapped the gift.", "question": "effect", "label": 1, "idx": 317}
+{"premise": "The mother suspected that her son was lying.", "choice1": "He refused to talk to her.", "choice2": "He avoided making eye contact with her.", "question": "cause", "label": 1, "idx": 179}
+{"premise": "The executive decided not to hire the applicant.", "choice1": "The applicant failed a background check.", "choice2": "The applicant had experience for the job.", "question": "cause", "label": 0, "idx": 42}
+{"premise": "The man craved a cigarette.", "choice1": "His family urged him to quit smoking.", "choice2": "He was addicted to nicotine.", "question": "cause", "label": 1, "idx": 76}

@@ -1,0 +1,6 @@
+{
+  "task": "qnli",
+  "paths": {
+    "train": "../task_data/qnli.json"
+  }
+}

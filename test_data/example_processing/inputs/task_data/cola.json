@@ -1,0 +1,20 @@
+{"guid": "train-311", "text_a": "Who did John think that Bill claimed that Mary suspected that everybody liked?", "label": "1"}
+{"guid": "train-2789", "text_a": "Steve pelted acorns against Anna.", "label": "0"}
+{"guid": "train-4248", "text_a": "He kicked you.", "label": "1"}
+{"guid": "train-788", "text_a": "To go abroad would be nice.", "label": "1"}
+{"guid": "train-270", "text_a": "You give every senator enough opportunity and he will succumb to corruption.", "label": "0"}
+{"guid": "train-6998", "text_a": "The scene of the movie was in Chicago.", "label": "1"}
+{"guid": "train-6536", "text_a": "Who did you wonder if came?", "label": "0"}
+{"guid": "train-7485", "text_a": "He will not endorse the treaty; and indeed.", "label": "1"}
+{"guid": "train-7859", "text_a": "He'll no can do it, will he?", "label": "1"}
+{"guid": "train-1502", "text_a": "It was tomorrow that I promised that he would be there.", "label": "1"}
+{"guid": "train-6020", "text_a": "The cat had eaten.", "label": "1"}
+{"guid": "train-589", "text_a": "the logs piled the barge high.", "label": "0"}
+{"guid": "train-424", "text_a": "My car was stolen.", "label": "1"}
+{"guid": "train-5129", "text_a": "That brought the letter is Bill.", "label": "0"}
+{"guid": "train-5385", "text_a": "She has enough a problem as it is.", "label": "0"}
+{"guid": "train-1792", "text_a": "Sodium is a little too peppy for me to want to try mixing and water in a teacup.", "label": "0"}
+{"guid": "train-3336", "text_a": "Italy borders France.", "label": "1"}
+{"guid": "train-6651", "text_a": "Barbara handed them to Alan on Tuesday.", "label": "1"}
+{"guid": "train-1605", "text_a": "If I can, I will work on it.", "label": "1"}
+{"guid": "train-1173", "text_a": "I know a man who John is as tall as.", "label": "1"}

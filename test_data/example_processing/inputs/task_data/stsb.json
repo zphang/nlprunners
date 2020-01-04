@@ -1,0 +1,20 @@
+{"guid": "train-2461", "text_a": "South Asia follows, with 1.1 millions youths infected \u2014 62 percent of them female.", "text_b": "Of the 1.1 million infected in south Asia, 62% are female.", "label": 4.0}
+{"guid": "train-312", "text_a": "A man is playing keyboard.", "text_b": "A person is playing a piano.", "label": 2.2}
+{"guid": "train-2790", "text_a": "The tech-heavy Nasdaq composite index fell 3.99, or 0.2 percent, to 1,682.72, following a two-day win of 55.93.", "text_b": "The technology-laced Nasdaq Composite Index .IXIC eased 8.52 points, or 0.51 percent, to 1,670.21.", "label": 1.5}
+{"guid": "train-3410", "text_a": "Unit volumes also set a record as notebooks accounted for more than 40 percent of sales.", "text_b": "In May 2002, LCDs accounted for only 22 percent of monitor sales.", "label": 1.2}
+{"guid": "train-3469", "text_a": "the conventional forces in europe treaty limits the number of military aircraft, tanks and other non-nuclear heavy weapons in europe.", "text_b": "the conventional forces in europe treaty was signed by russian and nato members in 1990.", "label": 2.8}
+{"guid": "train-675", "text_a": "A person is cutting a potato.", "text_b": "A person is slicing a shallot.", "label": 1.0}
+{"guid": "train-2741", "text_a": "Niels told an interviewer in 1999 he thought the Old Man would outlive him by many years.", "text_b": "In 1999, two years before his death, Mr. Nielsen told an interviewer that he thought the rock face would outlive him by many years.", "label": 3.0}
+{"guid": "train-4249", "text_a": "Dozens killed in Nigerian riots", "text_b": "Dozens killed in Kenyan clashes", "label": 1.0}
+{"guid": "train-789", "text_a": "A soccer player is kicking the soccer ball into the goal from a long way down the field.", "text_b": "A soccer player kicks the ball into the goal.", "label": 3.25}
+{"guid": "train-3980", "text_a": "GOP candidate Romney to call to arm Syrian rebels", "text_b": "US helping get arms to Syria rebels", "label": 2.4}
+{"guid": "train-271", "text_a": "A person is cutting some burrata cheese.", "text_b": "The person is slicing cheese.", "label": 3.8}
+{"guid": "train-2825", "text_a": "Authorities in Ohio, Indiana and Michigan have searched for the bodies.", "text_b": "So far, authorities also have searched areas in Pennsylvania, Ohio, Indiana, and Michigan.", "label": 2.8}
+{"guid": "train-5607", "text_a": "Obama orders Syria 'gas attack' inquiry", "text_b": "UN urges Syria gas attack inspection", "label": 2.0}
+{"guid": "train-5615", "text_a": "Thai protests escalate amid violence", "text_b": "Thai protesters call general strike", "label": 3.0}
+{"guid": "train-4202", "text_a": "The murky waters of the South China Sea", "text_b": "Peace lies over the South China Sea", "label": 1.4}
+{"guid": "train-5197", "text_a": "Suicide bomber kills 13 at restaurant in central Somalia", "text_b": "Suicide bomber kills at least 4 in Kabul", "label": 1.8}
+{"guid": "train-1503", "text_a": "A brown dog digging a hole in front of a plant", "text_b": "A group of people walking on the side of a railroad track.", "label": 0.0}
+{"guid": "train-4303", "text_a": "Spain jobless rate hits new high", "text_b": "Spain's jobless claims hit new high", "label": 4.2}
+{"guid": "train-5325", "text_a": "S Korea MPs to visit Kaesong complex", "text_b": "S. Korea demands talks with N. Korea on closed factory", "label": 1.4}
+{"guid": "train-590", "text_a": "A woman is slicing a carrot.", "text_b": "A man is slicing a tomato.", "label": 1.2}

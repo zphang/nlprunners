@@ -1,0 +1,6 @@
+{
+  "task": "mrpc",
+  "paths": {
+    "train": "../task_data/mrpc.json"
+  }
+}

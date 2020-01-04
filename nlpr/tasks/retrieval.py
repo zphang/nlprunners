@@ -1,3 +1,5 @@
+import os
+
 from nlpr.tasks.lib.anli import AnliTask
 from nlpr.tasks.lib.amazon import AmazonPolarityTask
 from nlpr.tasks.lib.commitmentbank import CommitmentBankTask
@@ -22,6 +24,8 @@ from nlpr.tasks.lib.sst import SstTask
 from nlpr.tasks.lib.stsb import StsbTask
 from nlpr.tasks.lib.wnli import WnliTask
 from nlpr.tasks.lib.shared import Task
+
+import nlpr.shared.path_utils as path_utils
 
 from pyutils.io import read_json
 
@@ -65,8 +69,13 @@ def get_task_class(task_name):
     return task_class
 
 
-def create_task_from_config(config: dict, verbose=False):
+def create_task_from_config(config: dict, base_path=None, verbose=False):
     task_class = get_task_class(config["task"])
+    for k in config["paths"].keys():
+        path = config["paths"][k]
+        if not os.path.isabs(path):
+            assert base_path
+            config["paths"][k] = os.path.join(base_path, path)
     if verbose:
         print(task_class.__name__)
         for k, v in config["paths"].items():
@@ -75,4 +84,8 @@ def create_task_from_config(config: dict, verbose=False):
 
 
 def create_task_from_config_path(config_path: str, verbose=False):
-    return create_task_from_config(read_json(config_path), verbose=verbose)
+    return create_task_from_config(
+        read_json(config_path),
+        base_path=os.path.split(config_path)[0],
+        verbose=verbose
+    )

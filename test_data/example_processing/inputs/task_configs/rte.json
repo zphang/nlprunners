@@ -1,0 +1,6 @@
+{
+  "task": "rte",
+  "paths": {
+    "train": "../task_data/rte.json"
+  }
+}

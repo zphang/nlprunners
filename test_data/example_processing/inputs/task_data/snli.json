@@ -1,0 +1,20 @@
+{"guid": "train-387485", "text_a": "A person in black glasses takes a drink from a shot glass.", "text_b": "A person has black glasses on.", "label": "entailment"}
+{"guid": "train-377144", "text_a": "A football player for the Sooners is preparing for the next play during a game.", "text_b": "The person is enrolled in college.", "label": "entailment"}
+{"guid": "train-372050", "text_a": "A boy riding a zip line and another behind him waiting his turn.", "text_b": "The boy is wearing red.", "label": "neutral"}
+{"guid": "train-290189", "text_a": "A mother and her child attending a concert.", "text_b": "The mother is making soup in the kitchen.", "label": "contradiction"}
+{"guid": "train-118937", "text_a": "A group of old people gathered around in a circle.", "text_b": "A young group of party goers were having a blast.", "label": "contradiction"}
+{"guid": "train-243607", "text_a": "A man surfs on a huge green wave.", "text_b": "The man is in the water.", "label": "entailment"}
+{"guid": "train-789", "text_a": "Three girls on an amusement ride enjoying themselves.", "text_b": "The girls are at home", "label": "contradiction"}
+{"guid": "train-521703", "text_a": "A man in a green shirt and black shorts has jumped into the air and is about to throw a red and white ball.", "text_b": "A man is pitching a baseball to the batter.", "label": "neutral"}
+{"guid": "train-326541", "text_a": "A woman wearing an olive green jacket and navy shirt looks tired as she comes up the steps from the subway.", "text_b": "The woman just got off a subway train.", "label": "neutral"}
+{"guid": "train-458483", "text_a": "A person is running up a field with a football.", "text_b": "running on the field", "label": "entailment"}
+{"guid": "train-6537", "text_a": "Constructions workers are working on a building.", "text_b": "People working on a building", "label": "entailment"}
+{"guid": "train-178111", "text_a": "There are four girls three in a dress and on in jeans and a shirt.", "text_b": "There are girls in clothes.", "label": "entailment"}
+{"guid": "train-73022", "text_a": "A man wearing an orange hard hat is feeding brush into an orange wood chipper.", "text_b": "There is a man in a red hard hat.", "label": "contradiction"}
+{"guid": "train-242765", "text_a": "A woman looks out over the water dressed in a blue dress, white shirt, and green leafy headwear.", "text_b": "The woman has sandals on.", "label": "neutral"}
+{"guid": "train-307407", "text_a": "A couple in a red canoe paddle down a rough river lined with trees.", "text_b": "Two people are outside", "label": "entailment"}
+{"guid": "train-432005", "text_a": "Two girls lounge in camp chairs around a campfire.", "text_b": "Two people lounge in camp chairs around a campfire.", "label": "entailment"}
+{"guid": "train-82345", "text_a": "The dog is swimming across the water.", "text_b": "The dog swims outside.", "label": "entailment"}
+{"guid": "train-218378", "text_a": "A crowd is gathering around a large fire at night.", "text_b": "The people are all standing in the ocean.", "label": "contradiction"}
+{"guid": "train-80344", "text_a": "A woman swinging a boy in a circle.", "text_b": "A boy is swinging a woman in a circle.", "label": "contradiction"}
+{"guid": "train-63507", "text_a": "One horse has wraps around its legs.", "text_b": "A sheep and a mule.", "label": "contradiction"}

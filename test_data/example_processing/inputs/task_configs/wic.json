@@ -1,0 +1,6 @@
+{
+  "task": "wic",
+  "paths": {
+    "train": "../task_data/wic.json"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "task": "wsc",
+  "paths": {
+    "train": "../task_data/wsc.json"
+  }
+}

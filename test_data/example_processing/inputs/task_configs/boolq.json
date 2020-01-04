@@ -1,0 +1,6 @@
+{
+  "task": "boolq",
+  "paths": {
+    "train": "../task_data/boolq.json"
+  }
+}

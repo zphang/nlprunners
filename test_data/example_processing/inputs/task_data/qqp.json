@@ -1,0 +1,20 @@
+{"guid": "train-330489", "text_a": "How can we improve our brain power?", "text_b": "How do I improve my brain power?", "label": "1"}
+{"guid": "train-290203", "text_a": "Outer Space: The last hundred years took us from the invention of manned flight to the edge of the solar system. Hypothetically and realistically, what could be achieved in the next hundred years in the field?", "text_b": "Could a metallic planet being ripped apart by tidal forces explain what has been happening to \u201cKIC-8462852\u201d in the last hundred years of observation?", "label": "0"}
+{"guid": "train-74405", "text_a": "How do I create VPN software?", "text_b": "How would you create a VPN?", "label": "0"}
+{"guid": "train-223938", "text_a": "How do I potty train a cat?", "text_b": "How do I potty train an adult cat?", "label": "1"}
+{"guid": "train-118942", "text_a": "What is Service encounter design?", "text_b": "What is the future of digital design (web, app, product, service, anything digital practically)?", "label": "0"}
+{"guid": "train-243621", "text_a": "Is JavaFX for desktop applications or for web applications?", "text_b": "I have to develop a desktop application in Java. I am using JavaFX framework. Which is the best approach: TDI or MDI?", "label": "0"}
+{"guid": "train-789", "text_a": "What would you do if you were asked to deploy AI on a website or app?", "text_b": "If you were to build a website/web app (think small social network scale) right now, what languages/tools/frameworks/etc. would you use?", "label": "0"}
+{"guid": "train-114964", "text_a": "What is difference between analog and digital signal?", "text_b": "What is the difference between digital signal and analog signal?", "label": "1"}
+{"guid": "train-326559", "text_a": "How can I wake up early in the morning?", "text_b": "How can I get up early in the morning?", "label": "1"}
+{"guid": "train-46577", "text_a": "Is it OK to fear fear itself?", "text_b": "Is there any word for 'fear of fear' itself?", "label": "0"}
+{"guid": "train-6537", "text_a": "Why do most Americans not use WhatsApp?", "text_b": "Can Americans use WhatsApp?", "label": "0"}
+{"guid": "train-178121", "text_a": "Why do people hate Aishwarya Rai?", "text_b": "Why do some Indians hate Bollywood actress Aishwarya Rai?", "label": "1"}
+{"guid": "train-73024", "text_a": "Is there any cure for Alopecia Areata?", "text_b": "What are the treatments for Alopecia Areata?", "label": "0"}
+{"guid": "train-351944", "text_a": "Why my hands sweat a lot?", "text_b": "Why does my palm sweat so much?", "label": "1"}
+{"guid": "train-196151", "text_a": "How do I find the best seo company in dellhi ncr?", "text_b": "What is the best SEO company in Delhi, India?", "label": "1"}
+{"guid": "train-242779", "text_a": "Is it true that you can see who\u2019s viewed your Instagram?", "text_b": "Is there a way to see who viewed my Instagram page?", "label": "1"}
+{"guid": "train-307423", "text_a": "How do I create fake WhatsApp account?", "text_b": "Which message is the most fake one in WhatsApp?", "label": "0"}
+{"guid": "train-292059", "text_a": "Did Queen Elizabeth have a good relationship with Edward VIII and Wallis Simpson?", "text_b": "Does Queen Elizabeth II own 1/6 of Earth\u2019s land?", "label": "0"}
+{"guid": "train-279132", "text_a": "What is a cool name for a hooded superhero that usually fights at night?", "text_b": "What's the best generator for cool character name", "label": "0"}
+{"guid": "train-82347", "text_a": "Does an IAS officer have bodyguards?", "text_b": "What is UPSC and MPSC?", "label": "0"}

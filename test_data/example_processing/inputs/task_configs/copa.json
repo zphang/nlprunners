@@ -1,0 +1,6 @@
+{
+  "task": "copa",
+  "paths": {
+    "train": "../task_data/copa.json"
+  }
+}
