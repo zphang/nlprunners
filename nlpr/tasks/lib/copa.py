@@ -24,8 +24,7 @@ class Example(BaseExample):
             input_premise=tokenizer.tokenize(self.input_premise),
             input_choice1=tokenizer.tokenize(self.input_choice1),
             input_choice2=tokenizer.tokenize(self.input_choice2),
-            # Safe assumption that question is a single word
-            question=tokenizer.tokenize(self.question)[0],
+            question=tokenizer.tokenize(self.question),
             label_id=CopaTask.LABEL_BIMAP.a[self.label],
         )
 
@@ -44,38 +43,34 @@ class TokenizedExample(BaseTokenizedExample):
         if feat_spec.sep_token_extra:
             maybe_extra_sep = [tokenizer.sep_token]
             maybe_extra_sep_segment_id = [feat_spec.sequence_a_segment_id]
-            special_tokens_count = 6  # CLS, SEP-SEP, SEP-SEP, SEP
+            special_tokens_count = 4  # CLS, SEP-SEP, SEP
         else:
             maybe_extra_sep = []
             maybe_extra_sep_segment_id = []
-            special_tokens_count = 4  # CLS, SEP, SEP, SEP
+            special_tokens_count = 3  # CLS, SEP, SEP
 
-        input_premise, input_choice1 = truncate_sequences(
-            tokens_ls=[self.input_premise, self.input_choice1],
-            max_length=feat_spec.max_seq_length - special_tokens_count - 1,
-            # -1 for self.question
+        input_premise, question, input_choice1 = truncate_sequences(
+            tokens_ls=[self.input_premise, self.question, self.input_choice1],
+            max_length=feat_spec.max_seq_length - special_tokens_count,
         )
-        input_premise, input_choice2 = truncate_sequences(
-            tokens_ls=[self.input_premise, self.input_choice2],
-            max_length=feat_spec.max_seq_length - special_tokens_count - 1,
-            # -1 for self.question
+        input_premise, question, input_choice2 = truncate_sequences(
+            tokens_ls=[self.input_premise, self.question, self.input_choice2],
+            max_length=feat_spec.max_seq_length - special_tokens_count,
         )
 
         unpadded_inputs_1 = add_cls_token(
             unpadded_tokens=(
-                [self.question] + [tokenizer.sep_token] + maybe_extra_sep
-                + input_premise + [tokenizer.sep_token] + maybe_extra_sep
-                + input_choice1 + [tokenizer.sep_token]
+                # premise
+                input_premise + [tokenizer.sep_token] + maybe_extra_sep
+                # question + choice
+                + question + input_choice1 + [tokenizer.sep_token]
             ),
             unpadded_segment_ids=(
-                # question + sep(s)
-                [feat_spec.sequence_a_segment_id] * 2
-                + maybe_extra_sep_segment_id
-                # premise + sep(s)
-                + [feat_spec.sequence_a_segment_id] * (len(input_premise) + 1)
+                # premise
+                [feat_spec.sequence_a_segment_id] * (len(input_premise) + 1)
                 + maybe_extra_sep_segment_id
                 # choice + sep
-                + [feat_spec.sequence_b_segment_id] * (len(input_choice1) + 1)
+                + [feat_spec.sequence_b_segment_id] * (len(question) + len(input_choice1) + 1)
             ),
             tokenizer=tokenizer,
             feat_spec=feat_spec,
@@ -83,19 +78,17 @@ class TokenizedExample(BaseTokenizedExample):
 
         unpadded_inputs_2 = add_cls_token(
             unpadded_tokens=(
-                [self.question] + [tokenizer.sep_token] + maybe_extra_sep
-                + input_premise + [tokenizer.sep_token] + maybe_extra_sep
-                + input_choice2 + [tokenizer.sep_token]
+                # premise
+                input_premise + [tokenizer.sep_token] + maybe_extra_sep
+                # question + choice
+                + question + input_choice2 + [tokenizer.sep_token]
             ),
             unpadded_segment_ids=(
-                # question + sep(s)
-                [feat_spec.sequence_a_segment_id] * 2
-                + maybe_extra_sep_segment_id
-                # premise + sep(s)
-                + [feat_spec.sequence_a_segment_id] * (len(input_premise) + 1)
+                # premise
+                [feat_spec.sequence_a_segment_id] * (len(input_premise) + 1)
                 + maybe_extra_sep_segment_id
                 # choice + sep
-                + [feat_spec.sequence_b_segment_id] * (len(input_choice2) + 1)
+                + [feat_spec.sequence_b_segment_id] * (len(question) + len(input_choice2) + 1)
             ),
             tokenizer=tokenizer,
             feat_spec=feat_spec,
@@ -146,12 +139,9 @@ class DataRow(BaseDataRow):
 
 @dataclass
 class Batch(BatchMixin):
-    input_ids1: torch.Tensor
-    input_mask1: torch.Tensor
-    segment_ids1: torch.Tensor
-    input_ids2: torch.Tensor
-    input_mask2: torch.Tensor
-    segment_ids2: torch.Tensor
+    input_ids: torch.Tensor
+    input_mask: torch.Tensor
+    segment_ids: torch.Tensor
     label_ids: torch.Tensor
     tokens1: list
     tokens2: list
@@ -159,12 +149,18 @@ class Batch(BatchMixin):
     @classmethod
     def from_data_rows(cls, data_row_ls):
         return Batch(
-            input_ids1=torch.tensor([f.input_ids1 for f in data_row_ls], dtype=torch.long),
-            input_mask1=torch.tensor([f.input_mask1 for f in data_row_ls], dtype=torch.long),
-            segment_ids1=torch.tensor([f.segment_ids1 for f in data_row_ls], dtype=torch.long),
-            input_ids2=torch.tensor([f.input_ids2 for f in data_row_ls], dtype=torch.long),
-            input_mask2=torch.tensor([f.input_mask2 for f in data_row_ls], dtype=torch.long),
-            segment_ids2=torch.tensor([f.segment_ids2 for f in data_row_ls], dtype=torch.long),
+            input_ids=torch.tensor([
+                [f.input_ids1, f.input_ids2]
+                for f in data_row_ls
+            ], dtype=torch.long),
+            input_mask=torch.tensor([
+                [f.input_mask1, f.input_mask2]
+                for f in data_row_ls
+            ], dtype=torch.long),
+            segment_ids=torch.tensor([
+                [f.segment_ids1, f.segment_ids2]
+                for f in data_row_ls
+            ], dtype=torch.long),
             label_ids=torch.tensor([f.label_id for f in data_row_ls], dtype=torch.long),
             tokens1=[f.tokens1 for f in data_row_ls],
             tokens2=[f.tokens2 for f in data_row_ls],
@@ -177,9 +173,15 @@ class CopaTask(Task):
     DataRow = DataRow
     Batch = Batch
 
-    TASK_TYPE = TaskTypes.CLASSIFICATION
+    TASK_TYPE = TaskTypes.MULTIPLE_CHOICE
+    NUM_CHOICES = 2
     LABELS = [0, 1]
     LABEL_BIMAP = labels_to_bimap(LABELS)
+
+    _QUESTION_DICT = {
+        "cause": "What was the cause of this?",
+        "effect": "What happened as a result?",
+    }
 
     def get_train_examples(self):
         return self._create_examples(lines=read_json_lines(self.train_path), set_type="train")
@@ -199,7 +201,7 @@ class CopaTask(Task):
                 input_premise=line["premise"],
                 input_choice1=line["choice1"],
                 input_choice2=line["choice2"],
-                question=line["question"],
+                question=cls._QUESTION_DICT[line["question"]],
                 label=line["label"] if set_type != "test" else cls.LABELS[-1],
             ))
         return examples
