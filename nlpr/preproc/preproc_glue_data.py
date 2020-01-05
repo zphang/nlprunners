@@ -47,7 +47,7 @@ GLUE_CONVERSION = {
             "train": {"cols": {"text_a": 1, "text_b": 2, "label": 3},
                       "meta": {"skiprows": 1}},
             "val": {"cols": {"text_a": 1, "text_b": 2, "label": 3},
-                    "meta": {"skiprows": 1}},
+                    "meta": {"filename": "dev", "skiprows": 1}},
             "test": {"cols": {"text_a": 1, "text_b": 2},
                      "meta": {"skiprows": 1}},
         },
