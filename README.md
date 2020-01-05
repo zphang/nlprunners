@@ -2,11 +2,15 @@
 
 This repository contains code for various NLP fine-tuning/transfer learning experiments, including semi-supervised learning, multi-task training, and adapters. 
 
-**This codebase is heavily WIP.** 
+**This codebase is heavily WIP.**
+
+---- 
 
 ### Quick Setup
 
 * For a quick environment setup, see: [Simple Setup](packaging)
+
+----
 
 ### Dependencies
 
@@ -15,6 +19,8 @@ These are the main notable dependencies. For more, see: [Simple Setup](packaging
 * PyTorch 1.2+
 * HuggingFace/Transformers (usually the latest version. Currently 2.3.0)
 * My own Python utility libraries: [zutils](https://github.com/zphang/zutils)
+
+----
 
 ### Overview
 
@@ -34,6 +40,8 @@ These are the main notable dependencies. For more, see: [Simple Setup](packaging
     * tokenization (`Example.tokenize`), giving a `TokenizedExmaple`. 
     * featurization (`TokenizedExample.featurize`), giving a `DataRow`. This converts the tokenized data into a format that the model can take in (e.g. concatenating inputs, truncating sequence length, adding `[SEP]` tokens.)
     * Conversion to a `Batch` (Batch.from_data_rows`), that our dataloaders know how to split up ` 
+
+----
 
 ### Guiding Principles
 
