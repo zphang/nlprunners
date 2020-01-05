@@ -8,13 +8,13 @@ This repository contains code for various NLP fine-tuning/transfer learning expe
 
 ### Quick Setup
 
-* For a quick environment setup, see: [Simple Setup](packaging)
+* For a quick environment setup, see: [Simple Setup](packaging/simple_setup.md)
 
 ----
 
 ### Dependencies
 
-These are the main notable dependencies. For more, see: [Simple Setup](packaging)
+These are the main notable dependencies. For more, see: [Simple Setup](packaging/simple_setup.md)
 
 * PyTorch 1.2+
 * HuggingFace/Transformers (usually the latest version. Currently 2.3.0)
