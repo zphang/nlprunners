@@ -66,11 +66,11 @@ GLUE_CONVERSION = {
     },
     "rte": {
         "data": {
-            "train": {"cols": {"text_a": 1, "text_b": 2, "label": 3},
+            "train": {"cols": {"premise": 1, "hypothesis": 2, "label": 3},
                       "meta": {"skiprows": 1}},
-            "val": {"cols": {"text_a": 1, "text_b": 2, "label": 3},
+            "val": {"cols": {"premise": 1, "hypothesis": 2, "label": 3},
                     "meta": {"filename": "dev", "skiprows": 1}},
-            "test": {"cols": {"text_a": 1, "text_b": 2},
+            "test": {"cols": {"premise": 1, "hypothesis": 2},
                      "meta": {"skiprows": 1}},
         },
         "dir_name": "RTE",

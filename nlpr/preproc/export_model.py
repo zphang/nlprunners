@@ -8,12 +8,12 @@ import zconf
 
 
 CLASS_LOOKUP = {
-    "bert": (tfm.BertForSequenceClassification, tfm.BertTokenizer),
-    "xlnet": (tfm.XLNetForSequenceClassification, tfm.XLNetTokenizer),
-    "xlm": (tfm.XLMForSequenceClassification, tfm.XLMTokenizer),
-    "roberta": (tfm.RobertaForSequenceClassification, tfm.RobertaTokenizer),
-    "distilbert": (tfm.DistilBertForSequenceClassification, tfm.DistilBertTokenizer),
-    "albert": (tfm.AlbertForSequenceClassification, tfm.AlbertTokenizer),
+    "bert": (tfm.BertForPreTraining, tfm.BertTokenizer),
+    "xlnet": (tfm.XLNetLMHeadModel, tfm.XLNetTokenizer),
+    "xlm": (tfm.XLMWithLMHeadModel, tfm.XLMTokenizer),
+    "roberta": (tfm.RobertaForMaskedLM, tfm.RobertaTokenizer),
+    "distilbert": (tfm.DistilBertForMaskedLM, tfm.DistilBertTokenizer),
+    "albert": (tfm.AlbertForMaskedLM, tfm.AlbertTokenizer),
 }
 
 

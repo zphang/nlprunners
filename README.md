@@ -18,7 +18,7 @@ These are the main notable dependencies. For more, see: [Simple Setup](packaging
 
 * PyTorch 1.2+
 * HuggingFace/Transformers (usually the latest version. Currently 2.3.0)
-* My own Python utility libraries: [zutils](https://github.com/zphang/zutils)
+* My own set of Python utility libraries: [zutils](https://github.com/zphang/zutils)
 
 ----
 
@@ -50,3 +50,4 @@ These are the main notable dependencies. For more, see: [Simple Setup](packaging
 * Explicit is better than implicit. Use classes rather than dicts for known data structures, refrain from using `kwargs`, use keyword arguments where possible, etc
 * Verbose is better than implicit. Use an IDE.
 * There should be a clean separation of messy "research" code, and solid "software engineering" code.
+* [PEP 8](https://www.python.org/dev/peps/pep-0008/), [PEP 20](https://www.python.org/dev/peps/pep-0020/) 

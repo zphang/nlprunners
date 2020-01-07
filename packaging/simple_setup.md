@@ -68,7 +68,7 @@ python nlprunners/nlpr/preproc/export_model.py \
 
 ### 5. Train!
 
-Fine-tune *RoBERTa-Base* to MRPC. Note the use of the `--ZZsrc` flag, which uses values from `models/roberta-base/config.json` as additional command-line arguments, so we don't have to individually specify `model_type`, `model_path`, `model_config_path`, and `model_tokenizer_path`.
+Fine-tune *RoBERTa-Base* to MRPC. Note the use of the `--ZZsrc` flag, which uses values from `models/roberta-base/config.json` as additional command-line arguments, so we don't have to individually specify `--model_type`, `--model_path`, `--model_config_path`, and `--model_tokenizer_path`.
 
 ```bash
 python nlprunners/nlpr/proj/simple/runscript.py \
