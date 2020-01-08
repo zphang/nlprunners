@@ -63,3 +63,17 @@ class IdentityModule(nn.Module):
 def set_requires_grad(named_parameters, requires_grad):
     for name, param in named_parameters:
         param.requires_grad = requires_grad
+
+
+def get_only_requires_grad(parameters, requires_grad=True):
+    if isinstance(parameters, list):
+        if not parameters:
+            return []
+        elif isinstance(parameters[0], tuple):
+            return [(n, p) for n, p in parameters if p.requires_grad == requires_grad]
+        else:
+            return [p for p in parameters if p.requires_grad == requires_grad]
+    elif isinstance(parameters, dict):
+        return {n: p for n, p in parameters if p.requires_grad == requires_grad}
+    else:
+        raise RuntimeError("todo: support generators")

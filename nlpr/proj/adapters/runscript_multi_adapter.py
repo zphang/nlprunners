@@ -116,6 +116,10 @@ def main(args):
         model_path=args.model_path,
     )
     adapter_weights_dict = multi_adapters.load_adapter_weights_dict_path(args.adapter_weights_path)
+    adapter_weights_dict = multi_adapters.isolate_adapter_weights_dict(
+        adapter_weights_dict=adapter_weights_dict,
+        model_type=args.model_type,
+    )
     sub_module_name_list = list(adapter_weights_dict.keys())
     modified_layers = multi_adapters.add_multi_adapters(
         model=model_wrapper.model,

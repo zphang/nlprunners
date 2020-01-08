@@ -183,6 +183,17 @@ MODEL_CLASS_DICT = {
 }
 
 
+# This assumes that there is a single encoder module per model
+# It is very possible that this abstraction will be broken in the future
+MODEL_ENCODER_PREFIX_DICT = {
+    ModelArchitectures.BERT: "bert",
+    ModelArchitectures.XLNET: "transformer",
+    ModelArchitectures.XLM: "transformer",
+    ModelArchitectures.ROBERTA: "roberta",
+    ModelArchitectures.ALBERT: "albert",
+}
+
+
 def resolve_model_setup_classes(model_type, task_type):
     model_arch = ModelArchitectures.from_model_type(model_type)
     if model_arch == ModelArchitectures.BERT:

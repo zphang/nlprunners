@@ -717,6 +717,35 @@ def load_adapter_weights_dict_path(path):
     return load_adapter_weights_dict(io.read_json(path))
 
 
+def isolate_adapter_weights(adapter_weights: dict, model_type):
+    # Using heuristics, unfortunately
+    model_arch = model_resolution.ModelArchitectures.from_model_type(model_type)
+    prefix = model_resolution.MODEL_ENCODER_PREFIX_DICT[model_arch]
+
+    new_weights_dict = {}
+    for k, v in adapter_weights.items():
+        if "adapter" in k or "LayerNorm" in k:
+            assert k.startswith(prefix)
+            new_k = k.replace(f"{prefix}.", "", 1)
+            new_weights_dict[new_k] = v
+            print(f"{k} ==> {new_k}")
+        elif startswith_one_of(k, ["classifier"]):  # will likely need to expand this
+            continue
+        elif startswith_one_of(k, ["classifier", f"{prefix}.pooler"]):
+            # will likely need to expand this list
+            continue
+        else:
+            raise KeyError
+    return new_weights_dict
+
+
+def isolate_adapter_weights_dict(adapter_weights_dict, model_type):
+    return {
+        k: isolate_adapter_weights(v, model_type=model_type)
+        for k, v in adapter_weights_dict.items()
+    }
+
+
 def get_tunable_parameters(model, modified_layers, ft_mode):
     if ft_mode == "base":
         torch_utils.set_requires_grad(model.named_parameters(), requires_grad=False)
@@ -742,3 +771,10 @@ def get_tunable_parameters(model, modified_layers, ft_mode):
 
 def list_exclude(ls, to_exclude):
     return [x for x in ls if x not in to_exclude]
+
+
+def startswith_one_of(string: str, prefix_ls: list):
+    for prefix in prefix_ls:
+        if string.startswith(prefix):
+            return True
+    return False

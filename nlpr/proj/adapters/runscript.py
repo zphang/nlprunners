@@ -14,6 +14,7 @@ import nlpr.proj.simple.runner as simple_runner
 import nlpr.shared.metarunner as metarunner
 import nlpr.proj.adapters.modeling as adapters
 import nlpr.proj.adapters.model_setup as adapters_model_setup
+import nlpr.shared.torch_utils as torch_utils
 
 
 @zconf.run_config
@@ -36,7 +37,8 @@ class RunConfiguration(zconf.RunConfig):
     do_train = zconf.attr(action='store_true')
     do_val = zconf.attr(action='store_true')
     do_test = zconf.attr(action='store_true')
-    do_save = zconf.attr(action="store_true")
+    do_save = zconf.attr(action="store_true", help="save adapter weights")
+    do_save_full = zconf.attr(action="store_true", help="save_full_model_weights")
     eval_every_steps = zconf.attr(type=int, default=0)
     save_every_steps = zconf.attr(type=int, default=0)
     partial_eval_number = zconf.attr(type=int, default=1000)
@@ -89,7 +91,7 @@ def main(args):
         )
         adapters.load_non_adapter_base_weights(
             model=model_wrapper.model,
-            state_dict=torch.load(args.model_path)
+            state_dict=torch.load(args.model_path),
         )
         adapters.add_adapters(model_wrapper.model, adapter_config=adapters.AdapterConfig())
         model_wrapper.model.to(quick_init_out.device)
@@ -161,21 +163,22 @@ def main(args):
                 should_eval_func=metarunner.get_should_eval_func(args.eval_every_steps),
                 output_dir=args.output_dir,
                 verbose=True,
-                save_best_model=args.do_save,
+                save_best_model=args.do_save_full,
                 load_best_model=True,
                 log_writer=quick_init_out.log_writer,
             ).train_val_save_every()
 
-        if args.do_save:
+        if args.do_save or args.do_save_full:
             state_dict = model_wrapper.model.state_dict()
-            saved_state_dict = {
-                k: state_dict[k]
-                for k, _ in named_parameters
-            }
-            torch.save(
-                saved_state_dict,
-                os.path.join(args.output_dir, "model.p")
-            )
+            if args.do_save:
+                trained_state_dict = {
+                    k: state_dict[k]
+                    for k, _ in torch_utils.get_only_requires_grad(named_parameters)
+                }
+                torch.save(trained_state_dict, os.path.join(args.output_dir, "model.p"))
+
+            if args.do_save_full:
+                torch.save(state_dict, os.path.join(args.output_dir, "full_model.p"))
 
         if args.do_val:
             val_examples = task.get_val_examples()
