@@ -9,7 +9,7 @@ This README goes over the procedure for setting up a working environment for NLP
 Set `NLPR_BASE_DIR` as our base directory where we'll setup everything.
 
 ```bash
-export NLPR_BASE_DIR=/home/zphang/working/bowman/nlpr1
+export NLPR_BASE_DIR=/path/to/nlpr1
 ``` 
 
 ### 1. Directory Setup
@@ -77,5 +77,5 @@ python nlprunners/nlpr/proj/simple/runscript.py \
 	--train_batch_size 4 \
 	--eval_every_steps 500 --partial_eval_number 500 \
 	--do_train --do_val --do_save \
-	--output_dir ${NLPR_BASE_DIR}/working/roberta_base___mrpc
+	--output_dir ${NLPR_BASE_DIR}/working/simple/roberta_base___mrpc
 ```
