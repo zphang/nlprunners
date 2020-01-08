@@ -39,7 +39,7 @@ export PYTHONPATH=${NLPR_BASE_DIR}/code/transformers/src:$PYTHONPATH
 export PYTHONPATH=${NLPR_BASE_DIR}/code/zutils:$PYTHONPATH
 export PYTHONPATH=${NLPR_BASE_DIR}/code/nlprunners:$PYTHONPATH
 conda install -y pytorch cudatoolkit=9.2 -c pytorch
-conda install -y pandas jupyter notebook lxml scikit-learn
+conda install -y pandas jupyter notebook lxml scikit-learn matplotlib
 pip install tokenizers tqdm boto3 requests filelock sentencepiece regex sacremoses bs4 overrides
 ```
 
