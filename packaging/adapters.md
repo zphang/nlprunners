@@ -18,8 +18,8 @@ We'll fine-tune RoBERTa-base Adapters on two GLUE tasks: RTE and MRPC.
 ```bash
 python \
     nlpr/proj/adapters/runscript.py \
-	--ZZsrc ${NLPR_BASE_DIR}/models/roberta-base/config.json \
-	--task_config_path ${NLPR_BASE_DIR}/data/nlpr_data/configs/mrpc.json \
+    --ZZsrc ${NLPR_BASE_DIR}/models/roberta-base/config.json \
+    --task_config_path ${NLPR_BASE_DIR}/data/nlpr_data/configs/mrpc.json \
     --train_batch_size 4 \
     --learning_rate 1e-4 \
     --num_train_epochs 5 \
@@ -31,8 +31,8 @@ python \
 
 python \
     nlpr/proj/adapters/runscript.py \
-	--ZZsrc ${NLPR_BASE_DIR}/models/roberta-base/config.json \
-	--task_config_path ${NLPR_BASE_DIR}/data/nlpr_data/configs/rte.json \
+    --ZZsrc ${NLPR_BASE_DIR}/models/roberta-base/config.json \
+    --task_config_path ${NLPR_BASE_DIR}/data/nlpr_data/configs/rte.json \
     --train_batch_size 4 \
     --learning_rate 1e-4 \
     --num_train_epochs 5 \
@@ -65,8 +65,8 @@ Next, we fine-tune our multi-adapter. As a sanity check, we will use RTE as the 
 ```bash
 python \
     nlpr/proj/adapters/runscript_multi_adapter.py \
-	--ZZsrc ${NLPR_BASE_DIR}/models/roberta-base/config.json \
-	--task_config_path ${NLPR_BASE_DIR}/data/nlpr_data/configs/mrpc.json \
+    --ZZsrc ${NLPR_BASE_DIR}/models/roberta-base/config.json \
+    --task_config_path ${NLPR_BASE_DIR}/data/nlpr_data/configs/mrpc.json \
     --train_batch_size 4 \
     --learning_rate 1e-3 \
     --num_train_epochs 5 \
