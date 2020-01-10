@@ -71,14 +71,13 @@ def convert_examples_to_dataset(examples, tokenizer, feat_spec, task, verbose=Fa
     ]
     full_batch = task.Batch.from_data_rows(data_rows)
     dataset_with_metadata = full_batch_to_dataset(full_batch)
-    dataset_with_metadata.metadata["descriptors"].append(
-        DataDescriptor("other_metadata", "example_id", None)
-    )
-    dataset_with_metadata.metadata["other"]["example_id"] = list(range(len(examples)))
     return dataset_with_metadata
 
 
 def full_batch_to_dataset(full_batch):
+    """
+    See: HybridLoader for details
+    """
     dataset_ls = []
     others_dict = {}
     descriptors = []
@@ -87,10 +86,15 @@ def full_batch_to_dataset(full_batch):
             descriptors.append(DataDescriptor("dataset", k, len(dataset_ls)))
             dataset_ls.append(v)
         elif v is None:
+            # Is this even used?
             descriptors.append(DataDescriptor("none", k, None))
         else:
             descriptors.append(DataDescriptor("other_data", k, None))
             others_dict[k] = v
+
+    # We always add example_id as an additional tensor column
+    descriptors.append(DataDescriptor(
+        "example_id", "example_id", len(dataset_ls)))
     dataset_ls.append(torch.arange(len(full_batch)))
     return DatasetWithMetadata(
         dataset=TensorDataset(*dataset_ls),
@@ -126,23 +130,30 @@ class HybridLoader:
         )
 
     def __iter__(self):
+        # dataset: tensors
+        # other_data: non-tensors, but go into batch
+        # other_metadata: non-tensors, and go into metadata
+        descriptor_dict = self.dataset_with_metadata.get_descriptor_dict()
         for batch in self.dataloader:
-            example_ids = batch[-1]
+            example_ids = batch[descriptor_dict["example_id"].pos]
             batch_dict = {}
             batch_metadata_dict = {"example_id": example_ids}
-            for descriptor in self.metadata["descriptors"]:
-                if descriptor.category == "dataset":
-                    batch_dict[descriptor.name] = batch[descriptor.pos]
+            for name, descriptor in descriptor_dict.items():
+                if descriptor.category == "example_id":
+                    # Special exception for example_id, cause we already pulled it out
+                    continue
+                elif descriptor.category == "dataset":
+                    batch_dict[name] = batch[descriptor.pos]
                 elif descriptor.category == "none":
-                    batch_dict[descriptor.name] = None
+                    batch_dict[name] = None
                 elif descriptor.category == "other_data":
-                    batch_dict[descriptor.name] = [
-                        self.metadata["other"][descriptor.name][i]
+                    batch_dict[name] = [
+                        self.metadata["other"][name][i]
                         for i in example_ids
                     ]
                 elif descriptor.category == "other_metadata":
-                    batch_metadata_dict[descriptor.name] = [
-                        self.metadata["other"][descriptor.name][i]
+                    batch_metadata_dict[name] = [
+                        self.metadata["other"][name][i]
                         for i in example_ids
                     ]
                 else:
