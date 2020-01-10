@@ -15,23 +15,23 @@ class MultiTaskModel(nn.Module):
         return self.model_dict[task_name].forward(*args, **kwargs)
 
 
-def forward_batch_basic(model: nn.Module, batch, task_name, omit_label_ids: bool = False):
+def forward_batch_basic(model: nn.Module, batch, task_name, omit_label_id: bool = False):
     return model(
         input_ids=batch.input_ids,
         token_type_ids=batch.segment_ids,
         attention_mask=batch.input_mask,
-        labels=batch.label_ids if not omit_label_ids else None,
+        labels=batch.label_id if not omit_label_id else None,
         task_name=task_name,
     )
 
 
 def forward_batch_delegate(model: nn.Module, batch,
-                           task_name, task_type: TaskTypes, omit_label_ids: bool = False):
+                           task_name, task_type: TaskTypes, omit_label_id: bool = False):
     if task_type in [TaskTypes.CLASSIFICATION, TaskTypes.REGRESSION]:
         return forward_batch_basic(
             model=model,
             batch=batch,
-            omit_label_ids=omit_label_ids,
+            omit_label_id=omit_label_id,
             task_name=task_name,
         )
     elif task_type == TaskTypes.SPAN_COMPARISON_CLASSIFICATION:
@@ -44,14 +44,14 @@ def forward_batch_delegate(model: nn.Module, batch,
             spans=spans,
             token_type_ids=batch.segment_ids,
             attention_mask=batch.input_mask,
-            labels=batch.label_ids if not omit_label_ids else None,
+            labels=batch.label_id if not omit_label_id else None,
             task_name=task_name,
         )
     elif task_type == TaskTypes.MULTIPLE_CHOICE:
         return forward_batch_basic(
             model=model,
             batch=batch,
-            omit_label_ids=omit_label_ids,
+            omit_label_id=omit_label_id,
             task_name=task_name,
         )
     else:

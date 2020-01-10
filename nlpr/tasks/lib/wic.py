@@ -151,7 +151,7 @@ class Batch(BatchMixin):
     segment_ids: torch.Tensor
     sentence1_span: torch.Tensor
     sentence2_span: torch.Tensor
-    label_ids: torch.Tensor
+    label_id: torch.Tensor
     tokens: List
     word: List
 
@@ -163,7 +163,7 @@ class Batch(BatchMixin):
             segment_ids=torch.tensor([f.segment_ids for f in data_row_ls], dtype=torch.long),
             sentence1_span=torch.tensor([f.sentence1_span for f in data_row_ls], dtype=torch.long),
             sentence2_span=torch.tensor([f.sentence2_span for f in data_row_ls], dtype=torch.long),
-            label_ids=torch.tensor([f.label_id for f in data_row_ls], dtype=torch.long),
+            label_id=torch.tensor([f.label_id for f in data_row_ls], dtype=torch.long),
             tokens=[f.tokens for f in data_row_ls],
             word=[f.word for f in data_row_ls],
         )

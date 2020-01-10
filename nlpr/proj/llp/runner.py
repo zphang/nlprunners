@@ -237,11 +237,11 @@ class LLPRunner(BaseRunner):
         model_output = self.model.forward_batch(batch, normalize_embedding=False)
 
         weight = self.llp_state.all_label_confidence[batch_metadata["example_id"]]
-        per_example_pred_loss = F.cross_entropy(model_output.logits, batch.label_ids, reduction="none")
+        per_example_pred_loss = F.cross_entropy(model_output.logits, batch.label_id, reduction="none")
         if self.llp_params.llp_compute_global_agg_loss_mode == "v1":
             per_example_global_agg_loss = llp_representation.compute_global_agg_loss(
                 embedding=torch_utils.normalize_embedding_tensor(model_output.embedding),
-                label_ids=batch.label_ids,
+                label_id=batch.label_id,
                 big_m_tensor=self.llp_state.big_m_tensor,
                 all_labels_tensor=self.llp_state.all_labels_tensor,
                 const_tau=self.llp_params.llp_const_tau,
@@ -249,7 +249,7 @@ class LLPRunner(BaseRunner):
         elif self.llp_params.llp_compute_global_agg_loss_mode == "v2":
             per_example_global_agg_loss = llp_representation.compute_global_agg_loss_v2(
                 embedding=torch_utils.normalize_embedding_tensor(model_output.embedding),
-                label_ids=batch.label_ids,
+                label_id=batch.label_id,
                 big_m_tensor=self.llp_state.big_m_tensor,
                 all_labels_tensor=self.llp_state.all_labels_tensor,
                 const_tau=self.llp_params.llp_const_tau,
@@ -296,7 +296,7 @@ class LLPRunner(BaseRunner):
 
             with torch.no_grad():
                 logits = self.model.forward_batch(batch).logits
-                tmp_eval_loss = self.loss_criterion(logits, batch.label_ids)
+                tmp_eval_loss = self.loss_criterion(logits, batch.label_id)
 
             logits = logits.detach().cpu().numpy()
             total_eval_loss += tmp_eval_loss.mean().item()
@@ -398,7 +398,7 @@ class LLPRunner(BaseRunner):
 
 
 def override_labels(dataset_with_metadata, labels_tensor):
-    label_column = dataset_with_metadata.get_descriptor_dict()["label_ids"].pos
+    label_column = dataset_with_metadata.get_descriptor_dict()["label_id"].pos
     tensors = list(dataset_with_metadata.dataset.tensors)
     tensors[label_column] = labels_tensor.cpu()
     dataset_with_metadata.dataset.tensors = tensors

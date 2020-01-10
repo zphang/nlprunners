@@ -90,7 +90,7 @@ class MultiTaskRunner(BaseRunner):
         logits = forward_batch_delegate(
             model=self.model,
             batch=batch,
-            omit_label_ids=True,
+            omit_label_id=True,
             task_type=task.TASK_TYPE,
             task_name=task_name,
         )[0]
@@ -159,7 +159,7 @@ class MultiTaskRunner(BaseRunner):
                 logits = forward_batch_delegate(
                     model=model,
                     batch=batch,
-                    omit_label_ids=True,
+                    omit_label_id=True,
                     task_type=task.TASK_TYPE,
                     task_name=task_name,
                 )[0]

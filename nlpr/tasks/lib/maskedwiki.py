@@ -123,7 +123,7 @@ class Batch(BatchMixin):
     input_ids_2: torch.Tensor
     input_mask_2: torch.Tensor
     segment_ids_2: torch.Tensor
-    label_ids: torch.Tensor
+    label_id: torch.Tensor
     option_1_span: torch.Tensor
     option_2_span: torch.Tensor
     tokens_1: list
@@ -140,7 +140,7 @@ class Batch(BatchMixin):
             segment_ids_2=torch.tensor([f.segment_ids_2 for f in data_row_ls], dtype=torch.long),
             option_1_span=torch.tensor([f.option_1_span for f in data_row_ls], dtype=torch.long),
             option_2_span=torch.tensor([f.option_2_span for f in data_row_ls], dtype=torch.long),
-            label_ids=torch.tensor([f.label_id for f in data_row_ls], dtype=torch.long),
+            label_id=torch.tensor([f.label_id for f in data_row_ls], dtype=torch.long),
             tokens_1=[f.tokens_1 for f in data_row_ls],
             tokens_2=[f.tokens_2 for f in data_row_ls],
         )

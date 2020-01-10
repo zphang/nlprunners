@@ -2,11 +2,10 @@ import os
 import numpy as np
 
 from dataclasses import dataclass
-from typing import Dict, Union, NamedTuple
 
 import torch
 import torch.nn as nn
-from torch.utils.data import TensorDataset, RandomSampler, SequentialSampler, DataLoader
+from torch.utils.data import Dataset, RandomSampler, SequentialSampler, DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
 from pyutils.display import maybe_tqdm
@@ -41,130 +40,33 @@ class TrainGlobalState(ExtendedDataClassMixin):
         return f"TGS({self.epoch} / {self.epoch_step} ({self.global_step}))"
 
 
-@dataclass
-class DatasetWithMetadata:
-    dataset: TensorDataset
-    metadata: Dict
+class ListDataset(Dataset):
+    def __init__(self, data: list):
+        self.data = data
 
-    def get_descriptor_dict(self):
-        return {
-            descriptor.name: descriptor
-            for descriptor in self.metadata["descriptors"]
-        }
+    def __len__(self):
+        return len(self.data)
 
-
-@dataclass
-class DataDescriptor:
-    category: str
-    # category=dataset: Tensor
-    # category=other: metadata to carry around be batch
-    # category=none: don't propagate
-    name: str
-    pos: Union[int, None]
-    # Tensor position. Only use if category=dataset
+    def __getitem__(self, item):
+        return self.data[item]
 
 
-def convert_examples_to_dataset(examples, tokenizer, feat_spec, task, verbose=False):
+def convert_examples_to_dataset(examples, tokenizer, feat_spec, verbose=False):
     data_rows = [
         example.tokenize(tokenizer).featurize(tokenizer, feat_spec)
         for example in maybe_tqdm(examples, desc="Tokenizing", verbose=verbose)
     ]
-    full_batch = task.Batch.from_data_rows(data_rows)
-    dataset_with_metadata = full_batch_to_dataset(full_batch)
-    return dataset_with_metadata
-
-
-def full_batch_to_dataset(full_batch):
-    """
-    See: HybridLoader for details
-    """
-    dataset_ls = []
-    others_dict = {}
-    descriptors = []
-    for i, (k, v) in enumerate(full_batch.asdict().items()):
-        if isinstance(v, torch.Tensor):
-            descriptors.append(DataDescriptor("dataset", k, len(dataset_ls)))
-            dataset_ls.append(v)
-        elif v is None:
-            # Is this even used?
-            descriptors.append(DataDescriptor("none", k, None))
-        else:
-            descriptors.append(DataDescriptor("other_data", k, None))
-            others_dict[k] = v
-
-    # We always add example_id as an additional tensor column
-    descriptors.append(DataDescriptor(
-        "example_id", "example_id", len(dataset_ls)))
-    dataset_ls.append(torch.arange(len(full_batch)))
-    return DatasetWithMetadata(
-        dataset=TensorDataset(*dataset_ls),
-        metadata={
-            "descriptors": descriptors,
-            "other": others_dict,
+    metadata = {
+        "example_id": list(range(len(data_rows))),
+    }
+    data = []
+    for i, data_row in enumerate(data_rows):
+        metadata_row = {
+            k: v[i]
+            for k, v in metadata.items()
         }
-    )
-
-
-class BatchTuple(NamedTuple):
-    batch: BatchMixin
-    metadata: dict
-
-    def to(self, device):
-        return BatchTuple(
-            batch=self.batch.to(device),
-            metadata=self.metadata,
-        )
-
-
-class HybridLoader:
-    def __init__(self, dataloader, metadata, task):
-        self.dataloader = dataloader
-        self.metadata = metadata
-        self.task = task
-
-    @property
-    def dataset_with_metadata(self):
-        return DatasetWithMetadata(
-            dataset=self.dataloader.dataset,
-            metadata=self.metadata,
-        )
-
-    def __iter__(self):
-        # dataset: tensors
-        # other_data: non-tensors, but go into batch
-        # other_metadata: non-tensors, and go into metadata
-        descriptor_dict = self.dataset_with_metadata.get_descriptor_dict()
-        for batch in self.dataloader:
-            example_ids = batch[descriptor_dict["example_id"].pos]
-            batch_dict = {}
-            batch_metadata_dict = {"example_id": example_ids}
-            for name, descriptor in descriptor_dict.items():
-                if descriptor.category == "example_id":
-                    # Special exception for example_id, cause we already pulled it out
-                    continue
-                elif descriptor.category == "dataset":
-                    batch_dict[name] = batch[descriptor.pos]
-                elif descriptor.category == "none":
-                    batch_dict[name] = None
-                elif descriptor.category == "other_data":
-                    batch_dict[name] = [
-                        self.metadata["other"][name][i]
-                        for i in example_ids
-                    ]
-                elif descriptor.category == "other_metadata":
-                    batch_metadata_dict[name] = [
-                        self.metadata["other"][name][i]
-                        for i in example_ids
-                    ]
-                else:
-                    raise KeyError(descriptor.category)
-            yield BatchTuple(
-                batch=self.task.Batch(**batch_dict),
-                metadata=batch_metadata_dict,
-            )
-
-    def __len__(self):
-        return len(self.dataloader)
+        data.append({"data_row": data_row, "metadata": metadata_row})
+    return ListDataset(data)
 
 
 def get_sampler(dataset, local_rank, force_sequential=False):
@@ -193,7 +95,7 @@ def run_val(val_examples, val_dataloader,
             logits = forward_batch_delegate(
                 model=model,
                 batch=batch,
-                omit_label_ids=True,
+                omit_label_id=True,
                 task_type=task.TASK_TYPE,
             )[0]
             tmp_eval_loss = compute_loss_from_model_output(
@@ -221,48 +123,40 @@ def run_val(val_examples, val_dataloader,
 
 def get_train_dataloader(train_examples, task,
                          tokenizer, feat_spec, local_rank, train_batch_size, verbose=True):
-    dataset_with_metadata = convert_examples_to_dataset(
+    dataset = convert_examples_to_dataset(
         examples=train_examples,
         feat_spec=feat_spec,
         tokenizer=tokenizer,
-        task=task,
         verbose=verbose,
     )
     train_sampler = get_sampler(
-        dataset=dataset_with_metadata.dataset,
+        dataset=dataset,
         local_rank=local_rank,
     )
     train_dataloader = DataLoader(
-        dataset=dataset_with_metadata.dataset,
+        dataset=dataset,
         sampler=train_sampler,
         batch_size=train_batch_size,
+        collate_fn=task.collate_fn,
     )
-    return HybridLoader(
-        dataloader=train_dataloader,
-        metadata=dataset_with_metadata.metadata,
-        task=task,
-    )
+    return train_dataloader
 
 
 def get_eval_dataloader(eval_examples, task,
                         tokenizer, feat_spec, eval_batch_size):
-    dataset_with_metadata = convert_examples_to_dataset(
+    dataset = convert_examples_to_dataset(
         examples=eval_examples,
         feat_spec=feat_spec,
         tokenizer=tokenizer,
-        task=task,
     )
-    eval_sampler = SequentialSampler(dataset_with_metadata.dataset)
+    eval_sampler = SequentialSampler(dataset)
     eval_dataloader = DataLoader(
-        dataset=dataset_with_metadata.dataset,
+        dataset=dataset,
         sampler=eval_sampler,
         batch_size=eval_batch_size,
+        collate_fn=task.collate_fn,
     )
-    return HybridLoader(
-        dataloader=eval_dataloader,
-        metadata=dataset_with_metadata.metadata,
-        task=task,
-    )
+    return eval_dataloader
 
 
 def complex_backpropagate(loss, optimizer, model,

@@ -41,7 +41,7 @@ class BatchMixin(ExtendedDataClassMixin):
             return v
 
     def __len__(self):
-        return len(getattr(self, self.fields[0]))
+        return len(getattr(self, self.get_fields()[0]))
 
 
 class BaseExample(ExtendedDataClassMixin):
@@ -76,3 +76,8 @@ class BiMap:
 
 def labels_to_bimap(labels):
     return BiMap(a=labels, b=list(range(len(labels))))
+
+
+def data_row_collate_fn(batch):
+    assert isinstance(batch[0], BaseDataRow)
+

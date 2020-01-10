@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import csv
 import json
-from typing import List, NamedTuple
+import numpy as np
+from typing import List, NamedTuple, Mapping
 from enum import Enum
+
+import torch.utils.data.dataloader as dataloader
 
 from dataclasses import dataclass
 
-from ..core import FeaturizationSpec
+from ..core import FeaturizationSpec, BatchMixin
 from ..utils import truncate_sequences, pad_to_max_seq_length
+
+from pyutils.datastructures import combine_dicts
 
 
 class TaskTypes(Enum):
@@ -20,7 +25,41 @@ class TaskTypes(Enum):
     UNDEFINED = -1
 
 
+class BatchTuple(NamedTuple):
+    batch: BatchMixin
+    metadata: dict
+
+    def to(self, device):
+        return BatchTuple(
+            batch=self.batch.to(device),
+            metadata=self.metadata,
+        )
+
+
+def metadata_collate_fn(metadata: list):
+    return {
+        k: [d[k] for d in metadata]
+        for k in metadata[0].keys()
+    }
+
+
+def flat_collate_fn(batch):
+    elem = batch[0]
+    if isinstance(elem, (np.ndarray, int, float, str)):
+        return dataloader.default_collate(batch)
+    elif isinstance(elem, list):
+        # Don't do anything to list of lists
+        return batch
+    else:
+        raise TypeError(type(batch))
+
+
 class Task:
+
+    Example = NotImplemented
+    TokenizedExample = NotImplemented
+    DataRow = NotImplemented
+    Batch = NotImplemented
 
     TASK_TYPE = NotImplemented
 
@@ -39,6 +78,29 @@ class Task:
     @property
     def test_path(self):
         return self.path_dict["test"]
+
+    @classmethod
+    def collate_fn(cls, batch):
+        # cls.collate_fn
+        elem = batch[0]
+        if isinstance(elem, Mapping):  # dict
+            assert set(elem.keys()) == {"data_row", "metadata"}
+            data_rows = [x["data_row"] for x in batch]
+            metadata = [x["metadata"] for x in batch]
+            collated_data_rows = {
+                key: flat_collate_fn([getattr(d, key) for d in data_rows])
+                for key in data_rows[0].asdict()
+            }
+            collated_metadata = metadata_collate_fn(metadata)
+            combined = combine_dicts([collated_data_rows, collated_metadata])
+            batch_dict = {}
+            for field in cls.Batch.get_fields():
+                batch_dict[field] = combined.pop(field)
+            batch = cls.Batch(**batch_dict)
+            remainder = combined
+            return batch, remainder
+        else:
+            raise TypeError(f"Unknown type for collate_fn {type(elem)}")
 
 
 class Span(NamedTuple):
@@ -196,9 +258,9 @@ def create_generic_data_row_from_tokens_and_segments(
     )
     return data_row_class(
         guid=guid,
-        input_ids=input_set.input_ids,
-        input_mask=input_set.input_mask,
-        segment_ids=input_set.segment_ids,
+        input_ids=np.array(input_set.input_ids),
+        input_mask=np.array(input_set.input_mask),
+        segment_ids=np.array(input_set.segment_ids),
         label_id=label_id,
         tokens=unpadded_tokens,
     )

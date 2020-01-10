@@ -11,11 +11,11 @@ def sup_train_step(model, sup_batch,
                    task, global_step, train_schedule, uda_params,
                    zlogger=zlogv1.VOID_LOGGER):
     # Compute logits, logprobs
-    sup_logits = forward_batch_basic(model=model, batch=sup_batch, omit_label_ids=True)[0]
+    sup_logits = forward_batch_basic(model=model, batch=sup_batch, omit_label_id=True)[0]
 
     sup_loss = compute_sup_loss(
         sup_logits=sup_logits,
-        label_ids=sup_batch.label_ids,
+        label_id=sup_batch.label_id,
         task=task, global_step=global_step,
         train_schedule=train_schedule, uda_params=uda_params,
         zlogger=zlogger,
@@ -23,11 +23,11 @@ def sup_train_step(model, sup_batch,
     return sup_loss, sup_logits
 
 
-def compute_sup_loss(sup_logits, label_ids,
+def compute_sup_loss(sup_logits, label_id,
                      task, global_step, train_schedule, uda_params,
                      zlogger=zlogv1.VOID_LOGGER):
     # Compute cross entropy (why manually? to get the mask I guess)
-    per_example_loss = F.cross_entropy(sup_logits, label_ids, reduction="none")
+    per_example_loss = F.cross_entropy(sup_logits, label_id, reduction="none")
     # Create mask-template
     loss_mask = torch.ones(
         per_example_loss.size(),
@@ -39,7 +39,7 @@ def compute_sup_loss(sup_logits, label_ids,
     if uda_params.tsa:
         # Compute probability of predicting correct label
         sup_logprobs = F.log_softmax(sup_logits, dim=-1)
-        one_hot_labels = F.one_hot(label_ids, num_classes=len(task.LABELS)).float()
+        one_hot_labels = F.one_hot(label_id, num_classes=len(task.LABELS)).float()
         correct_label_probs = (one_hot_labels * torch.exp(sup_logprobs)).sum(dim=-1)
         # TSA weight lower-bounded by 1/K
         tsa_threshold = get_tsa_threshold(
@@ -68,8 +68,8 @@ def compute_sup_loss(sup_logits, label_ids,
 def unsup_train_step(model, unsup_orig_batch, unsup_aug_batch, uda_params,
                      zlogger=zlogv1.VOID_LOGGER):
     # Compute Logits
-    unsup_orig_logits = forward_batch_basic(model=model, batch=unsup_orig_batch, omit_label_ids=True)[0]
-    unsup_aug_logits = forward_batch_basic(model=model, batch=unsup_aug_batch, omit_label_ids=True)[0]
+    unsup_orig_logits = forward_batch_basic(model=model, batch=unsup_orig_batch, omit_label_id=True)[0]
+    unsup_aug_logits = forward_batch_basic(model=model, batch=unsup_aug_batch, omit_label_id=True)[0]
 
     unsup_loss = compute_unsup_loss(
         unsup_orig_logits=unsup_orig_logits,

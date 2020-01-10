@@ -208,7 +208,7 @@ class MeanTeacherRunner(BaseRunner):
         sup_logits = forward_batch_delegate(
             model=self.model,
             batch=sup_batch.batch,
-            omit_label_ids=True,
+            omit_label_id=True,
             task_type=self.task.TASK_TYPE,
         )[0]
         classification_loss = compute_loss_from_model_output(
@@ -222,7 +222,7 @@ class MeanTeacherRunner(BaseRunner):
             teacher_sup_logits = forward_batch_delegate(
                 model=self.teacher_model_wrapper.model,
                 batch=sup_batch.batch,
-                omit_label_ids=True,
+                omit_label_id=True,
                 task_type=self.task.TASK_TYPE,
             )[0]
 
@@ -232,13 +232,13 @@ class MeanTeacherRunner(BaseRunner):
             unsup_logits = forward_batch_delegate(
                 model=self.model,
                 batch=unsup_batch.batch,
-                omit_label_ids=True,
+                omit_label_id=True,
                 task_type=self.task.TASK_TYPE,
             )[0]
             teacher_unsup_logits = forward_batch_delegate(
                 model=self.teacher_model_wrapper.model,
                 batch=unsup_batch.batch,
-                omit_label_ids=True,
+                omit_label_id=True,
                 task_type=self.task.TASK_TYPE,
             )[0]
             student_logits = torch.cat([sup_logits, unsup_logits], dim=0)
@@ -299,7 +299,7 @@ class MeanTeacherRunner(BaseRunner):
                 logits = forward_batch_delegate(
                     model=self.model,
                     batch=batch,
-                    omit_label_ids=True,
+                    omit_label_id=True,
                     task_type=self.task.TASK_TYPE,
                 )[0]
                 tmp_eval_loss = compute_loss_from_model_output(
@@ -335,7 +335,7 @@ class MeanTeacherRunner(BaseRunner):
                 logits = forward_batch_delegate(
                     model=self.model,
                     batch=batch,
-                    omit_label_ids=True,
+                    omit_label_id=True,
                     task_type=self.task.TASK_TYPE,
                 )[0]
             logits = logits.detach().cpu().numpy()

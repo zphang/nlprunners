@@ -239,9 +239,9 @@ class UDARunner(BaseRunner):
                 logits = forward_batch_basic(
                     model=self.model,
                     batch=batch,
-                    omit_label_ids=True,
+                    omit_label_id=True,
                 )[0]
-                tmp_eval_loss = self.loss_criterion(logits, batch.label_ids)
+                tmp_eval_loss = self.loss_criterion(logits, batch.label_id)
 
             logits = logits.detach().cpu().numpy()
             total_eval_loss += tmp_eval_loss.mean().item()
@@ -274,7 +274,7 @@ class UDARunner(BaseRunner):
                 logits = forward_batch_basic(
                     model=self.model,
                     batch=batch,
-                    omit_label_ids=True,
+                    omit_label_id=True,
                 )[0]
             logits = logits.detach().cpu().numpy()
             all_logits.append(logits)

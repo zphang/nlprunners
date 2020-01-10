@@ -18,21 +18,21 @@ class InputSet:
     attention_mask: torch.Tensor
 
 
-def forward_batch_basic(model: nn.Module, batch, omit_label_ids: bool = False):
+def forward_batch_basic(model: nn.Module, batch, omit_label_id: bool = False):
     return model(
         input_ids=batch.input_ids,
         token_type_ids=batch.segment_ids,
         attention_mask=batch.input_mask,
-        labels=batch.label_ids if not omit_label_ids else None,
+        labels=batch.label_id if not omit_label_id else None,
     )
 
 
-def forward_batch_delegate(model: nn.Module, batch, task_type: TaskTypes, omit_label_ids: bool = False):
+def forward_batch_delegate(model: nn.Module, batch, task_type: TaskTypes, omit_label_id: bool = False):
     if task_type in [TaskTypes.CLASSIFICATION, TaskTypes.REGRESSION]:
         return forward_batch_basic(
             model=model,
             batch=batch,
-            omit_label_ids=omit_label_ids,
+            omit_label_id=omit_label_id,
         )
     elif task_type == TaskTypes.SPAN_COMPARISON_CLASSIFICATION:
         spans = torch.stack([
@@ -44,13 +44,13 @@ def forward_batch_delegate(model: nn.Module, batch, task_type: TaskTypes, omit_l
             spans=spans,
             token_type_ids=batch.segment_ids,
             attention_mask=batch.input_mask,
-            labels=batch.label_ids if not omit_label_ids else None,
+            labels=batch.label_id if not omit_label_id else None,
         )
     elif task_type == TaskTypes.MULTIPLE_CHOICE:
         return forward_batch_basic(
             model=model,
             batch=batch,
-            omit_label_ids=omit_label_ids,
+            omit_label_id=omit_label_id,
         )
     else:
         raise KeyError(task_type)
@@ -59,13 +59,13 @@ def forward_batch_delegate(model: nn.Module, batch, task_type: TaskTypes, omit_l
 def compute_loss_from_model_output(logits, loss_criterion, batch, task_type: TaskTypes):
     # todo: cleanup
     if task_type == TaskTypes.CLASSIFICATION:
-        loss = loss_criterion(logits, batch.label_ids)
+        loss = loss_criterion(logits, batch.label_id)
     elif task_type == TaskTypes.REGRESSION:
         loss = loss_criterion(logits.squeeze(-1), batch.label)
     elif task_type == TaskTypes.SPAN_COMPARISON_CLASSIFICATION:
-        loss = loss_criterion(logits, batch.label_ids)
+        loss = loss_criterion(logits, batch.label_id)
     elif task_type == TaskTypes.MULTIPLE_CHOICE:
-        loss = loss_criterion(logits, batch.label_ids)
+        loss = loss_criterion(logits, batch.label_id)
     else:
         raise KeyError(task_type)
     return loss

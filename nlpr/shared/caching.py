@@ -1,4 +1,5 @@
 import math
+import numpy as np
 import os
 from dataclasses import dataclass
 from typing import List
@@ -23,6 +24,23 @@ class Chunker:
             slice(start, end)
             for start, end in zip(indices[:-1], indices[1:])
         ]
+
+    def lookup_chunk_and_index(self, i):
+        if isinstance(i, int):
+            return i // self.chunk_size, i % self.chunk_size
+        elif isinstance(i, np.ndarray):
+            i = i.astype(int)
+            return i / self.chunk_size, i % self.chunk_size
+        elif isinstance(i, torch.Tensor):
+            return self.lookup_chunk_and_index(i.numpy())
+        else:
+            raise TypeError(type(i))
+
+    def lookup_index(self, chunk_i, i):
+        if isinstance(i, (int, np.ndarray, torch.Tensor)):
+            return chunk_i * self.chunk_size + i
+        else:
+            raise TypeError(type(i))
 
     @classmethod
     def from_chunk_size(cls, length, chunk_size):
@@ -131,9 +149,13 @@ class ChunkedFilesDataCache(DataCache):
         self.data_args = torch.load(os.path.join(cache_fol_path, "data_args.p"))
         self.num_chunks = self.data_args["num_chunks"]
         self.length = self.data_args["length"]
+        self.chunk_size = self.data_args["chunk_size"]
         self.shared_metadata = None
+        self.chunker = Chunker.from_chunk_size(length=self.length, chunk_size=self.chunk_size)
 
-    def get_iterable_dataset(self):
+    def get_iterable_dataset(self, buffer_size=None):
+        if buffer_size is None:
+            buffer_size = self.length
         pass
 
     def get_all(self):

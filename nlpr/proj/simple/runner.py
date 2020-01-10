@@ -99,7 +99,7 @@ class SimpleTaskRunner(BaseRunner):
         logits = forward_batch_delegate(
             model=self.model,
             batch=batch,
-            omit_label_ids=True,
+            omit_label_id=True,
             task_type=self.task.TASK_TYPE,
         )[0]
         loss = compute_loss_from_model_output(
@@ -148,7 +148,7 @@ class SimpleTaskRunner(BaseRunner):
                 logits = forward_batch_delegate(
                     model=self.model,
                     batch=batch,
-                    omit_label_ids=True,
+                    omit_label_id=True,
                     task_type=self.task.TASK_TYPE,
                 )[0]
             logits = logits.detach().cpu().numpy()

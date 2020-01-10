@@ -1,13 +1,13 @@
 class ExtendedDataClassMixin:
 
-    @property
-    def fields(self):
-        return list(self.__dataclass_fields__)
+    @classmethod
+    def get_fields(cls):
+        return list(cls.__dataclass_fields__)
 
     def asdict(self):
         return {
             k: getattr(self, k)
-            for k in self.fields
+            for k in self.get_fields()
         }
 
     def new(self, **new_kwargs):
