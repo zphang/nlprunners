@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from dataclasses import dataclass
 from typing import List
@@ -113,12 +114,9 @@ class TokenizedExample(BaseTokenizedExample):
         )
         return DataRow(
             guid=self.guid,
-            input_ids1=input_set1.input_ids,
-            input_mask1=input_set1.input_mask,
-            segment_ids1=input_set1.segment_ids,
-            input_ids2=input_set2.input_ids,
-            input_mask2=input_set2.input_mask,
-            segment_ids2=input_set2.segment_ids,
+            input_ids=np.stack([input_set1.input_ids, input_set2.input_ids]),
+            input_mask=np.stack([input_set1.input_mask, input_set2.input_mask]),
+            segment_ids=np.stack([input_set1.segment_ids, input_set2.segment_ids]),
             label_id=self.label_id,
             tokens1=unpadded_inputs_1.unpadded_tokens,
             tokens2=unpadded_inputs_2.unpadded_tokens,
@@ -128,48 +126,22 @@ class TokenizedExample(BaseTokenizedExample):
 @dataclass
 class DataRow(BaseDataRow):
     guid: str
-    input_ids1: list
-    input_mask1: list
-    segment_ids1: list
-    input_ids2: list
-    input_mask2: list
-    segment_ids2: list
+    input_ids: np.ndarray  # Multiple
+    input_mask: np.ndarray  # Multiple
+    segment_ids: np.ndarray  # Multiple
     label_id: int
     tokens1: list
     tokens2: list
 
-    def get_tokens(self):
-        return [self.tokens1, self.tokens2]
-
 
 @dataclass
 class Batch(BatchMixin):
-    input_ids: torch.Tensor
-    input_mask: torch.Tensor
-    segment_ids: torch.Tensor
-    label_id: torch.Tensor
+    input_ids: torch.LongTensor
+    input_mask: torch.LongTensor
+    segment_ids: torch.LongTensor
+    label_id: torch.LongTensor
     tokens1: list
     tokens2: list
-
-    @classmethod
-    def from_data_rows(cls, data_row_ls):
-        return Batch(
-            input_ids=torch.tensor([
-                [f.input_ids1, f.input_ids2]
-                for f in data_row_ls
-            ], dtype=torch.long),
-            input_mask=torch.tensor([
-                [f.input_mask1, f.input_mask2]
-                for f in data_row_ls
-            ], dtype=torch.long),
-            segment_ids=torch.tensor([
-                [f.segment_ids1, f.segment_ids2]
-                for f in data_row_ls
-            ], dtype=torch.long),
-            label_id=torch.tensor([f.label_id for f in data_row_ls], dtype=torch.long),
-            tokens1=[f.tokens1 for f in data_row_ls],
-            tokens2=[f.tokens2 for f in data_row_ls],
-        )
 
 
 class AnliTask(Task):

@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from dataclasses import dataclass
 from typing import List
@@ -117,11 +118,11 @@ class TokenizedExample(BaseTokenizedExample):
 
         return DataRow(
             guid=self.guid,
-            input_ids=input_set.input_ids,
-            input_mask=input_set.input_mask,
-            segment_ids=input_set.segment_ids,
-            sentence1_span=sentence1_span,
-            sentence2_span=sentence2_span,
+            input_ids=np.array(input_set.input_ids),
+            input_mask=np.array(input_set.input_mask),
+            segment_ids=np.array(input_set.segment_ids),
+            sentence1_span=np.array(sentence1_span),
+            sentence2_span=np.array(sentence2_span),
             label_id=self.label_id,
             tokens=unpadded_inputs.unpadded_tokens,
             word=self.word,
@@ -131,42 +132,26 @@ class TokenizedExample(BaseTokenizedExample):
 @dataclass
 class DataRow(BaseDataRow):
     guid: str
-    input_ids: List
-    input_mask: List
-    segment_ids: List
-    sentence1_span: List
-    sentence2_span: List
+    input_ids: np.array
+    input_mask: np.array
+    segment_ids: np.array
+    sentence1_span: np.array
+    sentence2_span: np.array
     label_id: int
     tokens: List
     word: List
 
-    def get_tokens(self):
-        return [self.tokens]
-
 
 @dataclass
 class Batch(BatchMixin):
-    input_ids: torch.Tensor
-    input_mask: torch.Tensor
-    segment_ids: torch.Tensor
-    sentence1_span: torch.Tensor
-    sentence2_span: torch.Tensor
-    label_id: torch.Tensor
+    input_ids: torch.LongTensor
+    input_mask: torch.LongTensor
+    segment_ids: torch.LongTensor
+    sentence1_span: torch.LongTensor
+    sentence2_span: torch.LongTensor
+    label_id: torch.LongTensor
     tokens: List
     word: List
-
-    @classmethod
-    def from_data_rows(cls, data_row_ls):
-        return Batch(
-            input_ids=torch.tensor([f.input_ids for f in data_row_ls], dtype=torch.long),
-            input_mask=torch.tensor([f.input_mask for f in data_row_ls], dtype=torch.long),
-            segment_ids=torch.tensor([f.segment_ids for f in data_row_ls], dtype=torch.long),
-            sentence1_span=torch.tensor([f.sentence1_span for f in data_row_ls], dtype=torch.long),
-            sentence2_span=torch.tensor([f.sentence2_span for f in data_row_ls], dtype=torch.long),
-            label_id=torch.tensor([f.label_id for f in data_row_ls], dtype=torch.long),
-            tokens=[f.tokens for f in data_row_ls],
-            word=[f.word for f in data_row_ls],
-        )
 
 
 class WiCTask(Task):

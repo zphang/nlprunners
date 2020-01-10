@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from dataclasses import dataclass
 from typing import List
@@ -46,33 +47,20 @@ class TokenizedExample(BaseTokenizedExample):
 @dataclass
 class DataRow(BaseDataRow):
     guid: str
-    input_ids: list
-    input_mask: list
-    segment_ids: list
+    input_ids: np.ndarray
+    input_mask: np.ndarray
+    segment_ids: np.ndarray
     label_id: int
     tokens: list
-
-    def get_tokens(self):
-        return [self.tokens]
 
 
 @dataclass
 class Batch(BatchMixin):
-    input_ids: torch.Tensor
-    input_mask: torch.Tensor
-    segment_ids: torch.Tensor
-    label_id: torch.Tensor
+    input_ids: torch.LongTensor
+    input_mask: torch.LongTensor
+    segment_ids: torch.LongTensor
+    label_id: torch.LongTensor
     tokens: list
-
-    @classmethod
-    def from_data_rows(cls, data_row_ls):
-        return Batch(
-            input_ids=torch.tensor([f.input_ids for f in data_row_ls], dtype=torch.long),
-            input_mask=torch.tensor([f.input_mask for f in data_row_ls], dtype=torch.long),
-            segment_ids=torch.tensor([f.segment_ids for f in data_row_ls], dtype=torch.long),
-            label_id=torch.tensor([f.label_id for f in data_row_ls], dtype=torch.long),
-            tokens=[f.tokens for f in data_row_ls],
-        )
 
 
 class BoolQTask(Task):

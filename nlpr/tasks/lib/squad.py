@@ -1,5 +1,6 @@
 import collections
 import json
+import numpy as np
 
 import torch
 from dataclasses import dataclass
@@ -183,14 +184,14 @@ class Example(BaseExample):
                     tokens=tokens,
                     token_to_orig_map=token_to_orig_map,
                     token_is_max_context=token_is_max_context,
-                    input_ids=input_ids,
-                    input_mask=input_mask,
-                    segment_ids=segment_ids,
-                    cls_index=cls_index,
-                    p_mask=p_mask,
+                    input_ids=np.array(input_ids),
+                    input_mask=np.array(input_mask),
+                    segment_ids=np.array(segment_ids),
+                    cls_index=np.array(cls_index),
+                    p_mask=np.array(p_mask),
                     paragraph_len=paragraph_len,
-                    start_position=start_position,
-                    end_position=end_position,
+                    start_position=np.array(start_position),
+                    end_position=np.array(end_position),
                     is_impossible=span_is_impossible
                 )
             )
@@ -279,43 +280,27 @@ class DataRow(BaseDataRow):
     tokens: list
     token_to_orig_map: dict
     token_is_max_context: dict
-    input_ids: list
-    input_mask: list
-    segment_ids: list
-    cls_index: int
-    p_mask: list
+    input_ids: np.array
+    input_mask: np.array
+    segment_ids: np.array
+    cls_index: np.array
+    p_mask: np.array
     paragraph_len: int
-    start_position: int
-    end_position: int
+    start_position: np.array
+    end_position: np.array
     is_impossible: bool
-
-    def get_tokens(self):
-        return [self.tokens]
 
 
 @dataclass
 class Batch(BatchMixin):
-    input_ids: torch.Tensor
-    input_mask: torch.Tensor
-    segment_ids: torch.Tensor
-    start_positions: torch.Tensor
-    end_positions: torch.Tensor
-    cls_index: torch.Tensor
-    p_mask: torch.Tensor
+    input_ids: torch.LongTensor
+    input_mask: torch.LongTensor
+    segment_ids: torch.LongTensor
+    start_positions: torch.LongTensor
+    end_positions: torch.LongTensor
+    cls_index: torch.LongTensor
+    p_mask: torch.LongTensor
     tokens: list
-
-    @classmethod
-    def from_data_rows(cls, data_row_ls):
-        return Batch(
-            input_ids=torch.tensor([f.input_ids for f in data_row_ls], dtype=torch.long),
-            input_mask=torch.tensor([f.input_mask for f in data_row_ls], dtype=torch.long),
-            segment_ids=torch.tensor([f.segment_ids for f in data_row_ls], dtype=torch.long),
-            start_positions=torch.tensor([f.label_id for f in data_row_ls], dtype=torch.long),
-            end_positions=torch.tensor([f.label_id for f in data_row_ls], dtype=torch.long),
-            cls_index=torch.tensor([f.label_id for f in data_row_ls], dtype=torch.long),
-            p_mask=torch.tensor([f.label_id for f in data_row_ls], dtype=torch.float),
-            tokens=[f.tokens for f in data_row_ls],
-        )
 
 
 class SquadTask(Task):

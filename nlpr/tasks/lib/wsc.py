@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from dataclasses import dataclass
 from typing import List
@@ -111,11 +112,11 @@ class TokenizedExample(BaseTokenizedExample):
 
         return DataRow(
             guid=self.guid,
-            input_ids=input_set.input_ids,
-            input_mask=input_set.input_mask,
-            segment_ids=input_set.segment_ids,
-            span1_span=span1_span,
-            span2_span=span2_span,
+            input_ids=np.array(input_set.input_ids),
+            input_mask=np.array(input_set.input_mask),
+            segment_ids=np.array(input_set.segment_ids),
+            span1_span=np.array(span1_span),
+            span2_span=np.array(span2_span),
             label_id=self.label_id,
             tokens=unpadded_inputs.unpadded_tokens,
             span1_text=self.span1_text,
@@ -126,11 +127,11 @@ class TokenizedExample(BaseTokenizedExample):
 @dataclass
 class DataRow(BaseDataRow):
     guid: str
-    input_ids: List
-    input_mask: List
-    segment_ids: List
-    span1_span: List
-    span2_span: List
+    input_ids: np.ndarray
+    input_mask: np.ndarray
+    segment_ids: np.ndarray
+    span1_span: np.ndarray
+    span2_span: np.ndarray
     label_id: int
     tokens: List
     span1_text: str
@@ -142,29 +143,15 @@ class DataRow(BaseDataRow):
 
 @dataclass
 class Batch(BatchMixin):
-    input_ids: torch.Tensor
-    input_mask: torch.Tensor
-    segment_ids: torch.Tensor
-    span1_span: torch.Tensor
-    span2_span: torch.Tensor
-    label_id: torch.Tensor
+    input_ids: torch.LongTensor
+    input_mask: torch.LongTensor
+    segment_ids: torch.LongTensor
+    span1_span: torch.LongTensor
+    span2_span: torch.LongTensor
+    label_id: torch.LongTensor
     tokens: List
     span1_text: List
     span2_text: List
-
-    @classmethod
-    def from_data_rows(cls, data_row_ls):
-        return Batch(
-            input_ids=torch.tensor([f.input_ids for f in data_row_ls], dtype=torch.long),
-            input_mask=torch.tensor([f.input_mask for f in data_row_ls], dtype=torch.long),
-            segment_ids=torch.tensor([f.segment_ids for f in data_row_ls], dtype=torch.long),
-            span1_span=torch.tensor([f.span1_span for f in data_row_ls], dtype=torch.long),
-            span2_span=torch.tensor([f.span2_span for f in data_row_ls], dtype=torch.long),
-            label_id=torch.tensor([f.label_id for f in data_row_ls], dtype=torch.long),
-            tokens=[f.tokens for f in data_row_ls],
-            span1_text=[f.span1_text for f in data_row_ls],
-            span2_text=[f.span2_text for f in data_row_ls],
-        )
 
 
 class WSCTask(Task):

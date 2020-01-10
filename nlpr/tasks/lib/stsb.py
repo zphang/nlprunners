@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from dataclasses import dataclass
 from typing import List
@@ -33,7 +34,7 @@ class TokenizedExample(BaseTokenizedExample):
     label: float
 
     def featurize(self, tokenizer, feat_spec):
-        # Label not label_id, otherwise can use double_sentence_featurize
+        # Label not label_id, otherwise we can use double_sentence_featurize
         unpadded_inputs = construct_double_input_tokens_and_segment_ids(
             input_tokens_a=self.text_a,
             input_tokens_b=self.text_b,
@@ -48,45 +49,31 @@ class TokenizedExample(BaseTokenizedExample):
         )
         return DataRow(
             guid=self.guid,
-            input_ids=input_set.input_ids,
-            input_mask=input_set.input_mask,
-            segment_ids=input_set.segment_ids,
+            input_ids=np.array(input_set.input_ids),
+            input_mask=np.array(input_set.input_mask),
+            segment_ids=np.array(input_set.segment_ids),
             label=self.label,
             tokens=unpadded_inputs.unpadded_tokens,
         )
 
 
-
 @dataclass
 class DataRow(BaseDataRow):
     guid: str
-    input_ids: list
-    input_mask: list
-    segment_ids: list
+    input_ids: np.ndarray
+    input_mask: np.ndarray
+    segment_ids: np.ndarray
     label: float
     tokens: list
-
-    def get_tokens(self):
-        return [self.tokens]
 
 
 @dataclass
 class Batch(BatchMixin):
-    input_ids: torch.Tensor
-    input_mask: torch.Tensor
-    segment_ids: torch.Tensor
-    label: torch.Tensor
+    input_ids: torch.LongTensor
+    input_mask: torch.LongTensor
+    segment_ids: torch.LongTensor
+    label: torch.FloatTensor
     tokens: list
-
-    @classmethod
-    def from_data_rows(cls, data_row_ls):
-        return Batch(
-            input_ids=torch.tensor([f.input_ids for f in data_row_ls], dtype=torch.long),
-            input_mask=torch.tensor([f.input_mask for f in data_row_ls], dtype=torch.long),
-            segment_ids=torch.tensor([f.segment_ids for f in data_row_ls], dtype=torch.long),
-            label=torch.tensor([f.label for f in data_row_ls], dtype=torch.float),
-            tokens=[f.tokens for f in data_row_ls],
-        )
 
 
 class StsbTask(Task):

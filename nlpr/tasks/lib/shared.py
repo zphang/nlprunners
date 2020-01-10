@@ -113,6 +113,9 @@ class Span(NamedTuple):
     def to_slice(self):
         return slice(*self)
 
+    def to_array(self):
+        return np.array([self.start, self.end])
+
 
 @dataclass
 class UnpaddedInputs:

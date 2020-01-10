@@ -51,9 +51,6 @@ class DataRow(BaseDataRow):
     label_id: int
     tokens: list
 
-    def get_tokens(self):
-        return [self.tokens]
-
 
 @dataclass
 class Batch(BatchMixin):
@@ -62,16 +59,6 @@ class Batch(BatchMixin):
     segment_ids: torch.LongTensor
     label_id: torch.LongTensor
     tokens: list
-
-    @classmethod
-    def from_data_rows(cls, data_row_ls):
-        return Batch(
-            input_ids=torch.LongTensor([f.input_ids for f in data_row_ls], dtype=torch.long),
-            input_mask=torch.LongTensor([f.input_mask for f in data_row_ls], dtype=torch.long),
-            segment_ids=torch.LongTensor([f.segment_ids for f in data_row_ls], dtype=torch.long),
-            label_id=torch.tensor([f.label_id for f in data_row_ls], dtype=torch.long),
-            tokens=[f.tokens for f in data_row_ls],
-        )
 
 
 class AmazonPolarityTask(Task):

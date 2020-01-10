@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from dataclasses import dataclass
 from typing import List
@@ -88,8 +89,8 @@ class TokenizedExample(BaseTokenizedExample):
             input_ids_2=input_set_2.input_ids,
             input_mask_2=input_set_2.input_mask,
             segment_ids_2=input_set_2.segment_ids,
-            option_1_span=option_1_span,
-            option_2_span=option_2_span,
+            option_1_span=option_1_span.to_array(),
+            option_2_span=option_2_span.to_array(),
             label_id=self.label_id,
             tokens_1=unpadded_inputs_1.unpadded_tokens,
             tokens_2=unpadded_inputs_2.unpadded_tokens,
@@ -99,51 +100,32 @@ class TokenizedExample(BaseTokenizedExample):
 @dataclass
 class DataRow(BaseDataRow):
     guid: str
-    input_ids_1: list
-    input_mask_1: list
-    segment_ids_1: list
-    input_ids_2: list
-    input_mask_2: list
-    segment_ids_2: list
-    option_1_span: Span
-    option_2_span: Span
+    input_ids_1: np.ndarray
+    input_mask_1: np.ndarray
+    segment_ids_1: np.ndarray
+    input_ids_2: np.ndarray
+    input_mask_2: np.ndarray
+    segment_ids_2: np.ndarray
+    option_1_span: np.ndarray
+    option_2_span: np.ndarray
     label_id: int
     tokens_1: list
     tokens_2: list
 
-    def get_tokens(self):
-        return [self.tokens_1, self.tokens_2]
-
 
 @dataclass
 class Batch(BatchMixin):
-    input_ids_1: torch.Tensor
-    input_mask_1: torch.Tensor
-    segment_ids_1: torch.Tensor
-    input_ids_2: torch.Tensor
-    input_mask_2: torch.Tensor
-    segment_ids_2: torch.Tensor
-    label_id: torch.Tensor
-    option_1_span: torch.Tensor
-    option_2_span: torch.Tensor
+    input_ids_1: torch.LongTensor
+    input_mask_1: torch.LongTensor
+    segment_ids_1: torch.LongTensor
+    input_ids_2: torch.LongTensor
+    input_mask_2: torch.LongTensor
+    segment_ids_2: torch.LongTensor
+    label_id: torch.LongTensor
+    option_1_span: torch.LongTensor
+    option_2_span: torch.LongTensor
     tokens_1: list
     tokens_2: list
-
-    @classmethod
-    def from_data_rows(cls, data_row_ls: List[DataRow]):
-        return Batch(
-            input_ids_1=torch.tensor([f.input_ids_1 for f in data_row_ls], dtype=torch.long),
-            input_mask_1=torch.tensor([f.input_mask_1 for f in data_row_ls], dtype=torch.long),
-            segment_ids_1=torch.tensor([f.segment_ids_1 for f in data_row_ls], dtype=torch.long),
-            input_ids_2=torch.tensor([f.input_ids_2 for f in data_row_ls], dtype=torch.long),
-            input_mask_2=torch.tensor([f.input_mask_2 for f in data_row_ls], dtype=torch.long),
-            segment_ids_2=torch.tensor([f.segment_ids_2 for f in data_row_ls], dtype=torch.long),
-            option_1_span=torch.tensor([f.option_1_span for f in data_row_ls], dtype=torch.long),
-            option_2_span=torch.tensor([f.option_2_span for f in data_row_ls], dtype=torch.long),
-            label_id=torch.tensor([f.label_id for f in data_row_ls], dtype=torch.long),
-            tokens_1=[f.tokens_1 for f in data_row_ls],
-            tokens_2=[f.tokens_2 for f in data_row_ls],
-        )
 
 
 class MaskedWikiTask(Task):
