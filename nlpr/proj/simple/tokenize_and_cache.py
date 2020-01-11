@@ -24,16 +24,15 @@ class RunConfiguration(zconf.RunConfig):
     force_overwrite = zconf.attr(action="store_true")
 
 
-def chunk_and_save(phase, examples, feat_spec, tokenizer, task, args):
-    dataset_with_metadata = shared_runner.convert_examples_to_dataset(
+def chunk_and_save(phase, examples, feat_spec, tokenizer, args):
+    dataset = shared_runner.convert_examples_to_dataset(
         examples=examples,
         feat_spec=feat_spec,
         tokenizer=tokenizer,
-        task=task,
         verbose=True,
     )
     shared_caching.chunk_and_save(
-        dataset_with_metadata=dataset_with_metadata,
+        data=dataset.data,
         chunk_size=args.chunk_size,
         data_args=args.to_dict(),
         output_dir=os.path.join(args.output_dir, phase),
@@ -66,7 +65,6 @@ def main(args: RunConfiguration):
             examples=task.get_train_examples(),
             feat_spec=feat_spec,
             tokenizer=tokenizer,
-            task=task,
             args=args,
         )
     if "val" in phases:
@@ -75,7 +73,6 @@ def main(args: RunConfiguration):
             examples=task.get_val_examples(),
             feat_spec=feat_spec,
             tokenizer=tokenizer,
-            task=task,
             args=args,
         )
     if "test" in phases:
@@ -84,7 +81,6 @@ def main(args: RunConfiguration):
             examples=task.get_test_examples(),
             feat_spec=feat_spec,
             tokenizer=tokenizer,
-            task=task,
             args=args,
         )
 

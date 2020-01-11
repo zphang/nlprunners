@@ -11,7 +11,6 @@ from torch.utils.data.distributed import DistributedSampler
 from pyutils.display import maybe_tqdm
 import pyutils.io as io
 
-from nlpr.tasks.core import BatchMixin
 from nlpr.shared.pycore import ExtendedDataClassMixin
 from nlpr.shared.model_setup import OptimizerScheduler
 from nlpr.shared.modeling.models import forward_batch_delegate, compute_loss_from_model_output
