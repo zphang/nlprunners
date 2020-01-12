@@ -122,19 +122,10 @@ class ChunkedFilesDataCache(DataCache):
         self.chunker = Chunker.from_chunk_size(length=self.length, chunk_size=self.chunk_size)
 
     def get_iterable_dataset(self, buffer_size=None, shuffle=False, subset=None, verbose=False):
-        if subset is None:
-            subset = self.length
-        if buffer_size is None:
-            buffer_size = min(self.length, subset)
-
-        indices = np.arange(self.length).astype(int)
-        if shuffle:
-            np.random.shuffle(indices)
-        if subset:
-            indices = indices[:subset]
-        buffer_chunked_indices = convert_to_chunks(indices, chunk_size=buffer_size)
         return ChunkedFilesIterableDataset(
-            buffer_chunked_indices=buffer_chunked_indices,
+            buffer_size=buffer_size,
+            shuffle=shuffle,
+            subset=subset,
             chunked_file_data_cache=self,
             verbose=verbose,
         )
@@ -169,18 +160,40 @@ class ChunkedFilesDataCache(DataCache):
 
 
 class ChunkedFilesIterableDataset(torch.utils.data.dataset.IterableDataset):
-    def __init__(self, buffer_chunked_indices, chunked_file_data_cache: ChunkedFilesDataCache, verbose=False):
-        self.buffer_chunked_indices = buffer_chunked_indices
+    def __init__(self, buffer_size, shuffle, subset,
+                 chunked_file_data_cache: ChunkedFilesDataCache,
+                 verbose=False):
+        self.buffer_size = buffer_size
+        self.shuffle = shuffle
+        self.subset = subset
         self.chunked_file_data_cache = chunked_file_data_cache
         self.verbose = verbose
 
+        self.length = self.chunked_file_data_cache.length
+        if self.subset:
+            self.length = min(self.subset, self.length)
+        if self.buffer_size is None:
+            self.buffer_size = self.length
+
     def __iter__(self):
         seen = 0
-        total = sum(len(x) for x in self.buffer_chunked_indices)
-        for buffer_chunked_index in self.buffer_chunked_indices:
+        buffer_chunked_indices = self.get_buffer_chunked_indices()
+        for buffer_chunked_index in buffer_chunked_indices:
             if self.verbose:
-                print(f"Loading buffer {seen} - {seen + len(buffer_chunked_index)} out of {total}")
+                print(f"Loading buffer {seen} - {seen + len(buffer_chunked_index)} out of {len(self)}")
             buffer = self.chunked_file_data_cache.load_from_indices(buffer_chunked_index, verbose=self.verbose)
             for elem in buffer:
                 yield elem
             seen += len(buffer_chunked_index)
+
+    def get_buffer_chunked_indices(self):
+        indices = np.arange(self.length).astype(int)
+        if self.shuffle:
+            np.random.shuffle(indices)
+        if self.subset:
+            indices = indices[:self.subset]
+        buffer_chunked_indices = convert_to_chunks(indices, chunk_size=self.buffer_size)
+        return buffer_chunked_indices
+
+    def __len__(self):
+        return self.length

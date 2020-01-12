@@ -157,6 +157,24 @@ class SimpleTaskRunner(BaseRunner):
         return all_logits
 
     def get_train_dataloader(self, train_cache):
+        """
+        import nlpr.shared.runner as shared_runner
+        import nlpr.shared.torch_utils as torch_utils
+        from torch.utils.data import RandomSampler
+        train_examples = self.task.get_train_examples()
+        dataset = shared_runner.convert_examples_to_dataset(
+            examples=train_examples,
+            tokenizer=self.model_wrapper.tokenizer,
+            feat_spec=self.rparams.feat_spec,
+        )
+        train_dataloader = torch_utils.DataLoaderWithLength(
+            dataset=dataset,
+            sampler=RandomSampler(dataset),
+            batch_size=self.train_schedule.train_batch_size,
+            collate_fn=self.task.collate_fn,
+        )
+        return train_dataloader
+        """
         return get_train_dataloader_from_cache(
             train_cache=train_cache,
             task=self.task,

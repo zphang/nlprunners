@@ -1,10 +1,11 @@
 import copy
+import math
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
 CPU_DEVICE = torch.device("cpu")
 
@@ -90,3 +91,15 @@ class ListDataset(Dataset):
 
     def __getitem__(self, item):
         return self.data[item]
+
+
+class DataLoaderWithLength(DataLoader):
+    def __len__(self):
+        try:
+            return super().__len__()
+        except TypeError as e:
+            try:
+                return math.ceil(len(self.dataset) / self.batch_size)
+            except TypeError:
+                pass
+            raise e

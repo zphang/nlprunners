@@ -157,7 +157,7 @@ def get_train_dataloader_from_cache(train_cache: caching.ChunkedFilesDataCache,
         buffer_size=10000,
         shuffle=True,
     )
-    train_dataloader = DataLoader(
+    train_dataloader = torch_utils.DataLoaderWithLength(
         dataset=dataset,
         batch_size=train_batch_size,
         collate_fn=task.collate_fn,
@@ -171,10 +171,10 @@ def get_eval_dataloader_from_cache(eval_cache: caching.ChunkedFilesDataCache,
                                    subset=None):
     dataset = eval_cache.get_iterable_dataset(
         buffer_size=10000,
-        shuffle=True,
+        shuffle=False,
         subset=subset,
     )
-    eval_dataloader = DataLoader(
+    eval_dataloader = torch_utils.DataLoaderWithLength(
         dataset=dataset,
         batch_size=eval_batch_size,
         collate_fn=task.collate_fn,
@@ -206,7 +206,7 @@ def optim_step_grad_accum(optimizer_scheduler: OptimizerScheduler,
     if (train_global_state.epoch_step + 1) % gradient_accumulation_steps == 0:
         optimizer_scheduler.step()
         optimizer_scheduler.optimizer.zero_grad()
-        train_global_state.global_step += 1
+        train_global_state.step()
 
 
 def save_model_with_metadata(model: nn.Module, metadata: dict, output_dir: str, file_name="model"):

@@ -96,9 +96,9 @@ class Task:
             batch_dict = {}
             for field in cls.Batch.get_fields():
                 batch_dict[field] = combined.pop(field)
-            batch = cls.Batch(**batch_dict)
+            out_batch = cls.Batch(**batch_dict)
             remainder = combined
-            return batch, remainder
+            return out_batch, remainder
         else:
             raise TypeError(f"Unknown type for collate_fn {type(elem)}")
 
