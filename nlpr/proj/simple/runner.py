@@ -12,8 +12,8 @@ from nlpr.shared.runner import (
     TrainGlobalState,
     optim_step_grad_accum,
     run_val,
-    get_train_dataloader,
-    get_eval_dataloader,
+    get_train_dataloader_from_cache,
+    get_eval_dataloader_from_cache,
 )
 from nlpr.shared.modeling.models import forward_batch_delegate, compute_loss_from_model_output
 from nlpr.shared.train_setup import TrainSchedule
@@ -47,30 +47,30 @@ class SimpleTaskRunner(BaseRunner):
         # Convenience
         self.model = self.model_wrapper.model
 
-    def run_train(self, train_examples, verbose=True):
-        train_dataloader = self.get_train_dataloader(train_examples)
+    def run_train(self, train_cache, val_cache, verbose=True):
+        train_dataloader = self.get_train_dataloader(train_cache)
         train_global_state = TrainGlobalState()
 
         for epoch_i in \
                 maybe_trange(int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
             train_global_state.epoch = epoch_i
             self.run_train_epoch(train_dataloader, train_global_state)
-            results = self.run_val(val_examples=self.task.get_val_examples())
+            results = self.run_val(val_cache=val_cache)
             self.log_writer.write_entry("val_metric", {
                 "epoch": train_global_state.epoch,
                 "metric": results["metrics"].asdict(),
             })
             self.log_writer.flush()
 
-    def run_train_val(self, train_examples, val_examples, verbose=True):
+    def run_train_val(self, train_cache, val_cache, verbose=True):
         epoch_result_dict = col.OrderedDict()
         train_global_state = TrainGlobalState()
         for epoch_i in maybe_trange(
                 int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
             train_global_state.epoch = epoch_i
-            train_dataloader = self.get_train_dataloader(train_examples)
+            train_dataloader = self.get_train_dataloader(train_cache)
             self.run_train_epoch(train_dataloader, train_global_state)
-            epoch_result = self.run_val(val_examples)
+            epoch_result = self.run_val(val_cache)
             del epoch_result["logits"]
             epoch_result["metrics"] = epoch_result["metrics"].asdict()
             epoch_result_dict[epoch_i] = epoch_result
@@ -125,10 +125,9 @@ class SimpleTaskRunner(BaseRunner):
             "pred_entropy": compute_pred_entropy_clean(logits)
         })
 
-    def run_val(self, val_examples, verbose=True):
+    def run_val(self, val_cache, subset=None, verbose=True):
         return run_val(
-            val_examples=val_examples,
-            val_dataloader=self.get_eval_dataloader(val_examples),
+            val_dataloader=self.get_eval_dataloader(val_cache, subset=subset),
             model=self.model,
             task=self.task,
             loss_criterion=self.loss_criterion,
@@ -137,8 +136,8 @@ class SimpleTaskRunner(BaseRunner):
             verbose=verbose,
         )
 
-    def run_test(self, test_examples, verbose=True):
-        test_dataloader = self.get_eval_dataloader(test_examples)
+    def run_test(self, test_cache, verbose=True):
+        test_dataloader = self.get_eval_dataloader(test_cache)
         self.model.eval()
         all_logits = []
         for step, (batch, batch_metadata) in enumerate(
@@ -157,23 +156,18 @@ class SimpleTaskRunner(BaseRunner):
         all_logits = np.concatenate(all_logits, axis=0)
         return all_logits
 
-    def get_train_dataloader(self, train_examples, verbose=True):
-        return get_train_dataloader(
-            train_examples=train_examples,
+    def get_train_dataloader(self, train_cache):
+        return get_train_dataloader_from_cache(
+            train_cache=train_cache,
             task=self.task,
-            tokenizer=self.model_wrapper.tokenizer,
-            feat_spec=self.rparams.feat_spec,
-            local_rank=self.rparams.local_rank,
             train_batch_size=self.train_schedule.train_batch_size,
-            verbose=verbose,
         )
 
-    def get_eval_dataloader(self, eval_examples):
-        return get_eval_dataloader(
-            eval_examples=eval_examples,
+    def get_eval_dataloader(self, eval_cache, subset=None):
+        return get_eval_dataloader_from_cache(
+            eval_cache=eval_cache,
             task=self.task,
-            tokenizer=self.model_wrapper.tokenizer,
-            feat_spec=self.rparams.feat_spec,
+            subset=subset,
             eval_batch_size=self.rparams.eval_batch_size,
         )
 

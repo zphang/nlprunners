@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from torch.utils.data import Dataset
+
 CPU_DEVICE = torch.device("cpu")
 
 
@@ -77,3 +79,14 @@ def get_only_requires_grad(parameters, requires_grad=True):
         return {n: p for n, p in parameters if p.requires_grad == requires_grad}
     else:
         raise RuntimeError("todo: support generators")
+
+
+class ListDataset(Dataset):
+    def __init__(self, data: list):
+        self.data = data
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, item):
+        return self.data[item]

@@ -12,6 +12,7 @@ from nlpr.shared.runner import (
 )
 from nlpr.shared.pycore import ExtendedDataClassMixin
 from nlpr.shared.torch_utils import copy_state_dict, CPU_DEVICE
+from nlpr.shared.caching import ChunkedFilesDataCache
 
 
 @dataclass
@@ -50,7 +51,8 @@ class MetaRunner:
 
     def __init__(self,
                  runner: BaseRunner,
-                 train_examples: list, val_examples: list,
+                 train_cache: ChunkedFilesDataCache, val_cache: ChunkedFilesDataCache,
+                 partial_eval_number: int,
                  should_save_func,
                  should_eval_func,
                  output_dir,
@@ -60,8 +62,9 @@ class MetaRunner:
                  log_writer: BaseZLogger = PRINT_LOGGER
                  ):
         self.runner = runner
-        self.train_examples = train_examples
-        self.val_examples = val_examples
+        self.train_cache = train_cache
+        self.val_cache = val_cache
+        self.partial_eval_number = partial_eval_number
         self.should_save_func = should_save_func
         self.should_eval_func = should_eval_func
         self.output_dir = output_dir
@@ -96,7 +99,7 @@ class MetaRunner:
 
         for _ in maybe_trange(
                 int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=self.verbose):
-            train_dataloader = self.runner.get_train_dataloader(self.train_examples)
+            train_dataloader = self.runner.get_train_dataloader(self.train_cache)
             for _ in self.runner.run_train_epoch_context(
                     train_dataloader=train_dataloader,
                     train_global_state=self.train_global_state,
@@ -154,7 +157,7 @@ class MetaRunner:
         pass
 
     def eval_save(self):
-        val_result = self.runner.run_val(self.val_examples)
+        val_result = self.runner.run_val(self.val_cache)
         val_state = ValState(
             score=val_result["metrics"].major,
             train_global_state=self.train_global_state.new(),

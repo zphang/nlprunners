@@ -12,12 +12,14 @@ import nlpr.tasks as tasks
 import nlpr.tasks.evaluate as evaluate
 import nlpr.proj.simple.runner as simple_runner
 import nlpr.shared.metarunner as metarunner
+import nlpr.shared.caching as caching
 
 
 @zconf.run_config
 class RunConfiguration(zconf.RunConfig):
     # === Required parameters === #
     task_config_path = zconf.attr(type=str, required=True)
+    task_cache_data_path = zconf.attr(type=str, required=True)
     output_dir = zconf.attr(type=str, required=True)
 
     # === Model parameters === #
@@ -95,13 +97,8 @@ def main(args):
             )
             model_wrapper.model.to(quick_init_out.device)
 
-        train_examples = task.get_train_examples()
-        train_examples, _ = train_setup.maybe_subsample_train(
-            train_examples=train_examples,
-            train_examples_number=args.train_examples_number,
-            train_examples_fraction=args.train_examples_fraction,
-        )
-        num_train_examples = len(train_examples)
+        train_cache = caching.ChunkedFilesDataCache(os.path.join(args.task_cache_data_path, "train"))
+        num_train_examples = len(train_cache)
 
         train_schedule = train_setup.get_train_schedule(
             num_train_examples=num_train_examples,
@@ -152,11 +149,12 @@ def main(args):
         )
 
         if args.do_train:
-            val_examples = task.get_val_examples()
+            val_cache = caching.ChunkedFilesDataCache(os.path.join(args.task_cache_data_path, "val"))
             metarunner.MetaRunner(
                 runner=runner,
-                train_examples=train_examples,
-                val_examples=val_examples[:args.partial_eval_number],  # quick and dirty
+                train_cache=train_cache,
+                val_cache=val_cache,
+                partial_eval_number=args.partial_eval_number,
                 should_save_func=metarunner.get_should_save_func(args.save_every_steps),
                 should_eval_func=metarunner.get_should_eval_func(args.eval_every_steps),
                 output_dir=args.output_dir,
@@ -173,8 +171,8 @@ def main(args):
             )
 
         if args.do_val:
-            val_examples = task.get_val_examples()
-            results = runner.run_val(val_examples)
+            val_cache = caching.ChunkedFilesDataCache(os.path.join(args.task_cache_data_path, "val"))
+            results = runner.run_val(val_cache)
             evaluate.write_val_results(
                 results=results,
                 output_dir=args.output_dir,

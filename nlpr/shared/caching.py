@@ -5,7 +5,7 @@ import os
 import torch
 import torch.utils.data.dataset
 
-import nlpr.shared.runner as shared_runner
+import nlpr.shared.torch_utils as torch_utils
 
 
 class Chunker:
@@ -121,14 +121,11 @@ class ChunkedFilesDataCache(DataCache):
         self.chunk_size = self.data_args["chunk_size"]
         self.chunker = Chunker.from_chunk_size(length=self.length, chunk_size=self.chunk_size)
 
-    def get_iterable_dataset(self, buffer_size=None, batch_size=1, shuffle=False, subset=None, verbose=False):
+    def get_iterable_dataset(self, buffer_size=None, shuffle=False, subset=None, verbose=False):
         if subset is None:
             subset = self.length
-        else:
-            assert shuffle
         if buffer_size is None:
             buffer_size = min(self.length, subset)
-        buffer_size = math.ceil(buffer_size / batch_size) * batch_size
 
         indices = np.arange(self.length).astype(int)
         if shuffle:
@@ -165,7 +162,7 @@ class ChunkedFilesDataCache(DataCache):
         data = []
         for i in range(self.num_chunks):
             data += self.load_chunk(i)
-        return shared_runner.ListDataset(data)
+        return torch_utils.ListDataset(data)
 
     def __len__(self):
         return self.length

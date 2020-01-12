@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, RandomSampler, SequentialSampler, DataLoader
+from torch.utils.data import RandomSampler, SequentialSampler, DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
 from pyutils.display import maybe_tqdm
@@ -15,6 +15,8 @@ from nlpr.shared.pycore import ExtendedDataClassMixin
 from nlpr.shared.model_setup import OptimizerScheduler
 from nlpr.shared.modeling.models import forward_batch_delegate, compute_loss_from_model_output
 import nlpr.tasks.evaluate as evaluate
+import nlpr.shared.torch_utils as torch_utils
+import nlpr.shared.caching as caching
 
 
 class BaseRunner:
@@ -39,17 +41,6 @@ class TrainGlobalState(ExtendedDataClassMixin):
         return f"TGS({self.epoch} / {self.epoch_step} ({self.global_step}))"
 
 
-class ListDataset(Dataset):
-    def __init__(self, data: list):
-        self.data = data
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, item):
-        return self.data[item]
-
-
 def convert_examples_to_dataset(examples, tokenizer, feat_spec, verbose=False):
     data_rows = [
         example.tokenize(tokenizer).featurize(tokenizer, feat_spec)
@@ -65,7 +56,7 @@ def convert_examples_to_dataset(examples, tokenizer, feat_spec, verbose=False):
             for k, v in metadata.items()
         }
         data.append({"data_row": data_row, "metadata": metadata_row})
-    return ListDataset(data)
+    return torch_utils.ListDataset(data)
 
 
 def get_sampler(dataset, local_rank, force_sequential=False):
@@ -77,7 +68,7 @@ def get_sampler(dataset, local_rank, force_sequential=False):
         return DistributedSampler(dataset)
 
 
-def run_val(val_examples, val_dataloader,
+def run_val(val_dataloader,
             model, task, loss_criterion,
             device, local_rank, verbose):
     if not local_rank == -1:
@@ -116,7 +107,8 @@ def run_val(val_examples, val_dataloader,
     return {
         "logits": all_logits,
         "loss": eval_loss,
-        "metrics": evaluate.compute_task_metrics(task, all_logits, val_examples),
+        "metrics": evaluate.compute_task_metrics(task, all_logits,
+                                                 task.get_val_examples()),
     }
 
 
@@ -152,6 +144,38 @@ def get_eval_dataloader(eval_examples, task,
     eval_dataloader = DataLoader(
         dataset=dataset,
         sampler=eval_sampler,
+        batch_size=eval_batch_size,
+        collate_fn=task.collate_fn,
+    )
+    return eval_dataloader
+
+
+def get_train_dataloader_from_cache(train_cache: caching.ChunkedFilesDataCache,
+                                    task,
+                                    train_batch_size: int):
+    dataset = train_cache.get_iterable_dataset(
+        buffer_size=10000,
+        shuffle=True,
+    )
+    train_dataloader = DataLoader(
+        dataset=dataset,
+        batch_size=train_batch_size,
+        collate_fn=task.collate_fn,
+    )
+    return train_dataloader
+
+
+def get_eval_dataloader_from_cache(eval_cache: caching.ChunkedFilesDataCache,
+                                   task,
+                                   eval_batch_size: int,
+                                   subset=None):
+    dataset = eval_cache.get_iterable_dataset(
+        buffer_size=10000,
+        shuffle=True,
+        subset=subset,
+    )
+    eval_dataloader = DataLoader(
+        dataset=dataset,
         batch_size=eval_batch_size,
         collate_fn=task.collate_fn,
     )
