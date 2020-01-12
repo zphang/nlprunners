@@ -107,8 +107,12 @@ def run_val(val_dataloader,
     return {
         "logits": all_logits,
         "loss": eval_loss,
-        "metrics": evaluate.compute_task_metrics(task, all_logits,
-                                                 task.get_val_examples()),
+        "metrics": evaluate.compute_task_metrics(
+            task=task,
+            logits=all_logits,
+            # TODO: Find a better solution for getting a subset of val examples
+            examples=task.get_val_examples()[:len(val_dataloader.dataset)],
+        ),
     }
 
 

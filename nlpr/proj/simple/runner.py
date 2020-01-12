@@ -157,6 +157,7 @@ class SimpleTaskRunner(BaseRunner):
         return all_logits
 
     def get_train_dataloader(self, train_cache):
+        # Not currently supported distributed parallel
         return get_train_dataloader_from_cache(
             train_cache=train_cache,
             task=self.task,

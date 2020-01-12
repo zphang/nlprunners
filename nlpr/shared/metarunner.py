@@ -114,6 +114,9 @@ class MetaRunner:
                         output_dir=self.output_dir,
                         file_name=f"model__{self.train_global_state.global_step}.p",
                     )
+
+                # TODO: Fix: I think TGS has already been updated here, so we need
+                # to modify the check
                 if self.should_eval_func(self.train_global_state):
                     self.eval_save()
 
