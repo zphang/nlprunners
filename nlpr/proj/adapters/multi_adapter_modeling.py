@@ -1,3 +1,5 @@
+import os
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -695,7 +697,7 @@ def get_multi_adapter_adapter_params_dict(modified_layers):
     return adapter_params_dict
 
 
-def get_multi_adapter_weight_dict(modified_layers, simplify_name=True):
+def get_multi_adapter_weight_dict(modified_layers: dict, simplify_name=True):
     result = {}
     for i, (name, layer) in enumerate(modified_layers.items()):
         if simplify_name:
@@ -706,15 +708,21 @@ def get_multi_adapter_weight_dict(modified_layers, simplify_name=True):
     return result
 
 
-def load_adapter_weights_dict(path_dict):
+def load_adapter_weights_dict(path_dict: dict):
     return {
         name: torch.load(path, map_location="cpu")
         for name, path in path_dict.items()
     }
 
 
-def load_adapter_weights_dict_path(path):
-    return load_adapter_weights_dict(io.read_json(path))
+def load_adapter_weights_dict_path(path: str):
+    weights_path_dict = io.read_json(path)
+    base_path = os.path.split(path)[0]
+    new_weights_path_dict = {
+        k: path if os.path.exists(path) else os.path.join(base_path, path)
+        for k, path in weights_path_dict.items()
+    }
+    return load_adapter_weights_dict(new_weights_path_dict)
 
 
 def isolate_adapter_weights(adapter_weights: dict, model_type):
