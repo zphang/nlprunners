@@ -171,6 +171,7 @@ MODEL_CLASS_DICT = {
         TaskTypes.CLASSIFICATION: ptt.RobertaForSequenceClassification,
         TaskTypes.REGRESSION: ptt.RobertaForSequenceClassification,  # ptt is weird
         TaskTypes.MULTIPLE_CHOICE: ptt.RobertaForMultipleChoice,
+        TaskTypes.SQUAD_STYLE_QA: ptt.RobertaForQuestionAnswering,
     },
     ModelArchitectures.GLOVE_LSTM: {
         TaskTypes.CLASSIFICATION: glove_lstm_modeling.GloveLSTMForSequenceClassification,

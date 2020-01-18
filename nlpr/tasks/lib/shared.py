@@ -22,6 +22,7 @@ class TaskTypes(Enum):
     SPAN_COMPARISON_CLASSIFICATION = 3
     MULTIPLE_CHOICE = 4
     SPAN_CHOICE_PROB_TASK = 5
+    SQUAD_STYLE_QA = 6
     UNDEFINED = -1
 
 
@@ -47,7 +48,7 @@ def flat_collate_fn(batch):
     elem = batch[0]
     if isinstance(elem, (np.ndarray, int, float, str)):
         return dataloader.default_collate(batch)
-    elif isinstance(elem, list):
+    elif isinstance(elem, (list, dict)):
         # Don't do anything to list of lists
         return batch
     else:

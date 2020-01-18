@@ -25,8 +25,6 @@ from nlpr.tasks.lib.stsb import StsbTask
 from nlpr.tasks.lib.wnli import WnliTask
 from nlpr.tasks.lib.shared import Task
 
-import nlpr.shared.path_utils as path_utils
-
 from pyutils.io import read_json
 
 
@@ -49,7 +47,8 @@ TASK_DICT = {
     "qnli": QnliTask,
     "record": ReCoRDTask,
     "snli": SnliTask,
-    "squad": SquadTask,
+    "squad_v1": SquadTask,
+    "squad_v2": SquadTask,
     "sst": SstTask,
     "stsb": StsbTask,
     "wnli": WnliTask,
@@ -76,16 +75,17 @@ def create_task_from_config(config: dict, base_path=None, verbose=False):
         if not os.path.isabs(path):
             assert base_path
             config["paths"][k] = os.path.join(base_path, path)
+    task_kwargs = config.get("kwargs", {})
     if verbose:
         print(task_class.__name__)
         for k, v in config["paths"].items():
             print(f"  [{k}]: {v}")
-    return task_class(name=config["task"], path_dict=config["paths"])
+    return task_class(name=config["task"], path_dict=config["paths"], **task_kwargs)
 
 
 def create_task_from_config_path(config_path: str, verbose=False):
     return create_task_from_config(
         read_json(config_path),
         base_path=os.path.split(config_path)[0],
-        verbose=verbose
+        verbose=verbose,
     )

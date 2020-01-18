@@ -17,6 +17,8 @@ from nlpr.shared.modeling.models import forward_batch_delegate, compute_loss_fro
 import nlpr.tasks.evaluate as evaluate
 import nlpr.shared.torch_utils as torch_utils
 import nlpr.shared.caching as caching
+from nlpr.tasks.retrieval import SquadTask
+from nlpr.tasks.core import FeaturizationSpec
 
 
 class BaseRunner:
@@ -41,11 +43,29 @@ class TrainGlobalState(ExtendedDataClassMixin):
         return f"TGS({self.epoch} / {self.epoch_step} ({self.global_step}))"
 
 
-def convert_examples_to_dataset(examples, tokenizer, feat_spec, verbose=False):
-    data_rows = [
-        example.tokenize(tokenizer).featurize(tokenizer, feat_spec)
-        for example in maybe_tqdm(examples, desc="Tokenizing", verbose=verbose)
-    ]
+def convert_examples_to_dataset(examples: list,
+                                tokenizer,
+                                feat_spec: FeaturizationSpec,
+                                phase: str,
+                                verbose=False):
+    # TODO: Better solution
+    if isinstance(examples[0], SquadTask.Example):
+        data_rows = []
+        for example in maybe_tqdm(examples, desc="Tokenizing", verbose=verbose):
+            # TODO more arguments?
+            data_rows += example.to_feature_list(
+                tokenizer=tokenizer,
+                feat_spec=feat_spec,
+                max_seq_length=feat_spec.max_seq_length,
+                doc_stride=128,
+                max_query_length=64,
+                set_type=phase,
+            )
+    else:
+        data_rows = [
+            example.tokenize(tokenizer).featurize(tokenizer, feat_spec)
+            for example in maybe_tqdm(examples, desc="Tokenizing", verbose=verbose)
+        ]
     metadata = {
         "example_id": list(range(len(data_rows))),
     }
@@ -87,14 +107,15 @@ def run_val(val_dataloader,
                 batch=batch,
                 omit_label_id=True,
                 task_type=task.TASK_TYPE,
-            )[0]
+            )
             tmp_eval_loss = compute_loss_from_model_output(
                 logits=logits,
                 loss_criterion=loss_criterion,
                 batch=batch,
                 task_type=task.TASK_TYPE,
             )
-
+        1/0
+        # TODO: This is where we are now
         logits = logits.detach().cpu().numpy()
         total_eval_loss += tmp_eval_loss.mean().item()
 

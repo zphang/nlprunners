@@ -210,7 +210,7 @@ class MeanTeacherRunner(BaseRunner):
             batch=sup_batch.batch,
             omit_label_id=True,
             task_type=self.task.TASK_TYPE,
-        )[0]
+        )
         classification_loss = compute_loss_from_model_output(
             logits=sup_logits,
             loss_criterion=self.loss_criterion,
@@ -224,7 +224,7 @@ class MeanTeacherRunner(BaseRunner):
                 batch=sup_batch.batch,
                 omit_label_id=True,
                 task_type=self.task.TASK_TYPE,
-            )[0]
+            )
 
         # Consistency
         if self.mt_params.use_unsup:
@@ -234,13 +234,13 @@ class MeanTeacherRunner(BaseRunner):
                 batch=unsup_batch.batch,
                 omit_label_id=True,
                 task_type=self.task.TASK_TYPE,
-            )[0]
+            )
             teacher_unsup_logits = forward_batch_delegate(
                 model=self.teacher_model_wrapper.model,
                 batch=unsup_batch.batch,
                 omit_label_id=True,
                 task_type=self.task.TASK_TYPE,
-            )[0]
+            )
             student_logits = torch.cat([sup_logits, unsup_logits], dim=0)
             teacher_logits = torch.cat([teacher_sup_logits, teacher_unsup_logits], dim=0)
         else:
@@ -301,7 +301,7 @@ class MeanTeacherRunner(BaseRunner):
                     batch=batch,
                     omit_label_id=True,
                     task_type=self.task.TASK_TYPE,
-                )[0]
+                )
                 tmp_eval_loss = compute_loss_from_model_output(
                     logits=logits,
                     loss_criterion=self.loss_criterion,
@@ -337,7 +337,7 @@ class MeanTeacherRunner(BaseRunner):
                     batch=batch,
                     omit_label_id=True,
                     task_type=self.task.TASK_TYPE,
-                )[0]
+                )
             logits = logits.detach().cpu().numpy()
             all_logits.append(logits)
 

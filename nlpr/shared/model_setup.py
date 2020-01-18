@@ -67,6 +67,8 @@ def get_model(model_class_spec, config_path, task):
         config.num_choices = task.NUM_CHOICES
     elif task.TASK_TYPE == TaskTypes.SPAN_CHOICE_PROB_TASK:
         config.num_choices = task.NUM_CHOICES
+    elif task.TASK_TYPE == TaskTypes.SQUAD_STYLE_QA:
+        config.labels = 2
     else:
         raise KeyError(task.TASK_TYPE)
 

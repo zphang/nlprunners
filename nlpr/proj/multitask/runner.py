@@ -93,7 +93,7 @@ class MultiTaskRunner(BaseRunner):
             omit_label_id=True,
             task_type=task.TASK_TYPE,
             task_name=task_name,
-        )[0]
+        )
         loss = compute_loss_from_model_output(
             logits=logits,
             loss_criterion=self.loss_criterion_dict[task_name],
@@ -162,7 +162,7 @@ class MultiTaskRunner(BaseRunner):
                     omit_label_id=True,
                     task_type=task.TASK_TYPE,
                     task_name=task_name,
-                )[0]
+                )
                 tmp_eval_loss = compute_loss_from_model_output(
                     logits=logits,
                     loss_criterion=loss_criterion,

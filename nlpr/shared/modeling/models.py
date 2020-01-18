@@ -11,13 +11,6 @@ from nlpr.tasks.lib.shared import TaskTypes
 from nlpr.ext.allennlp import SelfAttentiveSpanExtractor
 
 
-@dataclass
-class InputSet:
-    input_ids: torch.Tensor
-    token_type_ids: torch.Tensor
-    attention_mask: torch.Tensor
-
-
 def forward_batch_basic(model: nn.Module, batch, omit_label_id: bool = False):
     return model(
         input_ids=batch.input_ids,
@@ -33,7 +26,7 @@ def forward_batch_delegate(model: nn.Module, batch, task_type: TaskTypes, omit_l
             model=model,
             batch=batch,
             omit_label_id=omit_label_id,
-        )
+        )[0]
     elif task_type == TaskTypes.SPAN_COMPARISON_CLASSIFICATION:
         spans = torch.stack([
             batch.sentence1_span,
@@ -45,12 +38,28 @@ def forward_batch_delegate(model: nn.Module, batch, task_type: TaskTypes, omit_l
             token_type_ids=batch.segment_ids,
             attention_mask=batch.input_mask,
             labels=batch.label_id if not omit_label_id else None,
-        )
+        )[0]
     elif task_type == TaskTypes.MULTIPLE_CHOICE:
         return forward_batch_basic(
             model=model,
             batch=batch,
             omit_label_id=omit_label_id,
+        )[0]
+    elif task_type == TaskTypes.SQUAD_STYLE_QA:
+        start_positions = batch.start_position if not omit_label_id else None
+        end_positions = batch.end_position if not omit_label_id else None
+        # TODO: Refactor this wrt model_resolution
+        # Actually "xlm", "roberta", "distilbert"
+        if model.__class__.__name__.startswith("Robert"):
+            segment_ids = None
+        else:
+            segment_ids = batch.segment_ids
+        return model(
+            input_ids=batch.input_ids,
+            attention_mask=batch.input_mask,
+            token_type_ids=segment_ids,
+            start_positions=start_positions,
+            end_positions=end_positions,
         )
     else:
         raise KeyError(task_type)
@@ -66,9 +75,37 @@ def compute_loss_from_model_output(logits, loss_criterion, batch, task_type: Tas
         loss = loss_criterion(logits, batch.label_id)
     elif task_type == TaskTypes.MULTIPLE_CHOICE:
         loss = loss_criterion(logits, batch.label_id)
+    elif task_type == TaskTypes.SQUAD_STYLE_QA:
+        # TODO: Note: we're ignoring the loss_criterion
+        loss = qa_compute_loss(
+            logits=logits,
+            start_positions=batch.start_position,
+            end_positions=batch.end_position,
+        )
     else:
         raise KeyError(task_type)
     return loss
+
+
+def qa_compute_loss(logits, start_positions, end_positions):
+    # Taken from: RobertaForQuestionAnswering
+
+    start_logits, end_logits = logits
+    # If we are on multi-GPU, split add a dimension
+    if len(start_positions.size()) > 1:
+        start_positions = start_positions.squeeze(-1)
+    if len(end_positions.size()) > 1:
+        end_positions = end_positions.squeeze(-1)
+    # sometimes the start/end positions are outside our model inputs, we ignore these terms
+    ignored_index = start_logits.size(1)
+    start_positions.clamp_(0, ignored_index)
+    end_positions.clamp_(0, ignored_index)
+
+    loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+    start_loss = loss_fct(start_logits, start_positions)
+    end_loss = loss_fct(end_logits, end_positions)
+    total_loss = (start_loss + end_loss) / 2
+    return total_loss
 
 
 class BertForSequenceRegression(ptt.BertPreTrainedModel):

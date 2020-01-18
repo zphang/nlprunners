@@ -29,6 +29,7 @@ def chunk_and_save(phase, examples, feat_spec, tokenizer, args):
         examples=examples,
         feat_spec=feat_spec,
         tokenizer=tokenizer,
+        phase=phase,
         verbose=True,
     )
     shared_caching.chunk_and_save(

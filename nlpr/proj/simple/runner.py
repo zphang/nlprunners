@@ -101,7 +101,7 @@ class SimpleTaskRunner(BaseRunner):
             batch=batch,
             omit_label_id=True,
             task_type=self.task.TASK_TYPE,
-        )[0]
+        )
         loss = compute_loss_from_model_output(
             logits=logits,
             loss_criterion=self.loss_criterion,
@@ -122,7 +122,8 @@ class SimpleTaskRunner(BaseRunner):
             "epoch_step": train_global_state.epoch_step,
             "global_step": train_global_state.global_step,
             "loss_val": loss_val,
-            "pred_entropy": compute_pred_entropy_clean(logits)
+            # TODO: Why is this here?
+            # "pred_entropy": compute_pred_entropy_clean(logits)
         })
 
     def run_val(self, val_cache, subset=None, verbose=True):
@@ -149,7 +150,7 @@ class SimpleTaskRunner(BaseRunner):
                     batch=batch,
                     omit_label_id=True,
                     task_type=self.task.TASK_TYPE,
-                )[0]
+                )
             logits = logits.detach().cpu().numpy()
             all_logits.append(logits)
 
