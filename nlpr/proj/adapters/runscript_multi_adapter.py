@@ -69,6 +69,7 @@ class RunConfiguration(zconf.RunConfig):
 
     # Multi Adapters
     adapter_weights_path = zconf.attr(type=str, required=True)
+    adapter_exclude = zconf.attr(type=str, default="")
     adapter_num_weight_sets = zconf.attr(type=int, default=1)
     adapter_ft_mode = zconf.attr(type=str, default="weights")
     adapter_use_optimized = zconf.attr(type=int, default=0)
@@ -116,6 +117,7 @@ def main(args):
         model_path=args.model_path,
     )
     adapter_weights_dict = multi_adapters.load_adapter_weights_dict_path(args.adapter_weights_path)
+    multi_adapters.exclude_adapters(adapter_weights_dict, exclude_list=args.adapter_exclude.split(","))
     adapter_weights_dict = multi_adapters.isolate_adapter_weights_dict(
         adapter_weights_dict=adapter_weights_dict,
         model_type=args.model_type,

@@ -725,6 +725,11 @@ def load_adapter_weights_dict_path(path: str):
     return load_adapter_weights_dict(new_weights_path_dict)
 
 
+def exclude_adapters(adapter_weights_dict: dict, exclude_list: list):
+    for name in exclude_list:
+        del adapter_weights_dict[name]
+
+
 def isolate_adapter_weights(adapter_weights: dict, model_type):
     # Using heuristics, unfortunately
     model_arch = model_resolution.ModelArchitectures.from_model_type(model_type)
