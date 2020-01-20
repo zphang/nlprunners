@@ -107,4 +107,4 @@ You should get a plot that looks something like this:
 * [Pretrained Adapter Weights Pack 1](https://drive.google.com/file/d/1xDj316AMvaVM-J-NYKkhog5oNfPZLxgK/view?usp=sharing)
     * Base model: RoBERTa-Large 
     * Adapter size: 64
-    * Tasks: CoLA, MRPC, QNLI, RTE, SST-2, STS-B
+    * Tasks: CoLA, MRPC, QNLI, RTE, SST-2, STS-B, QQP, MNLI
