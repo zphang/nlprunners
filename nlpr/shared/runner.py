@@ -114,7 +114,7 @@ def run_val(val_dataloader,
                 batch=batch,
                 task_type=task.TASK_TYPE,
             )
-        1/0
+        # 1/0
         # TODO: This is where we are now
         logits = logits.detach().cpu().numpy()
         total_eval_loss += tmp_eval_loss.mean().item()
