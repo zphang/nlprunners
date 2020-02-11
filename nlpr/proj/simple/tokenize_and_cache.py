@@ -7,6 +7,7 @@ import nlpr.shared.runner as shared_runner
 import nlpr.shared.model_resolution as shared_model_resolution
 import nlpr.shared.model_setup as shared_model_setup
 import nlpr.shared.caching as shared_caching
+import nlpr.tasks.evaluate as evaluate
 
 
 @zconf.run_config
@@ -69,12 +70,19 @@ def main(args: RunConfiguration):
             args=args,
         )
     if "val" in phases:
+        val_examples = task.get_val_examples()
         chunk_and_save(
             phase="val",
-            examples=task.get_val_examples(),
+            examples=val_examples,
             feat_spec=feat_spec,
             tokenizer=tokenizer,
             args=args,
+        )
+        shared_caching.chunk_and_save(
+            data=list(evaluate.get_labels_from_examples(task=task, examples=val_examples)),
+            chunk_size=args.chunk_size,
+            data_args=args.to_dict(),
+            output_dir=os.path.join(args.output_dir, "val_labels"),
         )
     if "test" in phases:
         chunk_and_save(

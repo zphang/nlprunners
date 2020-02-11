@@ -64,7 +64,7 @@ def compute_task_metrics(task, logits, examples):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.WSCTask):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
-    if isinstance(task, tasks.YelpPolarityTask):
+    elif isinstance(task, tasks.YelpPolarityTask):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
     else:
         raise KeyError(task)
@@ -106,8 +106,137 @@ def compute_task_metrics_from_classification_preds(task, preds, examples):
         return SimpleAccuracyEval.from_preds(task, preds, examples)
     elif isinstance(task, tasks.WSCTask):
         return SimpleAccuracyEval.from_preds(task, preds, examples)
-    if isinstance(task, tasks.YelpPolarityTask):
+    elif isinstance(task, tasks.YelpPolarityTask):
         return SimpleAccuracyEval.from_preds(task, preds, examples)
+    else:
+        raise KeyError(task)
+
+
+def compute_task_metrics_from_classification_preds_and_labels(task, preds, labels):
+    # Todo: move logic to task?
+    if isinstance(task, tasks.AnliTask):
+        return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.AmazonPolarityTask):
+        return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.BoolQTask):
+        return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.CommitmentBankTask):
+        return CommitmentBankEval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.ColaTask):
+        return MccEval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.CopaTask):
+        return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.IMDBTask):
+        return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.MnliTask):
+        return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.MrpcTask):
+        return AccAndF1Eval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.MultiRCTask):
+        # labels is a lists of dicts
+        return MultiRCEval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.QnliTask):
+        return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.QqpTask):
+        return AccAndF1Eval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.RteTask):
+        return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.SstTask):
+        return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.StsbTask):
+        raise RuntimeError("Not supported for regression")
+    elif isinstance(task, tasks.WiCTask):
+        return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.WSCTask):
+        return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.YelpPolarityTask):
+        return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
+    else:
+        raise KeyError(task)
+
+
+def compute_task_metrics_from_classification_logits_and_labels(task, logits, labels):
+    # Todo: move logic to task?
+    if isinstance(task, tasks.AnliTask):
+        return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.AmazonPolarityTask):
+        return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.BoolQTask):
+        return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.CommitmentBankTask):
+        return CommitmentBankEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.ColaTask):
+        return MccEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.CopaTask):
+        return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.IMDBTask):
+        return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.MnliTask):
+        return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.MrpcTask):
+        return AccAndF1Eval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.MultiRCTask):
+        # labels is a lists of dicts
+        return MultiRCEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.QnliTask):
+        return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.QqpTask):
+        return AccAndF1Eval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.RteTask):
+        return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.SstTask):
+        return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.StsbTask):
+        raise RuntimeError("Not supported for regression")
+    elif isinstance(task, tasks.WiCTask):
+        return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.WSCTask):
+        return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.YelpPolarityTask):
+        return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
+    else:
+        raise KeyError(task)
+
+
+def get_labels_from_examples(task, examples):
+    # Todo: move logic to task?
+    if isinstance(task, tasks.AnliTask):
+        return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.AmazonPolarityTask):
+        return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.BoolQTask):
+        return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.CommitmentBankTask):
+        return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.ColaTask):
+        return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.CopaTask):
+        return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.IMDBTask):
+        return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.MnliTask):
+        return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.MrpcTask):
+        return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.MultiRCTask):
+        # labels is a lists of dicts
+        return MultiRCEval.get_labels_from_examples(task=task, examples=examples)
+    elif isinstance(task, tasks.QnliTask):
+        return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.QqpTask):
+        return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.RteTask):
+        return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.SstTask):
+        return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.StsbTask):
+        return get_label_vals(examples=examples)
+    elif isinstance(task, tasks.WiCTask):
+        return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.WSCTask):
+        return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.YelpPolarityTask):
+        return get_label_ids(task=task, examples=examples)
     else:
         raise KeyError(task)
 
@@ -162,27 +291,35 @@ class MultiRCEval(BaseEvaluation):
 
     @classmethod
     def from_preds(cls, task, preds, examples):
-        labels = get_label_ids(examples=examples, task=task)
-        question_ids = np.array([example.question_id for example in examples])
-        return cls.from_preds_and_labels(preds=preds, labels=labels, question_ids=question_ids)
+        labels = cls.get_labels_from_examples(task=task, examples=examples)
+        return cls.from_preds_and_labels(preds=preds, labels=labels)
 
     @classmethod
-    def from_preds_and_labels(cls, preds, labels, question_ids):
-        df = pd.DataFrame({
-            "preds": preds,
-            "labels": labels,
-            "question_ids": question_ids,
-        })
+    def from_preds_and_labels(cls, preds, labels):
+        df = pd.DataFrame(labels)
+        assert "label_values" in df.columns
+        assert "question_ids" in df.columns
+        df["preds"] = preds
         exact_match = df \
             .groupby("question_ids") \
-            .apply(lambda _: (_["preds"] == _["labels"]).all()) \
+            .apply(lambda _: (_["preds"] == _["label_values"]).all()) \
             .mean()
         exact_match = float(exact_match)
-        f1 = f1_score(y_true=df["labels"], y_pred=df["preds"])
+        f1 = f1_score(y_true=df["label_values"], y_pred=df["preds"])
         return Metrics(
             major=mean(exact_match, f1),
             minor={"em": exact_match, "f1": f1},
         )
+
+    @classmethod
+    def get_labels_from_examples(cls, task, examples):
+        label_values = get_label_ids(examples=examples, task=task)
+        question_ids = np.array([example.question_id for example in examples])
+        assert len(label_values) == len(question_ids)
+        return [
+            {"label_values": lab, "question_ids": qid}
+            for lab, qid in zip(label_values, question_ids)
+        ]
 
 
 class AccAndF1Eval(BaseEvaluation):

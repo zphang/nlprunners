@@ -18,6 +18,7 @@ from nlpr.shared.train_setup import TrainSchedule
 import nlpr.tasks.evaluate as evaluate
 from nlpr.shared.torch_utils import compute_pred_entropy_clean
 from nlpr.proj.multitask.modeling import forward_batch_delegate
+from nlpr.constants import PHASE
 
 
 @dataclass
@@ -144,6 +145,7 @@ class MultiTaskRunner(BaseRunner):
         val_dataloader = self.get_single_eval_dataloader(
             eval_examples=task_val_examples,
             task=task,
+            phase=PHASE.VAL,
         )
         if not self.rparams.local_rank == -1:
             return
@@ -207,13 +209,14 @@ class MultiTaskRunner(BaseRunner):
             verbose=verbose,
         )
 
-    def get_single_eval_dataloader(self, eval_examples, task):
+    def get_single_eval_dataloader(self, eval_examples, task, phase):
         return get_eval_dataloader(
             eval_examples=eval_examples,
             task=task,
             tokenizer=self.model_wrapper.tokenizer,
             feat_spec=self.rparams.feat_spec,
             eval_batch_size=self.rparams.eval_batch_size,
+            phase=phase,
         )
 
     def complex_backpropagate(self, loss):

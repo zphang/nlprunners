@@ -19,6 +19,7 @@ import nlpr.shared.torch_utils as torch_utils
 import nlpr.shared.caching as caching
 from nlpr.tasks.retrieval import SquadTask
 from nlpr.tasks.core import FeaturizationSpec
+from nlpr.constants import PHASE
 
 
 class BaseRunner:
@@ -89,8 +90,12 @@ def get_sampler(dataset, local_rank, force_sequential=False):
 
 
 def run_val(val_dataloader,
+            val_labels,
             model, task, loss_criterion,
             device, local_rank, verbose):
+    # Reminder:
+    #   val_dataloader contains mostly PyTorch-relevant info
+    #   val_labels might contain more details information needed for full evaluation
     if not local_rank == -1:
         return
     model.eval()
@@ -128,11 +133,11 @@ def run_val(val_dataloader,
     return {
         "logits": all_logits,
         "loss": eval_loss,
-        "metrics": evaluate.compute_task_metrics(
+        "metrics": evaluate.compute_task_metrics_from_classification_logits_and_labels(
             task=task,
             logits=all_logits,
             # TODO: Find a better solution for getting a subset of val examples
-            examples=task.get_val_examples()[:len(val_dataloader.dataset)],
+            labels=val_labels,
         ),
     }
 
@@ -143,6 +148,7 @@ def get_train_dataloader(train_examples, task,
         examples=train_examples,
         feat_spec=feat_spec,
         tokenizer=tokenizer,
+        phase=PHASE.TRAIN,
         verbose=verbose,
     )
     train_sampler = get_sampler(
@@ -158,12 +164,13 @@ def get_train_dataloader(train_examples, task,
     return train_dataloader
 
 
-def get_eval_dataloader(eval_examples, task,
+def get_eval_dataloader(eval_examples, task, phase,
                         tokenizer, feat_spec, eval_batch_size):
     dataset = convert_examples_to_dataset(
         examples=eval_examples,
         feat_spec=feat_spec,
         tokenizer=tokenizer,
+        phase=phase,
     )
     eval_sampler = SequentialSampler(dataset)
     eval_dataloader = DataLoader(

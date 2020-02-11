@@ -47,7 +47,7 @@ class SimpleTaskRunner(BaseRunner):
         # Convenience
         self.model = self.model_wrapper.model
 
-    def run_train(self, train_cache, val_cache, verbose=True):
+    def run_train(self, train_cache, val_cache, val_labels_cache, verbose=True):
         train_dataloader = self.get_train_dataloader(train_cache)
         train_global_state = TrainGlobalState()
 
@@ -55,14 +55,14 @@ class SimpleTaskRunner(BaseRunner):
                 maybe_trange(int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
             train_global_state.epoch = epoch_i
             self.run_train_epoch(train_dataloader, train_global_state)
-            results = self.run_val(val_cache=val_cache)
+            results = self.run_val(val_cache=val_cache, val_labels_cache=val_labels_cache)
             self.log_writer.write_entry("val_metric", {
                 "epoch": train_global_state.epoch,
                 "metric": results["metrics"].asdict(),
             })
             self.log_writer.flush()
 
-    def run_train_val(self, train_cache, val_cache, verbose=True):
+    def run_train_val(self, train_cache, val_cache, val_labels_cache, verbose=True):
         epoch_result_dict = col.OrderedDict()
         train_global_state = TrainGlobalState()
         for epoch_i in maybe_trange(
@@ -70,7 +70,7 @@ class SimpleTaskRunner(BaseRunner):
             train_global_state.epoch = epoch_i
             train_dataloader = self.get_train_dataloader(train_cache)
             self.run_train_epoch(train_dataloader, train_global_state)
-            epoch_result = self.run_val(val_cache)
+            epoch_result = self.run_val(val_cache=val_cache, val_labels_cache=val_labels_cache)
             del epoch_result["logits"]
             epoch_result["metrics"] = epoch_result["metrics"].asdict()
             epoch_result_dict[epoch_i] = epoch_result
@@ -126,9 +126,13 @@ class SimpleTaskRunner(BaseRunner):
             # "pred_entropy": compute_pred_entropy_clean(logits)
         })
 
-    def run_val(self, val_cache, subset=None, verbose=True):
+    def run_val(self, val_cache, val_labels_cache, subset=None, verbose=True):
         return run_val(
-            val_dataloader=self.get_eval_dataloader(val_cache, subset=subset),
+            val_dataloader=self.get_eval_dataloader(
+                eval_cache=val_cache,
+                subset=subset
+            ),
+            val_labels=val_labels_cache.get_all()[:subset],
             model=self.model,
             task=self.task,
             loss_criterion=self.loss_criterion,

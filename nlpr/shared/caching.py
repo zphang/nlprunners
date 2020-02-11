@@ -153,7 +153,7 @@ class ChunkedFilesDataCache(DataCache):
         data = []
         for i in range(self.num_chunks):
             data += self.load_chunk(i)
-        return torch_utils.ListDataset(data)
+        return data
 
     def __len__(self):
         return self.length

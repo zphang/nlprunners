@@ -149,10 +149,12 @@ def main(args):
 
         if args.do_train:
             val_cache = caching.ChunkedFilesDataCache(os.path.join(args.task_cache_data_path, "val"))
+            val_labels_cache = caching.ChunkedFilesDataCache(os.path.join(args.task_cache_data_path, "val_labels"))
             metarunner.MetaRunner(
                 runner=runner,
                 train_cache=train_cache,
                 val_cache=val_cache,
+                val_labels_cache=val_labels_cache,
                 partial_eval_number=args.partial_eval_number,
                 should_save_func=metarunner.get_should_save_func(args.save_every_steps),
                 should_eval_func=metarunner.get_should_eval_func(args.eval_every_steps),
@@ -171,7 +173,10 @@ def main(args):
 
         if args.do_val:
             val_cache = caching.ChunkedFilesDataCache(os.path.join(args.task_cache_data_path, "val"))
-            results = runner.run_val(val_cache)
+            results = runner.run_val(
+                val_cache=val_cache,
+                val_labels_cache=val_labels_cache,
+            )
             evaluate.write_val_results(
                 results=results,
                 output_dir=args.output_dir,

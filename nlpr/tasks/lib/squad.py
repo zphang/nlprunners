@@ -9,6 +9,7 @@ from typing import Union
 from .shared import Task, TaskTypes
 from ..core import BaseExample, BaseDataRow, BatchMixin, FeaturizationSpec
 from transformers.tokenization_bert import whitespace_tokenize
+from nlpr.constants import PHASE
 
 import logging
 logger = logging.getLogger(__name__)
@@ -65,7 +66,7 @@ class Example(BaseExample):
     def to_feature_list(self, tokenizer, feat_spec: FeaturizationSpec,
                         max_seq_length, doc_stride, max_query_length,
                         set_type):
-        is_training = set_type == "train"
+        is_training = set_type == PHASE.TRAIN
         features = []
         if is_training and not self.is_impossible:
             # Get start and end position
@@ -270,20 +271,20 @@ class SquadTask(Task):
         super().__init__(name=name, path_dict=path_dict)
 
     def get_train_examples(self):
-        return self.read_squad_examples(path=self.train_path, set_type="train")
+        return self.read_squad_examples(path=self.train_path, set_type=PHASE.TRAIN)
 
     def get_val_examples(self):
-        return self.read_squad_examples(path=self.val_path, set_type="val")
+        return self.read_squad_examples(path=self.val_path, set_type=PHASE.VAL)
 
     def get_test_examples(self):
-        return self.read_squad_examples(path=self.test_path, set_type="test")
+        return self.read_squad_examples(path=self.test_path, set_type=PHASE.TEST)
 
     @classmethod
     def read_squad_examples(cls, path, set_type):
         with open(path, "r", encoding='utf-8') as reader:
             input_data = json.load(reader)["data"]
 
-        is_training = set_type == "train"
+        is_training = set_type == PHASE.TRAIN
         examples = []
         for entry in tqdm.tqdm(input_data):
             title = entry["title"]

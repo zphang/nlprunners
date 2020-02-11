@@ -53,6 +53,7 @@ class MetaRunner:
                  runner: BaseRunner,
                  train_cache: ChunkedFilesDataCache,
                  val_cache: ChunkedFilesDataCache,
+                 val_labels_cache: ChunkedFilesDataCache,
                  partial_eval_number: int,
                  should_save_func,
                  should_eval_func,
@@ -65,6 +66,7 @@ class MetaRunner:
         self.runner = runner
         self.train_cache = train_cache
         self.val_cache = val_cache
+        self.val_labels_cache = val_labels_cache
         self.partial_eval_number = partial_eval_number
         self.should_save_func = should_save_func
         self.should_eval_func = should_eval_func
@@ -161,7 +163,11 @@ class MetaRunner:
         pass
 
     def eval_save(self):
-        val_result = self.runner.run_val(self.val_cache, subset=self.partial_eval_number)
+        val_result = self.runner.run_val(
+            val_cache=self.val_cache,
+            val_labels_cache=self.val_labels_cache,
+            subset=self.partial_eval_number,
+        )
         val_state = ValState(
             score=val_result["metrics"].major,
             train_global_state=self.train_global_state.new(),
