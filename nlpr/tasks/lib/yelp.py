@@ -7,7 +7,7 @@ from typing import List
 
 import pyutils.io as io
 
-from .shared import (
+from nlpr.tasks.lib.templates.shared import (
     Task, single_sentence_featurize, TaskTypes,
 )
 from ..core import BaseExample, BaseTokenizedExample, BaseDataRow, BatchMixin, labels_to_bimap

@@ -6,7 +6,7 @@ import torch
 from dataclasses import dataclass
 from typing import Union
 
-from .shared import Task, TaskTypes
+from nlpr.tasks.lib.templates.shared import Task, TaskTypes
 from ..core import BaseExample, BaseDataRow, BatchMixin, FeaturizationSpec
 from transformers.tokenization_bert import whitespace_tokenize
 from nlpr.constants import PHASE

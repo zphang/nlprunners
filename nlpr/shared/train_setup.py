@@ -5,7 +5,7 @@ import torch.nn as nn
 from dataclasses import dataclass
 
 from nlpr.proj.adapters.model_setup import get_head_parameter_names
-from nlpr.tasks.lib.shared import TaskTypes
+from nlpr.tasks.lib.templates.shared import TaskTypes
 
 
 @dataclass

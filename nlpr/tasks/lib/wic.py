@@ -3,7 +3,7 @@ import torch
 from dataclasses import dataclass
 from typing import List
 
-from .shared import (
+from nlpr.tasks.lib.templates.shared import (
     read_json_lines, Task, create_input_set_from_tokens_and_segments, add_cls_token, TaskTypes,
 )
 from ..core import BaseExample, BaseTokenizedExample, BaseDataRow, BatchMixin, labels_to_bimap

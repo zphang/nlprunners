@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from nlpr.tasks.lib.shared import TaskTypes
+from nlpr.tasks.lib.templates.shared import TaskTypes
 
 
 class MultiTaskModel(nn.Module):

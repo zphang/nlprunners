@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import List
 import pyutils.io as io
 
-from .shared import (
+from nlpr.tasks.lib.templates.shared import (
     read_json_lines, Task,
     construct_single_input_tokens_and_segment_ids,
     create_input_set_from_tokens_and_segments,

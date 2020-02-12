@@ -10,8 +10,8 @@ import torch.utils.data.dataloader as dataloader
 
 from dataclasses import dataclass
 
-from ..core import FeaturizationSpec, BatchMixin
-from ..utils import truncate_sequences, pad_to_max_seq_length
+from nlpr.tasks.core import FeaturizationSpec, BatchMixin
+from nlpr.tasks.utils import truncate_sequences, pad_to_max_seq_length
 
 from pyutils.datastructures import combine_dicts
 

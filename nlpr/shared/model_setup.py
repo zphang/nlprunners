@@ -1,11 +1,10 @@
 import torch
-import torch.nn as nn
 
 import transformers
 
 from nlpr.shared.model_resolution import ModelArchitectures
 import nlpr.shared.modeling.glove_lstm as glove_lstm_modeling
-from nlpr.tasks.lib.shared import TaskTypes
+from nlpr.tasks.lib.templates.shared import TaskTypes
 import nlpr.tasks as tasks
 from nlpr.ext.radam import RAdam
 

@@ -1,5 +1,3 @@
-from dataclasses import dataclass
-
 import torch
 import torch.nn as nn
 
@@ -7,7 +5,7 @@ import transformers as ptt
 import transformers.modeling_roberta as modeling_roberta
 
 from torch.nn import CrossEntropyLoss, MSELoss
-from nlpr.tasks.lib.shared import TaskTypes
+from nlpr.tasks.lib.templates.shared import TaskTypes
 from nlpr.ext.allennlp import SelfAttentiveSpanExtractor
 
 

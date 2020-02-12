@@ -23,7 +23,7 @@ from nlpr.tasks.lib.squad import SquadTask
 from nlpr.tasks.lib.sst import SstTask
 from nlpr.tasks.lib.stsb import StsbTask
 from nlpr.tasks.lib.wnli import WnliTask
-from nlpr.tasks.lib.shared import Task
+from nlpr.tasks.lib.templates.shared import Task
 
 from pyutils.io import read_json
 

@@ -1,2 +1,2 @@
 from . retrieval import *
-from .lib.shared import TaskTypes
+from nlpr.tasks.lib.templates.shared import TaskTypes

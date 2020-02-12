@@ -1,12 +1,11 @@
-import os
 import pandas as pd
 
 import torch
 from dataclasses import dataclass
 from typing import List
 
-from .shared import (
-    Task, single_sentence_featurize, TaskTypes, TaskTypes,
+from nlpr.tasks.lib.templates.shared import (
+    Task, single_sentence_featurize, TaskTypes,
 )
 from ..core import BaseExample, BaseTokenizedExample, BaseDataRow, BatchMixin, labels_to_bimap
 

@@ -10,7 +10,7 @@ import pyutils.io as io
 import nlpr.shared.model_resolution as model_resolution
 import nlpr.shared.model_setup as model_setup
 import nlpr.tasks as tasks
-from nlpr.tasks.lib.shared import TaskTypes
+from nlpr.tasks.lib.templates.shared import TaskTypes
 
 
 TASK_EXCLUSION_LS = ["wic", "wsc"]

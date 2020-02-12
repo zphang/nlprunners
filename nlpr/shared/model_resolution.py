@@ -5,7 +5,7 @@ import transformers as ptt
 import transformers.modeling_albert
 
 from nlpr.tasks.core import FeaturizationSpec
-from nlpr.tasks.lib.shared import TaskTypes
+from nlpr.tasks.lib.templates.shared import TaskTypes
 import nlpr.shared.modeling.models as models
 import nlpr.shared.modeling.glove_lstm as glove_lstm_modeling
 
