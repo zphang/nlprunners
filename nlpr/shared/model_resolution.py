@@ -180,6 +180,7 @@ MODEL_CLASS_DICT = {
     ModelArchitectures.ALBERT: {
         TaskTypes.CLASSIFICATION: ptt.AlbertForSequenceClassification,
         TaskTypes.REGRESSION: ptt.AlbertForSequenceClassification,  # ptt is weird
+        TaskTypes.SQUAD_STYLE_QA: ptt.AlbertForQuestionAnswering,
     },
 }
 

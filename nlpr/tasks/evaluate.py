@@ -495,6 +495,28 @@ class PearsonAndSpearmanEval(BaseEvaluation):
         )
 
 
+class SQuADEval(BaseEvaluation):
+    @classmethod
+    def from_logits(cls, task, logits, examples):
+        raise NotImplementedError()
+
+    @classmethod
+    def from_preds(cls, task, preds, examples):
+        raise NotImplementedError()
+
+    @classmethod
+    def from_preds_and_labels(cls, preds, labels):
+        raise NotImplementedError()
+
+    @classmethod
+    def get_labels_from_examples(cls, task, examples):
+        return [
+            {
+                ""
+            }
+        ]
+
+
 def get_preds(logits):
     return np.argmax(logits, axis=1)
 
