@@ -39,6 +39,8 @@ def compute_task_metrics(task, logits, examples):
         return MccEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.CopaTask):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
+    elif isinstance(task, tasks.CommonsenseQATask):
+        return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.IMDBTask):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.MnliTask):
@@ -84,6 +86,8 @@ def compute_task_metrics_from_classification_preds(task, preds, examples):
         return MccEval.from_preds(task, preds, examples)
     elif isinstance(task, tasks.CopaTask):
         return SimpleAccuracyEval.from_preds(task, preds, examples)
+    elif isinstance(task, tasks.CommonsenseQATask):
+        return SimpleAccuracyEval.from_preds(task, preds, examples)
     elif isinstance(task, tasks.IMDBTask):
         return SimpleAccuracyEval.from_preds(task, preds, examples)
     elif isinstance(task, tasks.MnliTask):
@@ -125,6 +129,8 @@ def compute_task_metrics_from_classification_preds_and_labels(task, preds, label
     elif isinstance(task, tasks.ColaTask):
         return MccEval.from_preds_and_labels(preds, labels)
     elif isinstance(task, tasks.CopaTask):
+        return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.CommonsenseQATask):
         return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
     elif isinstance(task, tasks.IMDBTask):
         return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
@@ -169,6 +175,8 @@ def compute_task_metrics_from_classification_logits_and_labels(task, logits, lab
         return MccEval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.CopaTask):
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.CommonsenseQATask):
+        return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.IMDBTask):
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.MnliTask):
@@ -212,6 +220,8 @@ def get_labels_from_examples(task, examples):
         return get_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.CopaTask):
         return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.CommonsenseQATask):
+        return get_multiple_choice_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.IMDBTask):
         return get_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.MnliTask):
@@ -523,6 +533,10 @@ def get_preds(logits):
 
 def get_label_ids(examples, task):
     return np.array([task.LABEL_BIMAP.a[example.label] for example in examples])
+
+
+def get_multiple_choice_label_ids(examples, task):
+    return np.array([task.CHOICE_BIMAP.a[example.label] for example in examples])
 
 
 def get_label_vals(examples):

@@ -238,7 +238,7 @@ def optim_step_grad_accum(optimizer_scheduler: OptimizerScheduler,
     if (train_global_state.epoch_step + 1) % gradient_accumulation_steps == 0:
         optimizer_scheduler.step()
         optimizer_scheduler.optimizer.zero_grad()
-        train_global_state.step()
+    train_global_state.step()
 
 
 def save_model_with_metadata(model: nn.Module, metadata: dict, output_dir: str, file_name="model"):

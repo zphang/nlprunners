@@ -111,7 +111,6 @@ class SimpleTaskRunner(BaseRunner):
 
         loss = self.complex_backpropagate(loss)
         loss_val = loss.item()
-
         optim_step_grad_accum(
             optimizer_scheduler=self.optimizer_scheduler,
             train_global_state=train_global_state,
