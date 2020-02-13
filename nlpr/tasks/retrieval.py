@@ -18,11 +18,13 @@ from nlpr.tasks.lib.qqp import QqpTask
 from nlpr.tasks.lib.qnli import QnliTask
 from nlpr.tasks.lib.record import ReCoRDTask
 from nlpr.tasks.lib.rte import RteTask
+from nlpr.tasks.lib.scitail import SciTailTask
 from nlpr.tasks.lib.snli import SnliTask
 from nlpr.tasks.lib.socialiqa import SocialIQATask
 from nlpr.tasks.lib.squad import SquadTask
 from nlpr.tasks.lib.sst import SstTask
 from nlpr.tasks.lib.stsb import StsbTask
+from nlpr.tasks.lib.swag import SWAGTask
 from nlpr.tasks.lib.wic import WiCTask
 from nlpr.tasks.lib.wnli import WnliTask
 from nlpr.tasks.lib.wsc import WSCTask
@@ -51,12 +53,14 @@ TASK_DICT = {
     "qqp": QqpTask,
     "record": ReCoRDTask,
     "rte": RteTask,
+    "scitail": SciTailTask,
     "snli": SnliTask,
     "socialiqa": SocialIQATask,
     "squad_v1": SquadTask,
     "squad_v2": SquadTask,
     "sst": SstTask,
     "stsb": StsbTask,
+    "swag": SWAGTask,
     "wic": WiCTask,
     "wsc": WSCTask,
     "wnli": WnliTask,

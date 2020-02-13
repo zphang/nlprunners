@@ -39,7 +39,13 @@ def compute_task_metrics(task, logits, examples):
         return MccEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.CopaTask):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
-    elif isinstance(task, tasks.CommonsenseQATask):
+    elif isinstance(task, (
+                tasks.CommonsenseQATask,
+                tasks.CosmosQATask,
+                tasks.SWAGTask,
+                tasks.HellaSwagTask,
+                tasks.SocialIQATask,
+            )):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.IMDBTask):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
@@ -56,6 +62,8 @@ def compute_task_metrics(task, logits, examples):
     elif isinstance(task, tasks.ReCoRDTask):
         return RecordTaskEval.from_logits(logits, examples)
     elif isinstance(task, tasks.RteTask):
+        return SimpleAccuracyEval.from_logits(task, logits, examples)
+    elif isinstance(task, tasks.SciTailTask):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.SstTask):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
@@ -86,7 +94,13 @@ def compute_task_metrics_from_classification_preds(task, preds, examples):
         return MccEval.from_preds(task, preds, examples)
     elif isinstance(task, tasks.CopaTask):
         return SimpleAccuracyEval.from_preds(task, preds, examples)
-    elif isinstance(task, tasks.CommonsenseQATask):
+    elif isinstance(task, (
+                tasks.CommonsenseQATask,
+                tasks.CosmosQATask,
+                tasks.SWAGTask,
+                tasks.HellaSwagTask,
+                tasks.SocialIQATask,
+            )):
         return SimpleAccuracyEval.from_preds(task, preds, examples)
     elif isinstance(task, tasks.IMDBTask):
         return SimpleAccuracyEval.from_preds(task, preds, examples)
@@ -101,6 +115,8 @@ def compute_task_metrics_from_classification_preds(task, preds, examples):
     elif isinstance(task, tasks.QqpTask):
         return AccAndF1Eval.from_preds(task, preds, examples)
     elif isinstance(task, tasks.RteTask):
+        return SimpleAccuracyEval.from_preds(task, preds, examples)
+    elif isinstance(task, tasks.SciTailTask):
         return SimpleAccuracyEval.from_preds(task, preds, examples)
     elif isinstance(task, tasks.SstTask):
         return SimpleAccuracyEval.from_preds(task, preds, examples)
@@ -130,7 +146,13 @@ def compute_task_metrics_from_classification_preds_and_labels(task, preds, label
         return MccEval.from_preds_and_labels(preds, labels)
     elif isinstance(task, tasks.CopaTask):
         return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
-    elif isinstance(task, tasks.CommonsenseQATask):
+    elif isinstance(task, (
+                tasks.CommonsenseQATask,
+                tasks.CosmosQATask,
+                tasks.SWAGTask,
+                tasks.HellaSwagTask,
+                tasks.SocialIQATask,
+            )):
         return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
     elif isinstance(task, tasks.IMDBTask):
         return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
@@ -146,6 +168,8 @@ def compute_task_metrics_from_classification_preds_and_labels(task, preds, label
     elif isinstance(task, tasks.QqpTask):
         return AccAndF1Eval.from_preds_and_labels(preds, labels)
     elif isinstance(task, tasks.RteTask):
+        return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.SciTailTask):
         return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
     elif isinstance(task, tasks.SstTask):
         return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
@@ -175,7 +199,13 @@ def compute_task_metrics_from_classification_logits_and_labels(task, logits, lab
         return MccEval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.CopaTask):
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
-    elif isinstance(task, tasks.CommonsenseQATask):
+    elif isinstance(task, (
+                tasks.CommonsenseQATask,
+                tasks.CosmosQATask,
+                tasks.SWAGTask,
+                tasks.HellaSwagTask,
+                tasks.SocialIQATask,
+            )):
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.IMDBTask):
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
@@ -191,6 +221,8 @@ def compute_task_metrics_from_classification_logits_and_labels(task, logits, lab
     elif isinstance(task, tasks.QqpTask):
         return AccAndF1Eval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.RteTask):
+        return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.SciTailTask):
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.SstTask):
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
@@ -220,7 +252,13 @@ def get_labels_from_examples(task, examples):
         return get_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.CopaTask):
         return get_multiple_choice_label_ids(task=task, examples=examples)
-    elif isinstance(task, tasks.CommonsenseQATask):
+    elif isinstance(task, (
+                tasks.CommonsenseQATask,
+                tasks.CosmosQATask,
+                tasks.SWAGTask,
+                tasks.HellaSwagTask,
+                tasks.SocialIQATask,
+            )):
         return get_multiple_choice_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.IMDBTask):
         return get_label_ids(task=task, examples=examples)
@@ -236,6 +274,8 @@ def get_labels_from_examples(task, examples):
     elif isinstance(task, tasks.QqpTask):
         return get_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.RteTask):
+        return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.SciTailTask):
         return get_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.SstTask):
         return get_label_ids(task=task, examples=examples)
@@ -520,11 +560,7 @@ class SQuADEval(BaseEvaluation):
 
     @classmethod
     def get_labels_from_examples(cls, task, examples):
-        return [
-            {
-                ""
-            }
-        ]
+        raise NotImplementedError()
 
 
 def get_preds(logits):
