@@ -10,7 +10,7 @@ class Example(mc_template.Example):
 
     @property
     def task(self):
-        return CosmosQATask
+        return SWAGTask
 
 
 @dataclass
@@ -28,7 +28,7 @@ class Batch(mc_template.Batch):
     pass
 
 
-class CosmosQATask(mc_template.AbstractMultipleChoiceTask):
+class SWAGTask(mc_template.AbstractMultipleChoiceTask):
     Example = Example
     TokenizedExample = Example
     DataRow = DataRow
@@ -54,8 +54,13 @@ class CosmosQATask(mc_template.AbstractMultipleChoiceTask):
         for i, row in enumerate(df.itertuples()):
             examples.append(Example(
                 guid="%s-%s" % (set_type, i),
-                prompt=row.context + " " + row.question,
-                choice_list=[row.answer0, row.answer1, row.answer2, row.answer3],
+                prompt=row.sent1,
+                choice_list=[
+                    row.sent2 + " " + row.ending0,
+                    row.sent2 + " " + row.ending1,
+                    row.sent2 + " " + row.ending2,
+                    row.sent2 + " " + row.ending3,
+                ],
                 label=row.label if set_type != "test" else cls.CHOICE_KEYS[-1],
             ))
         return examples

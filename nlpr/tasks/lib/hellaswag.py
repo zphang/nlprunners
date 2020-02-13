@@ -1,6 +1,6 @@
-import pandas as pd
 from dataclasses import dataclass
 
+from nlpr.tasks.lib.templates.shared import read_json_lines
 from ..core import labels_to_bimap
 from .templates import multiple_choice as mc_template
 
@@ -10,7 +10,7 @@ class Example(mc_template.Example):
 
     @property
     def task(self):
-        return CosmosQATask
+        return HellaSwagTask
 
 
 @dataclass
@@ -28,7 +28,7 @@ class Batch(mc_template.Batch):
     pass
 
 
-class CosmosQATask(mc_template.AbstractMultipleChoiceTask):
+class HellaSwagTask(mc_template.AbstractMultipleChoiceTask):
     Example = Example
     TokenizedExample = Example
     DataRow = DataRow
@@ -39,23 +39,25 @@ class CosmosQATask(mc_template.AbstractMultipleChoiceTask):
     NUM_CHOICES = len(CHOICE_KEYS)
 
     def get_train_examples(self):
-        return self._create_examples(path=self.train_path, set_type="train")
+        return self._create_examples(lines=read_json_lines(self.train_path), set_type="train")
 
     def get_val_examples(self):
-        return self._create_examples(path=self.val_path, set_type="val")
+        return self._create_examples(lines=read_json_lines(self.val_path), set_type="val")
 
     def get_test_examples(self):
-        return self._create_examples(path=self.test_path, set_type="test")
+        return self._create_examples(lines=read_json_lines(self.test_path), set_type="test")
 
     @classmethod
-    def _create_examples(cls, path, set_type):
-        df = pd.read_csv(path)
+    def _create_examples(cls, lines, set_type):
         examples = []
-        for i, row in enumerate(df.itertuples()):
+        for i, line in enumerate(lines):
             examples.append(Example(
                 guid="%s-%s" % (set_type, i),
-                prompt=row.context + " " + row.question,
-                choice_list=[row.answer0, row.answer1, row.answer2, row.answer3],
-                label=row.label if set_type != "test" else cls.CHOICE_KEYS[-1],
+                prompt=line["ctx_a"],
+                choice_list=[
+                    line["ctx_b"] + " " + ending
+                    for ending in line["endings"]
+                ],
+                label=line["label"] if set_type != "test" else cls.CHOICE_KEYS[-1],
             ))
         return examples

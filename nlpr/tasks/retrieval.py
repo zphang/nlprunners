@@ -1,62 +1,66 @@
 import os
 
-from nlpr.tasks.lib.anli import AnliTask
 from nlpr.tasks.lib.amazon import AmazonPolarityTask
+from nlpr.tasks.lib.anli import AnliTask
+from nlpr.tasks.lib.boolq import BoolQTask
+from nlpr.tasks.lib.cola import ColaTask
 from nlpr.tasks.lib.commitmentbank import CommitmentBankTask
 from nlpr.tasks.lib.commonsenseqa import CommonsenseQATask
 from nlpr.tasks.lib.copa import CopaTask
 from nlpr.tasks.lib.cosmosqa import CosmosQATask
-from nlpr.tasks.lib.multirc import MultiRCTask
-from nlpr.tasks.lib.rte import RteTask
-from nlpr.tasks.lib.wic import WiCTask
-from nlpr.tasks.lib.wsc import WSCTask
-from nlpr.tasks.lib.yelp import YelpPolarityTask
+from nlpr.tasks.lib.hellaswag import HellaSwagTask
 from nlpr.tasks.lib.imdb import IMDBTask
 from nlpr.tasks.lib.maskedwiki import MaskedWikiTask
 from nlpr.tasks.lib.mnli import MnliTask
 from nlpr.tasks.lib.mrpc import MrpcTask
-from nlpr.tasks.lib.cola import ColaTask
-from nlpr.tasks.lib.boolq import BoolQTask
-from nlpr.tasks.lib.record import ReCoRDTask
+from nlpr.tasks.lib.multirc import MultiRCTask
 from nlpr.tasks.lib.qqp import QqpTask
 from nlpr.tasks.lib.qnli import QnliTask
+from nlpr.tasks.lib.record import ReCoRDTask
+from nlpr.tasks.lib.rte import RteTask
 from nlpr.tasks.lib.snli import SnliTask
+from nlpr.tasks.lib.socialiqa import SocialIQATask
 from nlpr.tasks.lib.squad import SquadTask
 from nlpr.tasks.lib.sst import SstTask
 from nlpr.tasks.lib.stsb import StsbTask
+from nlpr.tasks.lib.wic import WiCTask
 from nlpr.tasks.lib.wnli import WnliTask
+from nlpr.tasks.lib.wsc import WSCTask
+from nlpr.tasks.lib.yelp import YelpPolarityTask
 from nlpr.tasks.lib.templates.shared import Task
 
 from pyutils.io import read_json
 
 
 TASK_DICT = {
+    "amazon": AmazonPolarityTask,
     "anli": AnliTask,
+    "boolq": BoolQTask,
     "cb": CommitmentBankTask,
+    "cola": ColaTask,
     "commonsenseqa": CommonsenseQATask,
     "copa": CopaTask,
     "cosmosqa": CosmosQATask,
-    "mrc": MultiRCTask,
-    "rte": RteTask,
-    "wic": WiCTask,
-    "wsc": WSCTask,
-    "yelp": YelpPolarityTask,
-    "amazon": AmazonPolarityTask,
-    "mnli": MnliTask,
+    "hellaswag": HellaSwagTask,
     "imdb": IMDBTask,
+    "masked_wiki": MaskedWikiTask,
+    "mnli": MnliTask,
+    "mrc": MultiRCTask,
     "mrpc": MrpcTask,
-    "cola": ColaTask,
-    "boolq": BoolQTask,
-    "qqp": QqpTask,
     "qnli": QnliTask,
+    "qqp": QqpTask,
     "record": ReCoRDTask,
+    "rte": RteTask,
     "snli": SnliTask,
+    "socialiqa": SocialIQATask,
     "squad_v1": SquadTask,
     "squad_v2": SquadTask,
     "sst": SstTask,
     "stsb": StsbTask,
+    "wic": WiCTask,
+    "wsc": WSCTask,
     "wnli": WnliTask,
-    "masked_wiki": MaskedWikiTask,
+    "yelp": YelpPolarityTask,
 }
 
 
