@@ -6,7 +6,9 @@ import transformers.modeling_albert
 
 from nlpr.tasks.core import FeaturizationSpec
 from nlpr.tasks.lib.templates.shared import TaskTypes
-import nlpr.shared.modeling.models as models
+import nlpr.shared.modeling.bert_models as bert_models
+import nlpr.shared.modeling.roberta_models as roberta_models
+import nlpr.shared.modeling.albert_models as albert_models
 import nlpr.shared.modeling.glove_lstm as glove_lstm_modeling
 
 
@@ -155,8 +157,8 @@ def build_featurization_spec(model_type, max_seq_length):
 MODEL_CLASS_DICT = {
     ModelArchitectures.BERT: {
         TaskTypes.CLASSIFICATION: ptt.BertForSequenceClassification,
-        TaskTypes.REGRESSION: models.BertForSequenceRegression,  # ptt is weird
-        TaskTypes.SPAN_COMPARISON_CLASSIFICATION: models.BertForSpanComparisonClassification,
+        TaskTypes.REGRESSION: bert_models.BertForSequenceRegression,  # ptt is weird
+        TaskTypes.SPAN_COMPARISON_CLASSIFICATION: bert_models.BertForSpanComparisonClassification,
         TaskTypes.MULTIPLE_CHOICE: ptt.BertForMultipleChoice,
     },
     ModelArchitectures.XLNET: {
@@ -170,7 +172,7 @@ MODEL_CLASS_DICT = {
     ModelArchitectures.ROBERTA: {
         TaskTypes.CLASSIFICATION: ptt.RobertaForSequenceClassification,
         TaskTypes.REGRESSION: ptt.RobertaForSequenceClassification,  # ptt is weird
-        TaskTypes.MULTIPLE_CHOICE: ptt.RobertaForMultipleChoice,
+        TaskTypes.MULTIPLE_CHOICE: roberta_models.RobertaForMultipleChoice,
         TaskTypes.SQUAD_STYLE_QA: ptt.RobertaForQuestionAnswering,
     },
     ModelArchitectures.GLOVE_LSTM: {
@@ -180,6 +182,7 @@ MODEL_CLASS_DICT = {
     ModelArchitectures.ALBERT: {
         TaskTypes.CLASSIFICATION: ptt.AlbertForSequenceClassification,
         TaskTypes.REGRESSION: ptt.AlbertForSequenceClassification,  # ptt is weird
+        TaskTypes.MULTIPLE_CHOICE: albert_models.AlbertForMultipleChoice,
         TaskTypes.SQUAD_STYLE_QA: ptt.AlbertForQuestionAnswering,
     },
 }

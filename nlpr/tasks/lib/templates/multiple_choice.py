@@ -16,7 +16,7 @@ from ...utils import truncate_sequences
 class Example(BaseExample):
 
     guid: str
-    question: str
+    prompt: str
     choice_list: List[str]
     label: int
 
@@ -27,7 +27,7 @@ class Example(BaseExample):
     def tokenize(self, tokenizer):
         return TokenizedExample(
             guid=self.guid,
-            question=tokenizer.tokenize(self.question),
+            prompt=tokenizer.tokenize(self.prompt),
             choice_list=[
                 tokenizer.tokenize(choice)
                 for choice in self.choice_list
@@ -39,7 +39,7 @@ class Example(BaseExample):
 @dataclass
 class TokenizedExample(BaseTokenizedExample):
     guid: str
-    question: List
+    prompt: List
     choice_list: List[List]
     label_id: int
 
@@ -57,20 +57,20 @@ class TokenizedExample(BaseTokenizedExample):
         input_set_ls = []
         unpadded_inputs_ls = []
         for choice in self.choice_list:
-            question, choice = truncate_sequences(
-                tokens_ls=[self.question, choice],
+            prompt, choice = truncate_sequences(
+                tokens_ls=[self.prompt, choice],
                 max_length=feat_spec.max_seq_length - special_tokens_count,
             )
             unpadded_inputs = add_cls_token(
                 unpadded_tokens=(
-                    # question
-                    question + [tokenizer.sep_token] + maybe_extra_sep
+                    # prompt
+                    prompt + [tokenizer.sep_token] + maybe_extra_sep
                     # choice
                     + choice + [tokenizer.sep_token]
                 ),
                 unpadded_segment_ids=(
-                    # premise
-                    [feat_spec.sequence_a_segment_id] * (len(question) + 1)
+                    # prompt
+                    [feat_spec.sequence_a_segment_id] * (len(prompt) + 1)
                     + maybe_extra_sep_segment_id
                     # choice + sep
                     + [feat_spec.sequence_b_segment_id] * (len(choice) + 1)
@@ -119,3 +119,7 @@ class Batch(BatchMixin):
 class AbstractMultipleChoiceTask(Task, ABC):
 
     TASK_TYPE = TaskTypes.MULTIPLE_CHOICE
+
+    CHOICE_KEYS = NotImplemented
+    CHOICE_BIMAP = NotImplemented
+    NUM_CHOICES = NotImplemented

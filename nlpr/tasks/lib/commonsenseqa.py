@@ -57,8 +57,8 @@ class CommonsenseQATask(mc_template.AbstractMultipleChoiceTask):
             }
             examples.append(Example(
                 guid="%s-%s" % (set_type, i),
-                question=line["question"]["stem"],
+                prompt=line["question"]["stem"],
                 choice_list=[choice_dict[key] for key in cls.CHOICE_KEYS],
-                label=line["answerKey"],
+                label=line["answerKey"]  if set_type != "test" else cls.CHOICE_KEYS[-1],
             ))
         return examples

@@ -3,8 +3,9 @@ import os
 from nlpr.tasks.lib.anli import AnliTask
 from nlpr.tasks.lib.amazon import AmazonPolarityTask
 from nlpr.tasks.lib.commitmentbank import CommitmentBankTask
-from nlpr.tasks.lib.copa import CopaTask
 from nlpr.tasks.lib.commonsenseqa import CommonsenseQATask
+from nlpr.tasks.lib.copa import CopaTask
+from nlpr.tasks.lib.cosmosqa import CosmosQATask
 from nlpr.tasks.lib.multirc import MultiRCTask
 from nlpr.tasks.lib.rte import RteTask
 from nlpr.tasks.lib.wic import WiCTask
@@ -32,8 +33,9 @@ from pyutils.io import read_json
 TASK_DICT = {
     "anli": AnliTask,
     "cb": CommitmentBankTask,
-    "copa": CopaTask,
     "commonsenseqa": CommonsenseQATask,
+    "copa": CopaTask,
+    "cosmosqa": CosmosQATask,
     "mrc": MultiRCTask,
     "rte": RteTask,
     "wic": WiCTask,

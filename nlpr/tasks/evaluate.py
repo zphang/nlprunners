@@ -219,7 +219,7 @@ def get_labels_from_examples(task, examples):
     elif isinstance(task, tasks.ColaTask):
         return get_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.CopaTask):
-        return get_label_ids(task=task, examples=examples)
+        return get_multiple_choice_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.CommonsenseQATask):
         return get_multiple_choice_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.IMDBTask):
