@@ -87,7 +87,10 @@ def experimental_smart_truncate(dataset: torch_utils.ListDataset,
                 else:
                     slice_ls.append(slice(None))
             new_row_dict[k] = v[tuple(slice_ls)]
-        new_datum_ls.append(datum["data_row"].__class__(**new_row_dict))
+        new_datum_ls.append({
+            "data_row": datum["data_row"].__class__(**new_row_dict),
+            "metadata": datum["metadata"],
+        })
     new_dataset = torch_utils.ListDataset(new_datum_ls)
     return new_dataset, max_valid_length
 

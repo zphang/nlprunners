@@ -4,12 +4,13 @@ import tqdm
 
 import torch
 from dataclasses import dataclass
-from typing import Union
+from typing import Union, List
 
 from nlpr.tasks.lib.templates.shared import Task, TaskTypes
 from ..core import BaseExample, BaseDataRow, BatchMixin, FeaturizationSpec
 from transformers.tokenization_bert import whitespace_tokenize
 from nlpr.constants import PHASE
+import nlpr.experimental.squad as squad_utils
 
 import logging
 logger = logging.getLogger(__name__)
@@ -212,7 +213,7 @@ class Example(BaseExample):
 
             features.append(
                 DataRow(
-                    unique_id=f"{self.qas_id}-{len(features)}",
+                    unique_id="",
                     qas_id=self.qas_id,
                     tokens=span["tokens"],
                     token_to_orig_map=span["token_to_orig_map"],
@@ -225,6 +226,8 @@ class Example(BaseExample):
                     paragraph_len=span["paragraph_len"],
                     start_position=start_position,
                     end_position=end_position,
+                    answers=self.answers,
+                    doc_tokens=self.doc_tokens
                 )
             )
         return features
@@ -245,6 +248,8 @@ class DataRow(BaseDataRow):
     paragraph_len: int
     start_position: int
     end_position: int
+    answers: list
+    doc_tokens: list
 
 
 @dataclass
@@ -322,6 +327,33 @@ class SquadTask(Task):
                     )
                     examples.append(example)
         return examples
+
+
+def data_rows_to_partial_examples(data_rows: List[DataRow]) -> List[squad_utils.PartialExample]:
+    qas_id_to_data_rows = {}
+    for i, data_row in enumerate(data_rows):
+        data_row.unique_id = 1000000000 + i
+        if data_row.qas_id not in qas_id_to_data_rows:
+            qas_id_to_data_rows[data_row.qas_id] = []
+        qas_id_to_data_rows[data_row.qas_id].append(data_row)
+    partial_examples = []
+    for qas_id in sorted(list(qas_id_to_data_rows.keys())):
+        first_data_row = qas_id_to_data_rows[qas_id][0]
+        partial_examples.append(squad_utils.PartialExample(
+            doc_tokens=first_data_row.doc_tokens,
+            qas_id=first_data_row.qas_id,
+            partial_features=[
+                squad_utils.PartialFeatures(
+                    unique_id=data_row.unique_id,
+                    tokens=data_row.tokens,
+                    token_to_orig_map=data_row.token_to_orig_map,
+                    token_is_max_context=data_row.token_is_max_context,
+                )
+                for data_row in qas_id_to_data_rows[qas_id]
+            ],
+            answers=first_data_row.answers,
+        ))
+    return partial_examples
 
 
 def is_whitespace(c_):
