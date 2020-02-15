@@ -185,7 +185,8 @@ def compute_task_metrics_from_classification_preds_and_labels(task, preds, label
         raise KeyError(task)
 
 
-def compute_task_metrics_from_classification_logits_and_labels(task, logits, labels):
+def compute_task_metrics_from_classification_logits_and_labels(
+        task, logits, labels, tokenizer):
     # Todo: move logic to task?
     if isinstance(task, tasks.AnliTask):
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
@@ -224,6 +225,9 @@ def compute_task_metrics_from_classification_logits_and_labels(task, logits, lab
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.SciTailTask):
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.SquadTask):
+        raise NotImplementedError
+        return SQuADEval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.SstTask):
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.StsbTask):

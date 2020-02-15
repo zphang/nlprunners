@@ -4,13 +4,14 @@ import tqdm
 
 import torch
 from dataclasses import dataclass
-from typing import Union, List
+from typing import Union, List, Dict
 
 from nlpr.tasks.lib.templates.shared import Task, TaskTypes
 from ..core import BaseExample, BaseDataRow, BatchMixin, FeaturizationSpec
 from transformers.tokenization_bert import whitespace_tokenize
 from nlpr.constants import PHASE
 import nlpr.experimental.squad as squad_utils
+from nlpr.shared.pycore import ExtendedDataClassMixin
 
 import logging
 logger = logging.getLogger(__name__)
@@ -329,7 +330,24 @@ class SquadTask(Task):
         return examples
 
 
-def data_rows_to_partial_examples(data_rows: List[DataRow]) -> List[squad_utils.PartialExample]:
+@dataclass
+class PartialDataRow(ExtendedDataClassMixin):
+    qas_id: str
+    doc_tokens: List[str]
+    tokens: List[str]
+    token_to_orig_map: Dict[int, int]
+    token_is_max_context: Dict[int, bool]
+    doc_tokens: List[str]
+    answers: List[Dict]
+
+    @classmethod
+    def from_data_row(cls, data_row: DataRow):
+        data_row_dict = data_row.asdict()
+        return PartialDataRow(**{k: data_row_dict[k] for k in cls.get_fields()})
+
+
+def data_rows_to_partial_examples(data_rows: List[PartialDataRow]) \
+                -> List[squad_utils.PartialExample]:
     qas_id_to_data_rows = {}
     for i, data_row in enumerate(data_rows):
         data_row.unique_id = 1000000000 + i
