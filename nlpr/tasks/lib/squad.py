@@ -5,6 +5,8 @@ import tqdm
 import torch
 from dataclasses import dataclass
 from typing import Union, List, Dict
+from pyutils.display import maybe_tqdm
+import collections
 
 from nlpr.tasks.lib.templates.shared import Task, TaskTypes
 from ..core import BaseExample, BaseDataRow, BatchMixin, FeaturizationSpec
@@ -12,6 +14,9 @@ from transformers.tokenization_bert import whitespace_tokenize
 from nlpr.constants import PHASE
 import nlpr.experimental.squad as squad_utils
 from nlpr.shared.pycore import ExtendedDataClassMixin
+from nlpr.experimental.squad import (
+    _get_best_indexes, get_final_text, _compute_softmax
+)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -413,3 +418,47 @@ def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer, orig_ans
                 return (new_start, new_end)
 
     return (input_start, input_end)
+
+
+def logits_to_pred_results_list(logits):
+    """
+    :param logits: np.ndarray (batch_size, 2, seq_len)
+    :return: List[squad_utils.SquadResult]
+    """
+    return [
+        squad_utils.SquadResult(
+            unique_id=1000000000 + i,
+            start_logits=logits[i, 0],
+            end_logits=logits[i, 1],
+        )
+        for i in range(logits.shape[0])
+    ]
+
+
+def compute_predictions_logits_v3(
+    data_rows: List[Union[PartialDataRow, DataRow]],
+    logits: np.ndarray,
+    n_best_size,
+    max_answer_length,
+    do_lower_case,
+    version_2_with_negative,
+    null_score_diff_threshold,
+    tokenizer,
+    verbose=True,
+):
+    """Write final predictions to the json file and log-odds of null if needed."""
+    partial_examples = data_rows_to_partial_examples(data_rows)
+    all_pred_results = logits_to_pred_results_list(logits)
+    predictions = squad_utils.compute_predictions_logits_v2(
+        partial_examples=partial_examples,
+        all_results=all_pred_results,
+        n_best_size=n_best_size,
+        max_answer_length=max_answer_length,
+        do_lower_case=do_lower_case,
+        version_2_with_negative=version_2_with_negative,
+        null_score_diff_threshold=null_score_diff_threshold,
+        tokenizer=tokenizer,
+        verbose=verbose,
+    )
+    results = squad_utils.squad_evaluate(partial_examples, predictions)
+    return results, predictions
