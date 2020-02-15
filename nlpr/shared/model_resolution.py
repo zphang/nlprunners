@@ -246,3 +246,10 @@ def resolve_model_setup_classes(model_type, task_type):
     else:
         raise KeyError(model_arch)
     return model_class_spec
+
+
+def resolve_is_lower_case(tokenizer):
+    if isinstance(tokenizer, (ptt.BertTokenizer, ptt.AlbertTokenizer)):
+        return tokenizer.basic_tokenizer.do_lower_case
+    else:
+        return False

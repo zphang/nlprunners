@@ -132,7 +132,7 @@ class SimpleTaskRunner(BaseRunner):
                 subset=subset
             ),
             val_labels=val_labels_cache.get_all()[:subset],
-            model=self.model,
+            model_wrapper=self.model_wrapper,
             task=self.task,
             loss_criterion=self.loss_criterion,
             device=self.device,

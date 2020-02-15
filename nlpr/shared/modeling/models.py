@@ -48,13 +48,14 @@ def forward_batch_delegate(model: nn.Module, batch, task_type: TaskTypes, omit_l
             segment_ids = None
         else:
             segment_ids = batch.segment_ids
-        return model(
+        logits = model(
             input_ids=batch.input_ids,
             attention_mask=batch.input_mask,
             token_type_ids=segment_ids,
             start_positions=start_positions,
             end_positions=end_positions,
         )
+        return torch.stack(logits, dim=1)
     else:
         raise KeyError(task_type)
 
@@ -84,7 +85,7 @@ def compute_loss_from_model_output(logits, loss_criterion, batch, task_type: Tas
 def qa_compute_loss(logits, start_positions, end_positions):
     # Taken from: RobertaForQuestionAnswering
 
-    start_logits, end_logits = logits
+    start_logits, end_logits = logits[:, 0], logits[:, 1]
     # If we are on multi-GPU, split add a dimension
     if len(start_positions.size()) > 1:
         start_positions = start_positions.squeeze(-1)

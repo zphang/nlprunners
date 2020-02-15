@@ -173,6 +173,7 @@ def main(args):
 
         if args.do_val:
             val_cache = caching.ChunkedFilesDataCache(os.path.join(args.task_cache_data_path, "val"))
+            val_labels_cache = caching.ChunkedFilesDataCache(os.path.join(args.task_cache_data_path, "val_labels"))
             results = runner.run_val(
                 val_cache=val_cache,
                 val_labels_cache=val_labels_cache,

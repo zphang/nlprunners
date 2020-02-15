@@ -5,8 +5,6 @@ import tqdm
 import torch
 from dataclasses import dataclass
 from typing import Union, List, Dict
-from pyutils.display import maybe_tqdm
-import collections
 
 from nlpr.tasks.lib.templates.shared import Task, TaskTypes
 from ..core import BaseExample, BaseDataRow, BatchMixin, FeaturizationSpec
@@ -14,9 +12,6 @@ from transformers.tokenization_bert import whitespace_tokenize
 from nlpr.constants import PHASE
 import nlpr.experimental.squad as squad_utils
 from nlpr.shared.pycore import ExtendedDataClassMixin
-from nlpr.experimental.squad import (
-    _get_best_indexes, get_final_text, _compute_softmax
-)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -278,8 +273,16 @@ class SquadTask(Task):
 
     TASK_TYPE = TaskTypes.SQUAD_STYLE_QA
 
-    def __init__(self, name, path_dict):
+    def __init__(self, name, path_dict,
+                 version_2_with_negative=False,
+                 n_best_size=20,
+                 max_answer_length=30,
+                 null_score_diff_threshold=0.0):
         super().__init__(name=name, path_dict=path_dict)
+        self.version_2_with_negative = version_2_with_negative
+        self.n_best_size = n_best_size
+        self.max_answer_length = max_answer_length
+        self.null_score_diff_threshold = null_score_diff_threshold
 
     def get_train_examples(self):
         return self.read_squad_examples(path=self.train_path, set_type=PHASE.TRAIN)
@@ -297,7 +300,7 @@ class SquadTask(Task):
 
         is_training = set_type == PHASE.TRAIN
         examples = []
-        for entry in tqdm.tqdm(input_data):
+        for entry in tqdm.tqdm(input_data, desc="Reading SQuAD Data"):
             title = entry["title"]
             for paragraph in entry["paragraphs"]:
                 context_text = paragraph["context"]

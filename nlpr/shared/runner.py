@@ -44,11 +44,11 @@ class TrainGlobalState(ExtendedDataClassMixin):
         return f"TGS({self.epoch} / {self.epoch_step} ({self.global_step}))"
 
 
-def convert_examples_to_dataset(examples: list,
-                                tokenizer,
-                                feat_spec: FeaturizationSpec,
-                                phase: str,
-                                verbose=False):
+def tokenize_and_featurize(examples: list,
+                           tokenizer,
+                           feat_spec: FeaturizationSpec,
+                           phase,
+                           verbose=False):
     # TODO: Better solution
     if isinstance(examples[0], SquadTask.Example):
         data_rows = []
@@ -67,9 +67,22 @@ def convert_examples_to_dataset(examples: list,
             example.tokenize(tokenizer).featurize(tokenizer, feat_spec)
             for example in maybe_tqdm(examples, desc="Tokenizing", verbose=verbose)
         ]
-    metadata = {
-        "example_id": list(range(len(data_rows))),
-    }
+    return data_rows
+
+
+def convert_examples_to_dataset(examples: list,
+                                tokenizer,
+                                feat_spec: FeaturizationSpec,
+                                phase: str,
+                                verbose=False):
+    data_rows = tokenize_and_featurize(
+        examples=examples,
+        tokenizer=tokenizer,
+        feat_spec=feat_spec,
+        phase=phase,
+        verbose=verbose,
+    )
+    metadata = {"example_id": list(range(len(data_rows)))}
     data = []
     for i, data_row in enumerate(data_rows):
         metadata_row = {
@@ -91,14 +104,14 @@ def get_sampler(dataset, local_rank, force_sequential=False):
 
 def run_val(val_dataloader,
             val_labels,
-            model, task, loss_criterion,
+            model_wrapper, task, loss_criterion,
             device, local_rank, verbose):
     # Reminder:
     #   val_dataloader contains mostly PyTorch-relevant info
     #   val_labels might contain more details information needed for full evaluation
     if not local_rank == -1:
         return
-    model.eval()
+    model_wrapper.model.eval()
     total_eval_loss = 0
     nb_eval_steps, nb_eval_examples = 0, 0
     all_logits = []
@@ -108,7 +121,7 @@ def run_val(val_dataloader,
 
         with torch.no_grad():
             logits = forward_batch_delegate(
-                model=model,
+                model=model_wrapper.model,
                 batch=batch,
                 omit_label_id=True,
                 task_type=task.TASK_TYPE,
@@ -136,8 +149,8 @@ def run_val(val_dataloader,
         "metrics": evaluate.compute_task_metrics_from_classification_logits_and_labels(
             task=task,
             logits=all_logits,
-            # TODO: Find a better solution for getting a subset of val examples
             labels=val_labels,
+            tokenizer=model_wrapper.tokenizer,
         ),
     }
 

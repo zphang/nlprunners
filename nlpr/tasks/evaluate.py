@@ -3,6 +3,7 @@ import json
 import os
 import re
 import string
+import torch
 
 from dataclasses import dataclass
 import numpy as np
@@ -13,6 +14,9 @@ from typing import Dict
 
 import nlpr.tasks as tasks
 from nlpr.shared.pycore import ExtendedDataClassMixin
+import nlpr.shared.runner as shared_runner
+import nlpr.tasks.lib.squad as squad_lib
+import nlpr.shared.model_resolution as model_resolution
 
 
 @dataclass
@@ -226,8 +230,9 @@ def compute_task_metrics_from_classification_logits_and_labels(
     elif isinstance(task, tasks.SciTailTask):
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.SquadTask):
-        raise NotImplementedError
-        return SQuADEval.from_preds_and_labels(get_preds(logits), labels)
+        return SQuADEval.from_logits_and_labels(
+            task=task, logits=logits, labels=labels, tokenizer=tokenizer,
+        )
     elif isinstance(task, tasks.SstTask):
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.StsbTask):
@@ -242,7 +247,7 @@ def compute_task_metrics_from_classification_logits_and_labels(
         raise KeyError(task)
 
 
-def get_labels_from_examples(task, examples):
+def get_labels_from_examples(task, examples, tokenizer, feat_spec, phase):
     # Todo: move logic to task?
     if isinstance(task, tasks.AnliTask):
         return get_label_ids(task=task, examples=examples)
@@ -281,6 +286,13 @@ def get_labels_from_examples(task, examples):
         return get_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.SciTailTask):
         return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.SquadTask):
+        return SQuADEval.get_labels_from_examples(
+            examples=examples,
+            tokenizer=tokenizer,
+            feat_spec=feat_spec,
+            phase=phase,
+        )
     elif isinstance(task, tasks.SstTask):
         return get_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.StsbTask):
@@ -550,21 +562,34 @@ class PearsonAndSpearmanEval(BaseEvaluation):
 
 
 class SQuADEval(BaseEvaluation):
-    @classmethod
-    def from_logits(cls, task, logits, examples):
-        raise NotImplementedError()
 
     @classmethod
-    def from_preds(cls, task, preds, examples):
-        raise NotImplementedError()
+    def from_logits_and_labels(cls, task, tokenizer, logits, labels):
+        results, predictions = squad_lib.compute_predictions_logits_v3(
+            data_rows=labels,
+            logits=logits,
+            n_best_size=task.n_best_size,
+            max_answer_length=task.max_answer_length,
+            do_lower_case=model_resolution.resolve_is_lower_case(tokenizer),
+            version_2_with_negative=task.version_2_with_negative,
+            null_score_diff_threshold=task.null_score_diff_threshold,
+            tokenizer=tokenizer,
+        )
+        return Metrics(
+            major=results["f1"],
+            minor=results,
+        )
 
     @classmethod
-    def from_preds_and_labels(cls, preds, labels):
-        raise NotImplementedError()
-
-    @classmethod
-    def get_labels_from_examples(cls, task, examples):
-        raise NotImplementedError()
+    def get_labels_from_examples(cls, examples, feat_spec, tokenizer, phase):
+        dataset = shared_runner.convert_examples_to_dataset(
+            examples=examples,
+            feat_spec=feat_spec,
+            tokenizer=tokenizer,
+            phase=phase,
+            verbose=True,
+        )
+        return [squad_lib.PartialDataRow.from_data_row(datum["data_row"]) for datum in dataset.data]
 
 
 def get_preds(logits):
@@ -608,10 +633,13 @@ def write_preds(logits, output_path):
 
 def write_val_results(results, output_dir, verbose=True):
     os.makedirs(output_dir, exist_ok=True)
-    write_preds(
-        logits=results["logits"],
-        output_path=os.path.join(output_dir, "val_preds.csv"),
-    )
+    if len(results["logits"].shape) == 2:
+        write_preds(
+            logits=results["logits"],
+            output_path=os.path.join(output_dir, "val_preds.csv"),
+        )
+    else:
+        torch.save(results["logits"], os.path.join(output_dir, "val_preds.p"))
     write_metrics(
         results=results,
         output_path=os.path.join(output_dir, "val_metrics.json"),

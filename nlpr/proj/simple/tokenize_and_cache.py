@@ -11,6 +11,7 @@ import nlpr.shared.model_setup as shared_model_setup
 import nlpr.shared.caching as shared_caching
 import nlpr.tasks.evaluate as evaluate
 import nlpr.shared.torch_utils as torch_utils
+from nlpr.constants import PHASE
 
 
 @zconf.run_config
@@ -114,33 +115,39 @@ def main(args: RunConfiguration):
         tokenizer_path=args.model_tokenizer_path,
     )
     phases = args.phases.split(",")
-    assert set(phases) < {"train", "val", "test"}
-    if "train" in phases:
+    assert set(phases) < {PHASE.TRAIN, PHASE.VAL, PHASE.TEST}
+    if PHASE.TRAIN in phases:
         chunk_and_save(
-            phase="train",
+            phase=PHASE.TRAIN,
             examples=task.get_train_examples(),
             feat_spec=feat_spec,
             tokenizer=tokenizer,
             args=args,
         )
-    if "val" in phases:
+    if PHASE.VAL in phases:
         val_examples = task.get_val_examples()
         chunk_and_save(
-            phase="val",
+            phase=PHASE.VAL,
             examples=val_examples,
             feat_spec=feat_spec,
             tokenizer=tokenizer,
             args=args,
         )
         shared_caching.chunk_and_save(
-            data=list(evaluate.get_labels_from_examples(task=task, examples=val_examples)),
+            data=list(evaluate.get_labels_from_examples(
+                task=task,
+                examples=val_examples,
+                feat_spec=feat_spec,
+                tokenizer=tokenizer,
+                phase=PHASE.VAL
+            )),
             chunk_size=args.chunk_size,
             data_args=args.to_dict(),
             output_dir=os.path.join(args.output_dir, "val_labels"),
         )
-    if "test" in phases:
+    if PHASE.TEST in phases:
         chunk_and_save(
-            phase="test",
+            phase=PHASE.TEST,
             examples=task.get_test_examples(),
             feat_spec=feat_spec,
             tokenizer=tokenizer,

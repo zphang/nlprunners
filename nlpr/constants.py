@@ -1,4 +1,4 @@
 class PHASE:
-    TRAIN = "TRAIN"
-    VAL = "VAL"
-    TEST = "TEST"
+    TRAIN = "train"
+    VAL = "val"
+    TEST = "test"
