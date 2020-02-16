@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import tqdm
 
 from nlpr.shared import torch_utils as torch_utils
 from nlpr.tasks.core import FeaturizationSpec
@@ -38,7 +39,7 @@ def experimental_smart_truncate(dataset: torch_utils.ListDataset,
         return dataset, max_seq_length
 
     new_datum_ls = []
-    for datum in dataset.data:
+    for datum in tqdm.trange(dataset.data, desc="Smart truncate datum"):
         new_datum_ls.append(experimental_smart_truncate_datum(
             datum=datum,
             max_seq_length=max_seq_length,
@@ -51,16 +52,15 @@ def experimental_smart_truncate(dataset: torch_utils.ListDataset,
 def experimental_smart_truncate_cache(cache: shared_caching.ChunkedFilesDataCache,
                                       max_seq_length: int,
                                       max_valid_length: int):
-    for chunk_i in range(cache.num_chunks):
+    for chunk_i in tqdm.trange(cache.num_chunks, desc="Smart truncate chunks"):
         chunk = torch.load(cache.get_chunk_path(chunk_i))
-        new_chunk = [
-            experimental_smart_truncate_datum(
+        new_chunk = []
+        for datum in tqdm.trange(chunk, desc="Smart truncate chunk-datum"):
+            new_chunk.append(experimental_smart_truncate_datum(
                 datum=datum,
                 max_seq_length=max_seq_length,
                 max_valid_length=max_valid_length,
-            )
-            for datum in chunk
-        ]
+            ))
         torch.save(new_chunk, cache.get_chunk_path(chunk_i))
 
 

@@ -36,7 +36,7 @@ class MultiQATask(squad_style_template.BaseSquadStyleTask):
 
         is_training = set_type == PHASE.TRAIN
         examples = []
-        for entry in tqdm.tqdm(input_data, desc="Reading SQuAD Data [1]"):
+        for entry in tqdm.tqdm(input_data, desc="Reading MultiQA Data [1]"):
             title = entry["title"]
             for paragraph in tqdm.tqdm(entry["paragraphs"], desc="Reading SQuAD Data [2]"):
                 context_text = paragraph["context"]

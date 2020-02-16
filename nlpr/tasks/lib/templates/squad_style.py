@@ -300,9 +300,9 @@ class BaseSquadStyleTask(Task):
 
         is_training = set_type == PHASE.TRAIN
         examples = []
-        for entry in tqdm.tqdm(input_data, desc="Reading SQuAD Data"):
+        for entry in tqdm.tqdm(input_data, desc="Reading SQuAD Data [1]"):
             title = entry["title"]
-            for paragraph in entry["paragraphs"]:
+            for paragraph in tqdm.tqdm(entry["paragraphs"], desc="Reading SQuAD Data [2]"):
                 context_text = paragraph["context"]
                 for qa in paragraph["qas"]:
                     qas_id = qa["id"]
