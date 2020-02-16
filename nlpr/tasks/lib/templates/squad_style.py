@@ -324,7 +324,7 @@ class BaseSquadStyleTask(Task):
                         else:
                             answers = qa["answers"]
 
-                    example = Example(
+                    example = cls.Example(
                         qas_id=qas_id,
                         question_text=question_text,
                         context_text=context_text,

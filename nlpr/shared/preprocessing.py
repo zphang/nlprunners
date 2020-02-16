@@ -4,7 +4,7 @@ import tqdm
 
 from nlpr.shared import torch_utils as torch_utils
 from nlpr.tasks.core import FeaturizationSpec
-from nlpr.tasks import SquadTask, MultiQATask
+import nlpr.tasks.lib.templates.squad_style as squad_style
 import nlpr.shared.caching as shared_caching
 
 from pyutils.display import maybe_tqdm
@@ -39,7 +39,7 @@ def experimental_smart_truncate(dataset: torch_utils.ListDataset,
         return dataset, max_seq_length
 
     new_datum_ls = []
-    for datum in tqdm.trange(dataset.data, desc="Smart truncate datum"):
+    for datum in tqdm.tqdm(dataset.data, desc="Smart truncate datum"):
         new_datum_ls.append(experimental_smart_truncate_datum(
             datum=datum,
             max_seq_length=max_seq_length,
@@ -55,7 +55,7 @@ def experimental_smart_truncate_cache(cache: shared_caching.ChunkedFilesDataCach
     for chunk_i in tqdm.trange(cache.num_chunks, desc="Smart truncate chunks"):
         chunk = torch.load(cache.get_chunk_path(chunk_i))
         new_chunk = []
-        for datum in tqdm.trange(chunk, desc="Smart truncate chunk-datum"):
+        for datum in tqdm.tqdm(chunk, desc="Smart truncate chunk-datum"):
             new_chunk.append(experimental_smart_truncate_datum(
                 datum=datum,
                 max_seq_length=max_seq_length,
@@ -132,7 +132,7 @@ def tokenize_and_featurize(examples: list,
                            phase,
                            verbose=False):
     # TODO: Better solution
-    if isinstance(examples[0], (SquadTask.Example, MultiQATask.Example)):
+    if isinstance(examples[0], squad_style.Example):
         data_rows = []
         for example in maybe_tqdm(examples, desc="Tokenizing", verbose=verbose):
             # TODO more arguments?
@@ -158,7 +158,7 @@ def iter_chunk_tokenize_and_featurize(examples: list,
                                       phase,
                                       verbose=False):
     # TODO: Better solution
-    if isinstance(examples[0], (SquadTask.Example, MultiQATask.Example)):
+    if isinstance(examples[0], squad_style.Example):
         for example in maybe_tqdm(examples, desc="Tokenizing", verbose=verbose):
             # TODO more arguments?
             yield from example.to_feature_list(
