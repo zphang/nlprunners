@@ -13,6 +13,7 @@ from nlpr.tasks.lib.imdb import IMDBTask
 from nlpr.tasks.lib.maskedwiki import MaskedWikiTask
 from nlpr.tasks.lib.mnli import MnliTask
 from nlpr.tasks.lib.mrpc import MrpcTask
+from nlpr.tasks.lib.multiqa import MultiQATask
 from nlpr.tasks.lib.multirc import MultiRCTask
 from nlpr.tasks.lib.qqp import QqpTask
 from nlpr.tasks.lib.qnli import QnliTask
@@ -49,6 +50,9 @@ TASK_DICT = {
     "mnli": MnliTask,
     "mrc": MultiRCTask,
     "mrpc": MrpcTask,
+    "multiqa_duorc_self": MultiQATask,
+    "multiqa_boolq": MultiQATask,
+    "multiqa_newsqa": MultiQATask,
     "qnli": QnliTask,
     "qqp": QqpTask,
     "record": ReCoRDTask,

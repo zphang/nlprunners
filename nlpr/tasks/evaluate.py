@@ -15,7 +15,7 @@ from typing import Dict
 import nlpr.tasks as tasks
 from nlpr.shared.pycore import ExtendedDataClassMixin
 import nlpr.shared.runner as shared_runner
-import nlpr.tasks.lib.squad as squad_lib
+import nlpr.tasks.lib.templates.squad_style as squad_lib
 import nlpr.shared.model_resolution as model_resolution
 
 
@@ -218,6 +218,10 @@ def compute_task_metrics_from_classification_logits_and_labels(
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.MrpcTask):
         return AccAndF1Eval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.MultiQATask):
+        return SQuADEval.from_logits_and_labels(
+            task=task, logits=logits, labels=labels, tokenizer=tokenizer,
+        )
     elif isinstance(task, tasks.MultiRCTask):
         # labels is a lists of dicts
         return MultiRCEval.from_preds_and_labels(get_preds(logits), labels)
@@ -275,6 +279,13 @@ def get_labels_from_examples(task, examples, tokenizer, feat_spec, phase):
         return get_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.MrpcTask):
         return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.MultiQATask):
+        return SQuADEval.get_labels_from_examples(
+            examples=examples,
+            tokenizer=tokenizer,
+            feat_spec=feat_spec,
+            phase=phase,
+        )
     elif isinstance(task, tasks.MultiRCTask):
         # labels is a lists of dicts
         return MultiRCEval.get_labels_from_examples(task=task, examples=examples)

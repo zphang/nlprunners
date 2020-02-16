@@ -17,7 +17,7 @@ from nlpr.shared.modeling.models import forward_batch_delegate, compute_loss_fro
 import nlpr.tasks.evaluate as evaluate
 import nlpr.shared.torch_utils as torch_utils
 import nlpr.shared.caching as caching
-from nlpr.tasks.retrieval import SquadTask
+from nlpr.tasks.retrieval import SquadTask, MultiQATask
 from nlpr.tasks.core import FeaturizationSpec
 from nlpr.constants import PHASE
 
@@ -50,7 +50,7 @@ def tokenize_and_featurize(examples: list,
                            phase,
                            verbose=False):
     # TODO: Better solution
-    if isinstance(examples[0], SquadTask.Example):
+    if isinstance(examples[0], (SquadTask.Example, MultiQATask.Example)):
         data_rows = []
         for example in maybe_tqdm(examples, desc="Tokenizing", verbose=verbose):
             # TODO more arguments?
