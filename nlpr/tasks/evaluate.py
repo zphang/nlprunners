@@ -12,6 +12,7 @@ from sklearn.metrics import f1_score, matthews_corrcoef
 from scipy.stats import pearsonr, spearmanr
 from typing import Dict
 
+import nlpr.shared.preprocessing
 import nlpr.tasks as tasks
 from nlpr.shared.pycore import ExtendedDataClassMixin
 import nlpr.shared.runner as shared_runner
@@ -593,7 +594,7 @@ class SQuADEval(BaseEvaluation):
 
     @classmethod
     def get_labels_from_examples(cls, examples, feat_spec, tokenizer, phase):
-        dataset = shared_runner.convert_examples_to_dataset(
+        dataset = nlpr.shared.preprocessing.convert_examples_to_dataset(
             examples=examples,
             feat_spec=feat_spec,
             tokenizer=tokenizer,

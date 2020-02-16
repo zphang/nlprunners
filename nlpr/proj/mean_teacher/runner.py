@@ -12,13 +12,13 @@ from pyutils.display import maybe_tqdm, maybe_trange
 
 from nlpr.shared.runner import (
     BaseRunner,
-    convert_examples_to_dataset,
     HybridLoader,
     complex_backpropagate,
     get_sampler,
     TrainGlobalState,
     optim_step_grad_accum,
 )
+from nlpr.shared.preprocessing import convert_examples_to_dataset
 import nlpr.shared.model_setup as model_setup
 from nlpr.shared.modeling.models import forward_batch_delegate, compute_loss_from_model_output
 from nlpr.shared.train_setup import TrainSchedule

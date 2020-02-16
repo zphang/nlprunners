@@ -8,6 +8,7 @@ import torch.nn as nn
 from torch.utils.data import RandomSampler, SequentialSampler, DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
+from nlpr.shared.preprocessing import convert_examples_to_dataset
 from pyutils.display import maybe_tqdm
 import pyutils.io as io
 
@@ -17,8 +18,6 @@ from nlpr.shared.modeling.models import forward_batch_delegate, compute_loss_fro
 import nlpr.tasks.evaluate as evaluate
 import nlpr.shared.torch_utils as torch_utils
 import nlpr.shared.caching as caching
-from nlpr.tasks.retrieval import SquadTask, MultiQATask
-from nlpr.tasks.core import FeaturizationSpec
 from nlpr.constants import PHASE
 
 
@@ -42,55 +41,6 @@ class TrainGlobalState(ExtendedDataClassMixin):
 
     def __str__(self):
         return f"TGS({self.epoch} / {self.epoch_step} ({self.global_step}))"
-
-
-def tokenize_and_featurize(examples: list,
-                           tokenizer,
-                           feat_spec: FeaturizationSpec,
-                           phase,
-                           verbose=False):
-    # TODO: Better solution
-    if isinstance(examples[0], (SquadTask.Example, MultiQATask.Example)):
-        data_rows = []
-        for example in maybe_tqdm(examples, desc="Tokenizing", verbose=verbose):
-            # TODO more arguments?
-            data_rows += example.to_feature_list(
-                tokenizer=tokenizer,
-                feat_spec=feat_spec,
-                max_seq_length=feat_spec.max_seq_length,
-                doc_stride=128,
-                max_query_length=64,
-                set_type=phase,
-            )
-    else:
-        data_rows = [
-            example.tokenize(tokenizer).featurize(tokenizer, feat_spec)
-            for example in maybe_tqdm(examples, desc="Tokenizing", verbose=verbose)
-        ]
-    return data_rows
-
-
-def convert_examples_to_dataset(examples: list,
-                                tokenizer,
-                                feat_spec: FeaturizationSpec,
-                                phase: str,
-                                verbose=False):
-    data_rows = tokenize_and_featurize(
-        examples=examples,
-        tokenizer=tokenizer,
-        feat_spec=feat_spec,
-        phase=phase,
-        verbose=verbose,
-    )
-    metadata = {"example_id": list(range(len(data_rows)))}
-    data = []
-    for i, data_row in enumerate(data_rows):
-        metadata_row = {
-            k: v[i]
-            for k, v in metadata.items()
-        }
-        data.append({"data_row": data_row, "metadata": metadata_row})
-    return torch_utils.ListDataset(data)
 
 
 def get_sampler(dataset, local_rank, force_sequential=False):

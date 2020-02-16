@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import os
+from typing import Generator
 
 import torch
 import torch.utils.data.dataset
@@ -70,6 +71,33 @@ def chunk_and_save(data: list,
     torch.save(data_args, os.path.join(output_dir, "data_args.p"))
 
 
+def iter_chunk_and_save(data: Generator,
+                        chunk_size: int,
+                        data_args: dict,
+                        output_dir: str,
+                        recorder_callback=None):
+    os.makedirs(output_dir, exist_ok=True)
+    chunk_i = 0
+    length = 0
+    current_chunk = []
+    for datum in data:
+        if recorder_callback is not None:
+            recorder_callback(datum)
+        length += 1
+        current_chunk.append(datum)
+        if len(current_chunk) == chunk_size:
+            torch.save(current_chunk, os.path.join(output_dir, f"data_{chunk_i:05d}.chunk"))
+            chunk_i += 1
+            current_chunk = []
+    if current_chunk:
+        torch.save(current_chunk, os.path.join(output_dir, f"data_{chunk_i:05d}.chunk"))
+        chunk_i += 1
+    data_args = data_args.copy()
+    data_args["num_chunks"] = chunk_i
+    data_args["length"] = length
+    torch.save(data_args, os.path.join(output_dir, "data_args.p"))
+
+
 def compare_tensor_tuples(tup1, tup2):
     if len(tup1) != len(tup2):
         return False
@@ -112,7 +140,7 @@ class InMemoryDataCache(DataCache):
 
 
 class ChunkedFilesDataCache(DataCache):
-    def __init__(self, cache_fol_path, verbose=False):
+    def __init__(self, cache_fol_path):
         self.cache_fol_path = cache_fol_path
 
         self.data_args = torch.load(os.path.join(cache_fol_path, "data_args.p"))
@@ -131,7 +159,10 @@ class ChunkedFilesDataCache(DataCache):
         )
 
     def load_chunk(self, i):
-        return torch.load(os.path.join(self.cache_fol_path, f"data_{i:05d}.chunk"))
+        return torch.load(self.get_chunk_path(i))
+
+    def get_chunk_path(self, i):
+        return os.path.join(self.cache_fol_path, f"data_{i:05d}.chunk")
 
     def load_from_indices(self, indices, verbose=False):
         chunk_arr, chunk_sub_index_arr = self.chunker.lookup_chunk_and_index(indices)

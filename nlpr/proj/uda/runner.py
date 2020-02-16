@@ -11,13 +11,13 @@ from zproto.zlogv1 import BaseZLogger, PRINT_LOGGER
 from nlpr.shared.train_setup import TrainSchedule
 from nlpr.shared.runner import (
     BaseRunner,
-    convert_examples_to_dataset,
     HybridLoader,
     complex_backpropagate,
     get_sampler,
     TrainGlobalState,
     optim_step_grad_accum,
 )
+from nlpr.shared.preprocessing import convert_examples_to_dataset
 from nlpr.shared.modeling.models import forward_batch_basic
 import nlpr.tasks.evaluate as evaluate
 from nlpr.proj.uda import uda_ops

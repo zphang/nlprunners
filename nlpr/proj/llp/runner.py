@@ -16,13 +16,13 @@ import nlpr.proj.llp.propagate as llp_propagate
 import nlpr.proj.llp.representation as llp_representation
 from nlpr.shared.runner import (
     BaseRunner,
-    convert_examples_to_dataset,
     HybridLoader,
     complex_backpropagate,
     get_sampler,
     TrainGlobalState,
     optim_step_grad_accum,
 )
+from nlpr.shared.preprocessing import convert_examples_to_dataset
 from nlpr.shared.train_setup import TrainSchedule
 import nlpr.tasks.evaluate as evaluate
 import nlpr.shared.torch_utils as torch_utils
