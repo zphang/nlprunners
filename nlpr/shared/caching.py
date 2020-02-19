@@ -6,8 +6,6 @@ from typing import Generator
 import torch
 import torch.utils.data.dataset
 
-import nlpr.shared.torch_utils as torch_utils
-
 
 class Chunker:
     def __init__(self, length, num_chunks, chunk_size):

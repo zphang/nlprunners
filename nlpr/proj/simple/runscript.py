@@ -44,8 +44,6 @@ class RunConfiguration(zconf.RunConfig):
     eval_batch_size = zconf.attr(default=8, type=int)  # per gpu
     force_overwrite = zconf.attr(action="store_true")
     seed = zconf.attr(type=int, default=-1)
-    train_examples_number = zconf.attr(type=int, default=None)
-    train_examples_fraction = zconf.attr(type=float, default=None)
 
     # === Training Learning Parameters === #
     learning_rate = zconf.attr(default=1e-5, type=float)
