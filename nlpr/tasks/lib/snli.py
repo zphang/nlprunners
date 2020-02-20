@@ -86,10 +86,12 @@ class SnliTask(Task):
     def _create_examples(cls, lines, set_type):
         examples = []
         for (i, line) in enumerate(lines):
+            if line["gold_label"] == "-":
+                continue
             examples.append(Example(
                 guid="%s-%s" % (set_type, i),
-                input_premise=line["text_a"],
-                input_hypothesis=line["text_b"],
-                label=line["label"] if set_type != "test" else cls.LABELS[-1],
+                input_premise=line["sentence1"],
+                input_hypothesis=line["sentence2"],
+                label=line["gold_label"] if set_type != "test" else cls.LABELS[-1],
             ))
         return examples

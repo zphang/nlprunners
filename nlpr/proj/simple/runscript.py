@@ -19,8 +19,8 @@ import nlpr.shared.caching as caching
 class RunConfiguration(zconf.RunConfig):
     # === Required parameters === #
     task_config_path = zconf.attr(type=str, required=True)
-    task_train_cache_path = zconf.attr(type=str, required=True)
-    task_val_cache_path = zconf.attr(type=str, required=True)
+    task_cache_data_path = zconf.attr(type=str, required=True)
+    task_train_cache_path = zconf.attr(type=str, default=None)
     output_dir = zconf.attr(type=str, required=True)
 
     # === Model parameters === #
@@ -95,7 +95,11 @@ def main(args):
             )
             model_wrapper.model.to(quick_init_out.device)
 
-        train_cache = caching.ChunkedFilesDataCache(args.task_train_cache_path)
+        if args.task_train_cache_path is not None:
+            task_train_cache_path = args.task_train_cache_path
+        else:
+            task_train_cache_path = os.path.join(args.task_cache_data_path, "train")
+        train_cache = caching.ChunkedFilesDataCache(task_train_cache_path)
         num_train_examples = len(train_cache)
 
         train_schedule = train_setup.get_train_schedule(
@@ -147,7 +151,7 @@ def main(args):
         )
 
         if args.do_train:
-            val_cache = caching.ChunkedFilesDataCache(args.task_val_cache_path)
+            val_cache = caching.ChunkedFilesDataCache(os.path.join(args.task_cache_data_path, "val"))
             val_labels_cache = caching.ChunkedFilesDataCache(os.path.join(args.task_cache_data_path, "val_labels"))
             metarunner.MetaRunner(
                 runner=runner,
@@ -171,7 +175,7 @@ def main(args):
             )
 
         if args.do_val:
-            val_cache = caching.ChunkedFilesDataCache(args.task_val_cache_path)
+            val_cache = caching.ChunkedFilesDataCache(os.path.join(args.task_cache_data_path, "val"))
             val_labels_cache = caching.ChunkedFilesDataCache(os.path.join(args.task_cache_data_path, "val_labels"))
             results = runner.run_val(
                 val_cache=val_cache,

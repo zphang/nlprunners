@@ -4,6 +4,10 @@ class ExtendedDataClassMixin:
     def get_fields(cls):
         return list(cls.__dataclass_fields__)
 
+    @classmethod
+    def get_annotations(cls):
+        return cls.__annotations__
+
     def asdict(self):
         return {
             k: getattr(self, k)

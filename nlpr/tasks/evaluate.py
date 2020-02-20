@@ -15,7 +15,6 @@ from typing import Dict
 import nlpr.shared.preprocessing
 import nlpr.tasks as tasks
 from nlpr.shared.pycore import ExtendedDataClassMixin
-import nlpr.shared.runner as shared_runner
 import nlpr.tasks.lib.templates.squad_style as squad_lib
 import nlpr.shared.model_resolution as model_resolution
 
@@ -70,11 +69,12 @@ def compute_task_metrics(task, logits, examples):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.SciTailTask):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
+    elif isinstance(task, tasks.SnliTask):
+        return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.SstTask):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.StsbTask):
-        # Not actually logits
-        return PearsonAndSpearmanEval.from_preds(np.squeeze(logits, axis=-1), examples)
+        return PearsonAndSpearmanEval.from_preds(PearsonAndSpearmanEval.get_preds(logits), examples)
     elif isinstance(task, tasks.WiCTask):
         return SimpleAccuracyEval.from_logits(task, logits, examples)
     elif isinstance(task, tasks.WSCTask):
@@ -123,10 +123,12 @@ def compute_task_metrics_from_classification_preds(task, preds, examples):
         return SimpleAccuracyEval.from_preds(task, preds, examples)
     elif isinstance(task, tasks.SciTailTask):
         return SimpleAccuracyEval.from_preds(task, preds, examples)
+    elif isinstance(task, tasks.SnliTask):
+        return SimpleAccuracyEval.from_preds(task, preds, examples)
     elif isinstance(task, tasks.SstTask):
         return SimpleAccuracyEval.from_preds(task, preds, examples)
     elif isinstance(task, tasks.StsbTask):
-        raise RuntimeError("Not supported for regression")
+        return PearsonAndSpearmanEval.from_preds(preds, examples)
     elif isinstance(task, tasks.WiCTask):
         return SimpleAccuracyEval.from_preds(task, preds, examples)
     elif isinstance(task, tasks.WSCTask):
@@ -176,10 +178,12 @@ def compute_task_metrics_from_classification_preds_and_labels(task, preds, label
         return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
     elif isinstance(task, tasks.SciTailTask):
         return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.SnliTask):
+        return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
     elif isinstance(task, tasks.SstTask):
         return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
     elif isinstance(task, tasks.StsbTask):
-        raise RuntimeError("Not supported for regression")
+        return PearsonAndSpearmanEval.from_preds_and_labels(preds, labels)
     elif isinstance(task, tasks.WiCTask):
         return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
     elif isinstance(task, tasks.WSCTask):
@@ -234,6 +238,8 @@ def compute_task_metrics_from_classification_logits_and_labels(
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.SciTailTask):
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.SnliTask):
+        return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.SquadTask):
         return SQuADEval.from_logits_and_labels(
             task=task, logits=logits, labels=labels, tokenizer=tokenizer,
@@ -241,7 +247,10 @@ def compute_task_metrics_from_classification_logits_and_labels(
     elif isinstance(task, tasks.SstTask):
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.StsbTask):
-        raise RuntimeError("Not supported for regression")
+        return PearsonAndSpearmanEval.from_preds_and_labels(
+            preds=PearsonAndSpearmanEval.get_preds(logits),
+            true_values=labels,
+        )
     elif isinstance(task, tasks.WiCTask):
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.WSCTask):
@@ -298,6 +307,8 @@ def get_labels_from_examples(task, examples, tokenizer, feat_spec, phase):
         return get_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.SciTailTask):
         return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.SnliTask):
+        return get_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.SquadTask):
         return SQuADEval.get_labels_from_examples(
             examples=examples,
@@ -351,6 +362,7 @@ class CommitmentBankEval(BaseEvaluation):
     @classmethod
     def from_preds_and_labels(cls, preds, labels):
         acc = float((preds == labels).mean())
+        labels = np.array(labels)
         f11 = f1_score(y_true=labels == 0, y_pred=preds == 0)
         f12 = f1_score(y_true=labels == 1, y_pred=preds == 1)
         f13 = f1_score(y_true=labels == 2, y_pred=preds == 2)
@@ -413,6 +425,7 @@ class AccAndF1Eval(BaseEvaluation):
     @classmethod
     def from_preds_and_labels(cls, preds, labels):
         acc = float((preds == labels).mean())
+        labels = np.array(labels)
         f1 = f1_score(y_true=labels, y_pred=preds)
         minor = {
             "acc": acc,
@@ -469,6 +482,7 @@ class RecordTaskEval(BaseEvaluation):
     @classmethod
     def from_preds_and_labels(cls, preds, labels):
         acc = float((preds == labels).mean())
+        labels = np.array(labels)
         f1 = f1_score(y_true=labels, y_pred=preds)
         minor = {
             "acc": acc,
@@ -552,6 +566,10 @@ class MccEval(BaseEvaluation):
 
 
 class PearsonAndSpearmanEval(BaseEvaluation):
+
+    @classmethod
+    def get_preds(cls, logits):
+        return np.squeeze(logits, axis=-1)
 
     @classmethod
     def from_preds(cls, preds, examples):

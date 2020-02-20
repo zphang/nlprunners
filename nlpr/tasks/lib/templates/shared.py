@@ -6,6 +6,7 @@ import numpy as np
 from typing import List, NamedTuple, Mapping
 from enum import Enum
 
+import torch
 import torch.utils.data.dataloader as dataloader
 
 from dataclasses import dataclass
@@ -81,7 +82,7 @@ class Task:
         return self.path_dict["test"]
 
     @classmethod
-    def collate_fn(cls, batch):
+    def collate_fn(cls, batch: Batch):
         # cls.collate_fn
         elem = batch[0]
         if isinstance(elem, Mapping):  # dict
@@ -95,8 +96,11 @@ class Task:
             collated_metadata = metadata_collate_fn(metadata)
             combined = combine_dicts([collated_data_rows, collated_metadata])
             batch_dict = {}
-            for field in cls.Batch.get_fields():
+            for field, field_type in cls.Batch.get_annotations().items():
                 batch_dict[field] = combined.pop(field)
+                if field_type == torch.FloatTensor:
+                    # Ensure that floats stay as float32
+                    batch_dict[field] = batch_dict[field].float()
             out_batch = cls.Batch(**batch_dict)
             remainder = combined
             return out_batch, remainder

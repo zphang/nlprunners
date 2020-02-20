@@ -114,7 +114,7 @@ class MetaRunner:
                         model=self.model,
                         metadata={},
                         output_dir=self.output_dir,
-                        file_name=f"model__{self.train_global_state.global_step}",
+                        file_name=f"model__{self.train_global_state.global_step:09d}",
                     )
 
                 # TODO: Fix: I think TGS has already been updated here, so we need
