@@ -19,7 +19,7 @@ import nlpr.shared.caching as caching
 class RunConfiguration(zconf.RunConfig):
     # === Required parameters === #
     task_config_path = zconf.attr(type=str, required=True)
-    task_cache_data_path = zconf.attr(type=str, required=True)
+    task_cache_data_path = zconf.attr(type=str, default=None)
     task_train_cache_path = zconf.attr(type=str, default=None)
     output_dir = zconf.attr(type=str, required=True)
 
