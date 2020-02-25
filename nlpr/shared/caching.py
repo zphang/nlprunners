@@ -1,7 +1,7 @@
 import math
 import numpy as np
 import os
-from typing import Generator
+from typing import Generator, Union, Sequence
 
 import torch
 import torch.utils.data.dataset
@@ -147,11 +147,15 @@ class ChunkedFilesDataCache(DataCache):
         self.chunk_size = self.data_args["chunk_size"]
         self.chunker = Chunker.from_chunk_size(length=self.length, chunk_size=self.chunk_size)
 
-    def get_iterable_dataset(self, buffer_size=None, shuffle=False, subset=None, verbose=False):
+    def get_iterable_dataset(self, buffer_size=None, shuffle=False,
+                             subset_num: Union[None, int] = None,
+                             explicit_subset: Union[None, Sequence] = None,
+                             verbose=False):
         return ChunkedFilesIterableDataset(
             buffer_size=buffer_size,
             shuffle=shuffle,
-            subset=subset,
+            subset_num=subset_num,
+            explicit_subset=explicit_subset,
             chunked_file_data_cache=self,
             verbose=verbose,
         )
@@ -189,18 +193,26 @@ class ChunkedFilesDataCache(DataCache):
 
 
 class ChunkedFilesIterableDataset(torch.utils.data.dataset.IterableDataset):
-    def __init__(self, buffer_size, shuffle, subset,
+    def __init__(self, buffer_size, shuffle,
                  chunked_file_data_cache: ChunkedFilesDataCache,
+                 subset_num: Union[int, None] = None,
+                 explicit_subset: Union[Sequence, None] = None,
                  verbose=False):
         self.buffer_size = buffer_size
         self.shuffle = shuffle
-        self.subset = subset
+        self.subset_num = subset_num
         self.chunked_file_data_cache = chunked_file_data_cache
+        self.explicit_subset = explicit_subset
         self.verbose = verbose
 
-        self.length = self.chunked_file_data_cache.length
-        if self.subset:
-            self.length = min(self.subset, self.length)
+        if self.explicit_subset is not None:
+            assert self.subset_num is None
+            self.length = len(self.explicit_subset)
+        else:
+            self.length = self.chunked_file_data_cache.length
+            if self.subset_num:
+                self.length = min(self.subset_num, self.length)
+
         if self.buffer_size is None:
             self.buffer_size = self.length
 
@@ -216,11 +228,14 @@ class ChunkedFilesIterableDataset(torch.utils.data.dataset.IterableDataset):
             seen += len(buffer_chunked_index)
 
     def get_buffer_chunked_indices(self):
-        indices = np.arange(self.length).astype(int)
+        if self.explicit_subset:
+            indices = np.array(self.explicit_subset).astype(int)
+        else:
+            indices = np.arange(self.length).astype(int)
         if self.shuffle:
             np.random.shuffle(indices)
-        if self.subset:
-            indices = indices[:self.subset]
+        if self.subset_num:
+            indices = indices[:self.subset_num]
         buffer_chunked_indices = convert_to_chunks(indices, chunk_size=self.buffer_size)
         return buffer_chunked_indices
 

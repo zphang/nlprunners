@@ -166,7 +166,7 @@ class MetaRunner:
         val_result = self.runner.run_val(
             val_cache=self.val_cache,
             val_labels_cache=self.val_labels_cache,
-            subset=self.partial_eval_number,
+            subset_num=self.partial_eval_number,
         )
         val_state = ValState(
             score=val_result["metrics"].major,

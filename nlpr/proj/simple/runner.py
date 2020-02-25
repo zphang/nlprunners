@@ -125,13 +125,13 @@ class SimpleTaskRunner(BaseRunner):
             # "pred_entropy": compute_pred_entropy_clean(logits)
         })
 
-    def run_val(self, val_cache, val_labels_cache, subset=None, verbose=True):
+    def run_val(self, val_cache, val_labels_cache, subset_num=None, verbose=True):
         return run_val(
             val_dataloader=self.get_eval_dataloader(
                 eval_cache=val_cache,
-                subset=subset
+                subset_num=subset_num
             ),
-            val_labels=val_labels_cache.get_all()[:subset],
+            val_labels=val_labels_cache.get_all()[:subset_num],
             model_wrapper=self.model_wrapper,
             task=self.task,
             loss_criterion=self.loss_criterion,
@@ -168,11 +168,12 @@ class SimpleTaskRunner(BaseRunner):
             train_batch_size=self.train_schedule.train_batch_size,
         )
 
-    def get_eval_dataloader(self, eval_cache, subset=None):
+    def get_eval_dataloader(self, eval_cache, subset_num=None, explicit_subset=None):
         return get_eval_dataloader_from_cache(
             eval_cache=eval_cache,
             task=self.task,
-            subset=subset,
+            subset_num=subset_num,
+            explicit_subset=explicit_subset,
             eval_batch_size=self.rparams.eval_batch_size,
         )
 

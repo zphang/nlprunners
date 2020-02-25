@@ -164,11 +164,13 @@ def get_train_dataloader_from_cache(train_cache: caching.ChunkedFilesDataCache,
 def get_eval_dataloader_from_cache(eval_cache: caching.ChunkedFilesDataCache,
                                    task,
                                    eval_batch_size: int,
-                                   subset=None):
+                                   subset_num=None,
+                                   explicit_subset=None):
     dataset = eval_cache.get_iterable_dataset(
         buffer_size=10000,
         shuffle=False,
-        subset=subset,
+        subset_num=subset_num,
+        explicit_subset=explicit_subset,
     )
     eval_dataloader = torch_utils.DataLoaderWithLength(
         dataset=dataset,

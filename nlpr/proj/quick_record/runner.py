@@ -131,9 +131,9 @@ class SimpleTaskRunner(BaseRunner):
             "guid": batch_metadata["example_id"],
         })
 
-    def run_val(self, val_cache, subset=None, verbose=True):
+    def run_val(self, val_cache, subset_num=None, verbose=True):
         return run_val(
-            val_dataloader=self.get_eval_dataloader(val_cache, subset=subset),
+            val_dataloader=self.get_eval_dataloader(val_cache, subset_num=subset_num),
             model=self.model,
             task=self.task,
             loss_criterion=self.loss_criterion,
@@ -170,11 +170,11 @@ class SimpleTaskRunner(BaseRunner):
             train_batch_size=self.train_schedule.train_batch_size,
         )
 
-    def get_eval_dataloader(self, eval_cache, subset=None):
+    def get_eval_dataloader(self, eval_cache, subset_num=None):
         return get_eval_dataloader_from_cache(
             eval_cache=eval_cache,
             task=self.task,
-            subset=subset,
+            subset_num=subset_num,
             eval_batch_size=self.rparams.eval_batch_size,
         )
 
