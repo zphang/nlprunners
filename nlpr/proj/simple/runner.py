@@ -1,6 +1,7 @@
 import collections as col
 import numpy as np
 from dataclasses import dataclass
+from typing import Union
 
 import torch
 
@@ -17,7 +18,6 @@ from nlpr.shared.runner import (
 )
 from nlpr.shared.modeling.models import forward_batch_delegate, compute_loss_from_model_output
 from nlpr.shared.train_setup import TrainSchedule
-from nlpr.shared.torch_utils import compute_pred_entropy_clean
 
 
 @dataclass
@@ -33,7 +33,7 @@ class RunnerParameters:
 
 class SimpleTaskRunner(BaseRunner):
     def __init__(self, task, model_wrapper, optimizer_scheduler, loss_criterion,
-                 device, rparams: RunnerParameters, train_schedule: TrainSchedule,
+                 device, rparams: RunnerParameters, train_schedule: Union[TrainSchedule, None],
                  log_writer):
         self.task = task
         self.model_wrapper = model_wrapper

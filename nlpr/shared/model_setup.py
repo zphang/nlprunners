@@ -190,7 +190,7 @@ def simple_load_model_path(model, model_path, model_load_mode, verbose=True):
         return
     simple_load_model(
         model=model,
-        state_dict=torch.load(model_path),
+        state_dict=torch.load(model_path, map_location="cpu"),
         model_load_mode=model_load_mode,
         verbose=verbose
     )
