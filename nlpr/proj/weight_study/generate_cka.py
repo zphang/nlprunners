@@ -37,6 +37,7 @@ class RunConfiguration(zconf.RunConfig):
 
     # === Running Setup === #
     batch_size = zconf.attr(default=8, type=int)
+    skip_cka = zconf.attr(action="store_true")
     save_acts = zconf.attr(action="store_true")
 
     # Specialized config
@@ -78,22 +79,26 @@ def main(args):
         # === Compute === #
         act_a = compute_activations_from_path(
             data_obj=data_obj,
+            task=task,
             model_wrapper=model_wrapper,
             model_path=args.model_a_path,
             device=quick_init_out.device,
         )
         act_b = compute_activations_from_path(
             data_obj=data_obj,
+            task=task,
             model_wrapper=model_wrapper,
             model_path=args.model_b_path,
             device=quick_init_out.device,
         )
-        cka_outputs = compute_cka(
-            act_a=act_a,
-            act_b=act_b,
-            device=quick_init_out.device,
-        )
-        torch.save(cka_outputs, os.path.join(args.output_dir, "cka.p"))
+        print(act_a.shape)
+        if not args.skip_cka:
+            cka_outputs = compute_cka(
+                act_a=act_a,
+                act_b=act_b,
+                device=quick_init_out.device,
+            )
+            torch.save(cka_outputs, os.path.join(args.output_dir, "cka.p"))
         if args.save_acts:
             torch.save(act_a, os.path.join(args.output_dir, "act_a.p"))
             torch.save(act_b, os.path.join(args.output_dir, "act_b.p"))
@@ -102,29 +107,37 @@ def main(args):
 @dataclass
 class DataObj:
     dataloader: DataLoader
-    grouped_example_indices: Sequence
+    grouped_input_indices: Sequence
     grouped_position_indices: Sequence
 
     @classmethod
     def from_path(cls, task, task_cache_path, indices_path, batch_size):
         loaded = torch.load(indices_path)
-        grouped_example_indices = loaded["grouped_example_indices"]
+        grouped_input_indices = loaded["grouped_input_indices"]
         grouped_position_indices = loaded["grouped_position_indices"]
         task_cache = caching.ChunkedFilesDataCache(task_cache_path)
         dataloader = shared_runner.get_eval_dataloader_from_cache(
             eval_cache=task_cache,
             task=task,
             eval_batch_size=batch_size,
-            explicit_subset=grouped_example_indices,
+            explicit_subset=np.array(grouped_input_indices) // get_num_inputs(task),
         )
         return cls(
             dataloader=dataloader,
-            grouped_example_indices=grouped_example_indices,
+            grouped_input_indices=grouped_input_indices,
             grouped_position_indices=grouped_position_indices,
         )
 
 
+def get_num_inputs(task: tasks.Task):
+    if task.TASK_TYPE == tasks.TaskTypes.MULTIPLE_CHOICE:
+        return task.NUM_CHOICES
+    else:
+        return 1
+
+
 def compute_activations_from_path(data_obj: DataObj,
+                                  task: tasks.Task,
                                   model_wrapper: model_setup.ModelWrapper,
                                   model_path: str,
                                   device):
@@ -135,6 +148,7 @@ def compute_activations_from_path(data_obj: DataObj,
     )
     return compute_activations_from_model(
         data_obj=data_obj,
+        task=task,
         model_wrapper=model_wrapper,
         device=device,
     )
@@ -144,7 +158,7 @@ def compute_cka(act_a, act_b, device):
     assert act_a.shape[1] == act_b.shape[1]
     num_layers = act_a.shape[1]
     collated = np.empty([num_layers, num_layers])
-    for i in tqdm.tqdm(range(num_layers)):
+    for i in tqdm.tqdm(range(num_layers), desc="CKA row"):
         for j in tqdm.tqdm(range(num_layers)):
             collated[i, j] = cka.linear_CKA(
                 torch.Tensor(act_a[:, i].copy()).float().to(device),
@@ -153,30 +167,110 @@ def compute_cka(act_a, act_b, device):
     return collated
 
 
+def get_hidden_act(task: tasks.Task, model_wrapper, batch):
+    if task.TASK_TYPE in (
+                tasks.TaskTypes.CLASSIFICATION,
+                tasks.TaskTypes.MULTIPLE_CHOICE,
+                tasks.TaskTypes.REGRESSION,
+            ):
+        _, raw_hidden = shared_models.forward_batch_basic(
+            model=model_wrapper.model,
+            batch=batch,
+            omit_label_id=True,
+        )
+    elif task.TASK_TYPE == tasks.TaskTypes.SQUAD_STYLE_QA:
+        start_positions = None
+        end_positions = None
+        # TODO: Refactor this wrt model_resolution
+        # Actually "xlm", "roberta", "distilbert"
+        if model_wrapper.model.__class__.__name__.startswith("Robert"):
+            segment_ids = None
+        else:
+            segment_ids = batch.segment_ids
+        _, _, raw_hidden = model_wrapper.model(
+            input_ids=batch.input_ids,
+            attention_mask=batch.input_mask,
+            token_type_ids=segment_ids,
+            start_positions=start_positions,
+            end_positions=end_positions,
+        )
+    else:
+        raise KeyError(task.TASK_TYPE)
+    hidden_act = torch.stack(raw_hidden, dim=2)
+    return hidden_act
+
+
 def compute_activations_from_model(data_obj: DataObj,
+                                   task: tasks.Task,
                                    model_wrapper: model_setup.ModelWrapper,
                                    device):
+    num_inputs_per_example = get_num_inputs(task)
     collected_acts = []
     with torch.no_grad():
         model_wrapper.model.eval()
         example_i = 0
-        for batch, batch_metadata in tqdm.tqdm(data_obj.dataloader):
+        for batch, batch_metadata in tqdm.tqdm(data_obj.dataloader, desc="Computing Activation"):
             batch = batch.to(device)
-            outputs = shared_models.forward_batch_basic(
-                model=model_wrapper.model,
-                batch=batch,
-                omit_label_id=True,
+
+            hidden_act = get_hidden_act(
+                task=task,
+                model_wrapper=model_wrapper,
+                batch=batch
             )
-            batch_example_indices = torch.LongTensor(np.repeat(
-                np.arange(len(batch)),
-                [len(data_obj.grouped_position_indices[example_i + i]) for i in range(len(batch))],
-            )).to(device)
-            batch_position_indices = torch.LongTensor(np.concatenate([
-                data_obj.grouped_position_indices[example_i + i] for i in range(len(batch))]
-            )).to(device)
-            hidden_act = torch.stack(outputs[1], dim=2)
-            collected_acts.append(hidden_act[batch_example_indices, batch_position_indices].cpu().numpy())
-            example_i += len(batch)
+
+            if task.TASK_TYPE == tasks.TaskTypes.MULTIPLE_CHOICE:
+                """
+                batch_example_indices = torch.LongTensor(np.repeat(
+                    np.repeat(range(len(batch)), num_inputs_per_example),
+                    [
+                        len(data_obj.grouped_position_indices[
+                            (example_i + i) * num_inputs_per_example + input_i
+                        ])
+                        for i in range(len(batch))
+                        for input_i in range(num_inputs_per_example)
+                    ],
+                )).to(device)
+                batch_choice_indices = torch.LongTensor(np.repeat(
+                    list(range(num_inputs_per_example)) * len(batch),
+                    [
+                        len(data_obj.grouped_position_indices[
+                            (example_i + i) * num_inputs_per_example + input_i
+                        ])
+                        for i in range(len(batch))
+                        for input_i in range(num_inputs_per_example)
+                    ],
+                )).to(device)
+                batch_position_indices = torch.LongTensor(np.concatenate([
+                    data_obj.grouped_position_indices[(example_i + i) * num_inputs_per_example + input_i]
+                    for i in range(len(batch))
+                    for input_i in range(num_inputs_per_example)
+                ])).to(device)
+                """
+                input_indices = np.repeat(
+                    np.arange(len(batch)),
+                    [len(data_obj.grouped_position_indices[example_i + i])
+                     for i in range(len(batch))],
+                )
+                batch_example_indices = torch.LongTensor(input_indices // num_inputs_per_example).to(device)
+                batch_choice_indices = torch.LongTensor(input_indices % num_inputs_per_example).to(device)
+                batch_position_indices = torch.LongTensor(np.concatenate([
+                    data_obj.grouped_position_indices[example_i + i] for i in range(len(batch))]
+                )).to(device)
+                collected_acts.append(hidden_act[
+                    batch_example_indices, batch_choice_indices, :, batch_position_indices
+                ].cpu().numpy())
+                example_i += len(batch)
+            else:
+                batch_example_indices = torch.LongTensor(np.repeat(
+                    np.arange(len(batch)),
+                    [len(data_obj.grouped_position_indices[example_i + i])
+                     for i in range(len(batch))],
+                )).to(device)
+                batch_position_indices = torch.LongTensor(np.concatenate([
+                    data_obj.grouped_position_indices[example_i + i] for i in range(len(batch))]
+                )).to(device)
+                collected_acts.append(hidden_act[batch_example_indices, batch_position_indices].cpu().numpy())
+                example_i += len(batch)
     return np.concatenate(collected_acts)
 
 

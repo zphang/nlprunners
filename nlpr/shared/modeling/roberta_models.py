@@ -67,7 +67,7 @@ class RobertaForMultipleChoice(ptt.BertPreTrainedModel):
         num_choices = input_ids.shape[1]
 
         logits_list = []
-        outputs_list = []
+        misc_list = []
         for i in range(num_choices):
             outputs = self.roberta(
                 input_ids[:, i],
@@ -80,14 +80,20 @@ class RobertaForMultipleChoice(ptt.BertPreTrainedModel):
             pooled_output = self.dropout(pooled_output)
             logits = self.classifier(pooled_output)
             logits_list.append(logits)
+            misc_list.append(outputs[2:])
+
         reshaped_logits = torch.cat([
             logits.unsqueeze(1).squeeze(-1)
             for logits in logits_list
         ], dim=1)
-        reshaped_outputs = tuple([
-            outputs[2:]
-            for outputs in outputs_list
-        ])
+
+        reshaped_outputs = []
+        for j in range(len(misc_list[0])):
+            reshaped_outputs.append([
+                torch.stack([misc[j][layer_i] for misc in misc_list], dim=1)
+                for layer_i in range(len(misc_list[0][0]))
+            ])
+        reshaped_outputs = tuple(reshaped_outputs)
 
         outputs = (reshaped_logits,) + reshaped_outputs  # add hidden states and attention if they are here
 

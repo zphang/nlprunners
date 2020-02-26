@@ -228,7 +228,7 @@ class ChunkedFilesIterableDataset(torch.utils.data.dataset.IterableDataset):
             seen += len(buffer_chunked_index)
 
     def get_buffer_chunked_indices(self):
-        if self.explicit_subset:
+        if self.explicit_subset is not None:
             indices = np.array(self.explicit_subset).astype(int)
         else:
             indices = np.arange(self.length).astype(int)
