@@ -16,6 +16,7 @@ import nlpr.tasks as tasks
 import nlpr.shared.runner as shared_runner
 import nlpr.shared.caching as caching
 import nlpr.proj.weight_study.cka as cka
+import nlpr.proj.weight_study.split_dict as split_dict
 from torch.utils.data.dataloader import DataLoader
 
 
@@ -159,11 +160,10 @@ def compute_cka(act_a, act_b, device):
     num_layers = act_a.shape[1]
     collated = np.empty([num_layers, num_layers])
     for i in tqdm.tqdm(range(num_layers), desc="CKA row"):
+        act_a_tensor = torch.Tensor(act_a[:, i].copy()).float().to(device)
         for j in tqdm.tqdm(range(num_layers)):
-            collated[i, j] = cka.linear_CKA(
-                torch.Tensor(act_a[:, i].copy()).float().to(device),
-                torch.Tensor(act_b[:, j].copy()).float().to(device),
-            ).item()
+            act_b_tensor = torch.Tensor(act_b[:, j].copy()).float().to(device)
+            collated[i, j] = cka.linear_CKA(act_a_tensor, act_b_tensor).item()
     return collated
 
 
@@ -215,37 +215,10 @@ def compute_activations_from_model(data_obj: DataObj,
             hidden_act = get_hidden_act(
                 task=task,
                 model_wrapper=model_wrapper,
-                batch=batch
+                batch=batch,
             )
 
             if task.TASK_TYPE == tasks.TaskTypes.MULTIPLE_CHOICE:
-                """
-                batch_example_indices = torch.LongTensor(np.repeat(
-                    np.repeat(range(len(batch)), num_inputs_per_example),
-                    [
-                        len(data_obj.grouped_position_indices[
-                            (example_i + i) * num_inputs_per_example + input_i
-                        ])
-                        for i in range(len(batch))
-                        for input_i in range(num_inputs_per_example)
-                    ],
-                )).to(device)
-                batch_choice_indices = torch.LongTensor(np.repeat(
-                    list(range(num_inputs_per_example)) * len(batch),
-                    [
-                        len(data_obj.grouped_position_indices[
-                            (example_i + i) * num_inputs_per_example + input_i
-                        ])
-                        for i in range(len(batch))
-                        for input_i in range(num_inputs_per_example)
-                    ],
-                )).to(device)
-                batch_position_indices = torch.LongTensor(np.concatenate([
-                    data_obj.grouped_position_indices[(example_i + i) * num_inputs_per_example + input_i]
-                    for i in range(len(batch))
-                    for input_i in range(num_inputs_per_example)
-                ])).to(device)
-                """
                 input_indices = np.repeat(
                     np.arange(len(batch)),
                     [len(data_obj.grouped_position_indices[example_i + i])
@@ -275,10 +248,14 @@ def compute_activations_from_model(data_obj: DataObj,
 
 
 def load_model(model_wrapper, model_path, device):
-    model_setup.simple_load_model_path(
+    if model_path.endswith("split_dict"):
+        state_dict = split_dict.load_split_dict(model_path)
+    else:
+        state_dict = torch.load(model_path, map_location="cpu")
+    model_setup.simple_load_model(
         model=model_wrapper.model,
         model_load_mode="safe",
-        model_path=model_path,
+        state_dict=state_dict,
         verbose=False,
     )
     model_wrapper.model.to(device)
