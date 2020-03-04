@@ -1,13 +1,16 @@
 import numpy as np
 import torch
 from dataclasses import dataclass
-from typing import List
+from typing import List, Union
 
 import pyutils.io as io
 
 import transformers as ptt
 from nlpr.tasks.lib.templates.shared import (
-    Task, TaskTypes, construct_single_input_tokens_and_segment_ids,
+    Task, TaskTypes,
+    pad_single_with_feat_spec,
+    construct_single_input_tokens_and_segment_ids,
+    create_input_set_from_tokens_and_segments,
 )
 from ..core import BaseExample, BaseTokenizedExample, BaseDataRow, BatchMixin, labels_to_bimap
 
@@ -33,7 +36,7 @@ class Example(BaseExample):
             indices=indices,
             split_text=split_text,
         )
-        labels, mask = convert_mapped_tags(
+        labels, label_mask = convert_mapped_tags(
             positions=positions,
             tag_ids=self.tag_ids,
             length=len(tokenized),
@@ -43,7 +46,7 @@ class Example(BaseExample):
             guid=self.guid,
             text=tokenizer.tokenize(self.text),
             labels=labels,
-            mask=mask,
+            label_mask=label_mask,
         )
 
 
@@ -51,8 +54,8 @@ class Example(BaseExample):
 class TokenizedExample(BaseTokenizedExample):
     guid: str
     text: List
-    labels: List[int, None]
-    mask: List[int]
+    labels: List[Union[int, None]]
+    label_mask: List[int]
 
     def featurize(self, tokenizer, feat_spec):
         unpadded_inputs = construct_single_input_tokens_and_segment_ids(
@@ -60,7 +63,44 @@ class TokenizedExample(BaseTokenizedExample):
             tokenizer=tokenizer,
             feat_spec=feat_spec,
         )
+        input_set = create_input_set_from_tokens_and_segments(
+            unpadded_tokens=unpadded_inputs.unpadded_tokens,
+            unpadded_segment_ids=unpadded_inputs.unpadded_segment_ids,
+            tokenizer=tokenizer,
+            feat_spec=feat_spec,
+        )
+        if feat_spec.sep_token_extra:
+            label_suffix = [None, None]
+            mask_suffix = [0, 0]
+            special_tokens_count = 3  # CLS, SEP-SEP
+        else:
+            label_suffix = [None]
+            mask_suffix = [0]
+            special_tokens_count = 2  # CLS, SEP
+        unpadded_labels = [None] + self.labels[:feat_spec.max_seq_length - special_tokens_count] + label_suffix
+        unpadded_labels = [i if i is not None else -1 for i in unpadded_labels]
+        unpadded_label_mask = [0] + self.label_mask[:feat_spec.max_seq_length - special_tokens_count] + mask_suffix
 
+        padded_labels = pad_single_with_feat_spec(
+            ls=unpadded_labels,
+            feat_spec=feat_spec,
+            pad_idx=-1,
+        )
+        padded_label_mask = pad_single_with_feat_spec(
+            ls=unpadded_label_mask,
+            feat_spec=feat_spec,
+            pad_idx=0,
+        )
+
+        return DataRow(
+            guid=self.guid,
+            input_ids=np.array(input_set.input_ids),
+            input_mask=np.array(input_set.input_mask),
+            segment_ids=np.array(input_set.segment_ids),
+            label_ids=padded_labels,
+            label_mask=padded_label_mask,
+            tokens=unpadded_inputs.unpadded_tokens,
+        )
 
 
 @dataclass
@@ -69,7 +109,8 @@ class DataRow(BaseDataRow):
     input_ids: np.ndarray
     input_mask: np.ndarray
     segment_ids: np.ndarray
-    label_id: int
+    label_ids: np.ndarray
+    label_mask: np.ndarray
     tokens: list
 
 
@@ -78,7 +119,8 @@ class Batch(BatchMixin):
     input_ids: torch.LongTensor
     input_mask: torch.LongTensor
     segment_ids: torch.LongTensor
-    label_id: torch.LongTensor
+    label_ids: torch.LongTensor
+    label_mask: torch.LongTensor
     tokens: list
 
 
@@ -166,7 +208,7 @@ def bert_flat_strip(tokens, return_indices=False):
             pass
         ls.append(token)
         indices += [len(indices)] * len(token)
-    string =  "".join(ls).lower()
+    string = "".join(ls).lower()
     if return_indices:
         return string, indices
     else:
