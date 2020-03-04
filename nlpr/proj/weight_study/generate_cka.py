@@ -38,6 +38,7 @@ class RunConfiguration(zconf.RunConfig):
 
     # === Running Setup === #
     batch_size = zconf.attr(default=8, type=int)
+    skip_b = zconf.attr(action="store_true")
     skip_cka = zconf.attr(action="store_true")
     save_acts = zconf.attr(action="store_true")
 
@@ -85,15 +86,16 @@ def main(args):
             model_path=args.model_a_path,
             device=quick_init_out.device,
         )
-        act_b = compute_activations_from_path(
-            data_obj=data_obj,
-            task=task,
-            model_wrapper=model_wrapper,
-            model_path=args.model_b_path,
-            device=quick_init_out.device,
-        )
-        print(act_a.shape)
+        if args.skip_b:
+            act_b = compute_activations_from_path(
+                data_obj=data_obj,
+                task=task,
+                model_wrapper=model_wrapper,
+                model_path=args.model_b_path,
+                device=quick_init_out.device,
+            )
         if not args.skip_cka:
+            assert not args.skip_b
             cka_outputs = compute_cka(
                 act_a=act_a,
                 act_b=act_b,
@@ -102,7 +104,8 @@ def main(args):
             torch.save(cka_outputs, os.path.join(args.output_dir, "cka.p"))
         if args.save_acts:
             torch.save(act_a, os.path.join(args.output_dir, "act_a.p"))
-            torch.save(act_b, os.path.join(args.output_dir, "act_b.p"))
+            if not args.skip_b:
+                torch.save(act_b, os.path.join(args.output_dir, "act_b.p"))
 
 
 @dataclass
