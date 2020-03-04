@@ -24,6 +24,7 @@ class TaskTypes(Enum):
     MULTIPLE_CHOICE = 4
     SPAN_CHOICE_PROB_TASK = 5
     SQUAD_STYLE_QA = 6
+    TAGGING = 7
     UNDEFINED = -1
 
 
@@ -136,8 +137,12 @@ class InputSet:
     segment_ids: List
 
 
-def single_sentence_featurize(guid, input_tokens, label_id,
-                              tokenizer, feat_spec: FeaturizationSpec, data_row_class):
+def single_sentence_featurize(guid: str,
+                              input_tokens: List[str],
+                              label_id: int,
+                              tokenizer,
+                              feat_spec: FeaturizationSpec,
+                              data_row_class):
     unpadded_inputs = construct_single_input_tokens_and_segment_ids(
         input_tokens=input_tokens,
         tokenizer=tokenizer,
@@ -154,8 +159,13 @@ def single_sentence_featurize(guid, input_tokens, label_id,
     )
 
 
-def double_sentence_featurize(guid, input_tokens_a, input_tokens_b, label_id,
-                              tokenizer, feat_spec: FeaturizationSpec, data_row_class):
+def double_sentence_featurize(guid: str,
+                              input_tokens_a: List[str],
+                              input_tokens_b: List[str],
+                              label_id: int,
+                              tokenizer,
+                              feat_spec: FeaturizationSpec,
+                              data_row_class):
     unpadded_inputs = construct_double_input_tokens_and_segment_ids(
         input_tokens_a=input_tokens_a,
         input_tokens_b=input_tokens_b,
@@ -174,7 +184,8 @@ def double_sentence_featurize(guid, input_tokens_a, input_tokens_b, label_id,
     )
 
 
-def construct_single_input_tokens_and_segment_ids(input_tokens, tokenizer,
+def construct_single_input_tokens_and_segment_ids(input_tokens: List[str],
+                                                  tokenizer,
                                                   feat_spec: FeaturizationSpec):
     if feat_spec.sep_token_extra:
         maybe_extra_sep = [tokenizer.sep_token]
@@ -202,7 +213,9 @@ def construct_single_input_tokens_and_segment_ids(input_tokens, tokenizer,
     )
 
 
-def construct_double_input_tokens_and_segment_ids(input_tokens_a, input_tokens_b, tokenizer,
+def construct_double_input_tokens_and_segment_ids(input_tokens_a: List[str],
+                                                  input_tokens_b: List[str],
+                                                  tokenizer,
                                                   feat_spec: FeaturizationSpec):
 
     if feat_spec.sep_token_extra:
@@ -239,7 +252,9 @@ def construct_double_input_tokens_and_segment_ids(input_tokens_a, input_tokens_b
     )
 
 
-def add_cls_token(unpadded_tokens, unpadded_segment_ids, tokenizer,
+def add_cls_token(unpadded_tokens: List[str],
+                  unpadded_segment_ids: List[int],
+                  tokenizer,
                   feat_spec: FeaturizationSpec):
     if feat_spec.cls_token_at_end:
         return UnpaddedInputs(
@@ -256,8 +271,13 @@ def add_cls_token(unpadded_tokens, unpadded_segment_ids, tokenizer,
 
 
 def create_generic_data_row_from_tokens_and_segments(
-        guid, unpadded_tokens, unpadded_segment_ids, label_id,
-        tokenizer, feat_spec: FeaturizationSpec, data_row_class):
+        guid: str,
+        unpadded_tokens: List[str],
+        unpadded_segment_ids: List[int],
+        label_id: int,
+        tokenizer,
+        feat_spec: FeaturizationSpec,
+        data_row_class):
     input_set = create_input_set_from_tokens_and_segments(
         unpadded_tokens=unpadded_tokens,
         unpadded_segment_ids=unpadded_segment_ids,
@@ -274,8 +294,10 @@ def create_generic_data_row_from_tokens_and_segments(
     )
 
 
-def create_input_set_from_tokens_and_segments(unpadded_tokens, unpadded_segment_ids,
-                                              tokenizer, feat_spec: FeaturizationSpec):
+def create_input_set_from_tokens_and_segments(unpadded_tokens: List[str],
+                                              unpadded_segment_ids: List[int],
+                                              tokenizer,
+                                              feat_spec: FeaturizationSpec):
     assert len(unpadded_tokens) == len(unpadded_segment_ids)
     input_ids = tokenizer.convert_tokens_to_ids(unpadded_tokens)
     input_mask = [1] * len(input_ids)
@@ -288,7 +310,9 @@ def create_input_set_from_tokens_and_segments(unpadded_tokens, unpadded_segment_
     return input_set
 
 
-def pad_features_with_feat_spec(input_ids, input_mask, unpadded_segment_ids,
+def pad_features_with_feat_spec(input_ids: List[int],
+                                input_mask: List[int],
+                                unpadded_segment_ids: List[int],
                                 feat_spec: FeaturizationSpec):
     return InputSet(
         input_ids=pad_single_with_feat_spec(
@@ -303,7 +327,10 @@ def pad_features_with_feat_spec(input_ids, input_mask, unpadded_segment_ids,
     )
 
 
-def pad_single_with_feat_spec(ls, feat_spec: FeaturizationSpec, pad_idx: int, check=True):
+def pad_single_with_feat_spec(ls: List[int],
+                              feat_spec: FeaturizationSpec,
+                              pad_idx: int,
+                              check=True):
     return pad_to_max_seq_length(
         ls=ls,
         max_seq_length=feat_spec.max_seq_length,
@@ -313,7 +340,7 @@ def pad_single_with_feat_spec(ls, feat_spec: FeaturizationSpec, pad_idx: int, ch
     )
 
 
-def read_tsv(input_file, quotechar=None):
+def read_tsv(input_file: str, quotechar=None):
     with open(input_file, "r", encoding='utf-8') as f:
         reader = csv.reader(f, delimiter="\t", quotechar=quotechar)
         lines = []
@@ -322,7 +349,7 @@ def read_tsv(input_file, quotechar=None):
         return lines
 
 
-def read_json_lines(input_file):
+def read_json_lines(input_file: str):
     with open(input_file, "r", encoding='utf-8') as f:
         lines = []
         for line in f:
