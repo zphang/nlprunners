@@ -4,6 +4,8 @@ import torch.nn as nn
 import transformers as ptt
 import transformers.modeling_roberta as modeling_roberta
 
+from nlpr.ext.allennlp import SelfAttentiveSpanExtractor
+
 
 class RobertaForSpanChoiceProb(ptt.BertPreTrainedModel):
     def __init__(self, config):
@@ -38,6 +40,56 @@ class RobertaForSpanChoiceProb(ptt.BertPreTrainedModel):
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
         return prediction_scores
+
+
+class RobertaForSpanComparisonClassification(ptt.BertPreTrainedModel):
+    config_class = ptt.RobertaConfig
+    pretrained_model_archive_map = ptt.ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
+    base_model_prefix = "roberta"
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.num_spans = config.num_spans
+
+        self.roberta = ptt.RobertaModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+        self.span_attention_extractor = SelfAttentiveSpanExtractor(config.hidden_size)
+        self.classifier = nn.Linear(config.hidden_size * self.num_spans, self.num_labels)
+
+    def forward(
+        self,
+        input_ids, spans,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+    ):
+        outputs = self.roberta(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
+        sequence_output = outputs[0]
+        span_embeddings = self.span_attention_extractor(sequence_output, spans)
+        span_embeddings = span_embeddings.view(-1, self.num_spans * self.config.hidden_size)
+        span_embeddings = self.dropout(span_embeddings)
+
+        logits = self.classifier(span_embeddings)
+
+        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+
+        if labels is not None:
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            outputs = (loss,) + outputs
+        return outputs  # (loss), logits, (hidden_states), (attentions)
 
 
 class RobertaForMultipleChoice(ptt.BertPreTrainedModel):

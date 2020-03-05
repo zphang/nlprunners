@@ -7,7 +7,8 @@ from nlpr.tasks.lib.templates.shared import (
     read_json_lines, Task, create_input_set_from_tokens_and_segments, add_cls_token, TaskTypes,
 )
 from ..core import BaseExample, BaseTokenizedExample, BaseDataRow, BatchMixin, labels_to_bimap
-from ..utils import truncate_sequences, get_tokens_start_end
+from ..utils import truncate_sequences, get_tokens_start_end, ExclusiveSpan
+import nlpr.tasks.hacky_tokenization_matching as tokenization_utils
 
 
 @dataclass
@@ -16,44 +17,56 @@ class Example(BaseExample):
     sentence1: str
     sentence2: str
     word: str
-    start1: int
-    end1: int
-    start2: int
-    end2: int
+    span1: ExclusiveSpan
+    span2: ExclusiveSpan
     label: str
 
     def tokenize(self, tokenizer):
-        sentence1_span = get_tokens_start_end(
-            sent=self.sentence1,
-            char_span_start=self.start1,
-            char_span_end=self.end1,
+        sentence1_tokens, sentence1_span = self.get_token_span(
+            sentence=self.sentence1,
+            span=self.span1,
             tokenizer=tokenizer,
         )
-        sentence2_span = get_tokens_start_end(
-            sent=self.sentence2,
-            char_span_start=self.start2,
-            char_span_end=self.end2,
+        sentence2_tokens, sentence2_span = self.get_token_span(
+            sentence=self.sentence2,
+            span=self.span2,
             tokenizer=tokenizer,
         )
+
         return TokenizedExample(
             guid=self.guid,
-            sentence1_tokens=tokenizer.tokenize(self.sentence1),
-            sentence2_tokens=tokenizer.tokenize(self.sentence2),
+            sentence1_tokens=sentence1_tokens,
+            sentence2_tokens=sentence2_tokens,
             word=tokenizer.tokenize(self.word),  # might be more than one token
             sentence1_span=sentence1_span,
             sentence2_span=sentence2_span,
             label_id=WiCTask.LABEL_BIMAP.a[self.label],
         )
 
+    @classmethod
+    def get_token_span(cls, sentence, span, tokenizer):
+        tokenized = tokenizer.tokenize(sentence)
+        tokenized_start1 = tokenizer.tokenize(sentence[:span.start])
+        tokenized_start2 = tokenizer.tokenize(sentence[:span.end])
+        assert tokenization_utils.starts_with(tokenized, tokenized_start1)
+        # assert starts_with(tokenized, tokenized_start2)  # <- fails because of "does" in "doesn't"
+        word = sentence[span.to_slice()]
+        assert word.lower() in tokenization_utils.delegate_flat_strip(
+            tokenized_start2[len(tokenized_start1):],
+            tokenizer=tokenizer,
+        )
+        token_span = ExclusiveSpan(start=len(tokenized_start1), end=len(tokenized_start2))
+        return tokenized, token_span
+
 
 @dataclass
 class TokenizedExample(BaseTokenizedExample):
     guid: str
-    sentence1_tokens: List
-    sentence2_tokens: List
-    word: List
-    sentence1_span: List
-    sentence2_span: List
+    sentence1_tokens: List[str]
+    sentence2_tokens: List[str]
+    word: List[str]
+    sentence1_span: ExclusiveSpan
+    sentence2_span: ExclusiveSpan
     label_id: int
 
     def featurize(self, tokenizer, feat_spec):
@@ -99,22 +112,22 @@ class TokenizedExample(BaseTokenizedExample):
             feat_spec=feat_spec,
         )
 
-        end_span_offset = -1  # Inclusive span
-        word_sep_offset = 1
-        sent1_sep_offset = 1
+        word_sep_offset = 2 if feat_spec.sep_token_extra else 1
+        sent1_sep_offset = 2 if feat_spec.sep_token_extra else 1
 
-        sentence1_span = [
-            self.sentence1_span[0] + unpadded_inputs.cls_offset + word_sep_offset
+        # Both should be inclusive spans at the end
+        sentence1_span = ExclusiveSpan(
+            start=self.sentence1_span[0] + unpadded_inputs.cls_offset + word_sep_offset
             + len(self.word),
-            self.sentence1_span[1] + unpadded_inputs.cls_offset + word_sep_offset
-            + len(self.word) + end_span_offset,
-        ]
-        sentence2_span = [
-            self.sentence2_span[0] + unpadded_inputs.cls_offset + word_sep_offset + sent1_sep_offset
+            end=self.sentence1_span[1] + unpadded_inputs.cls_offset + word_sep_offset
+            + len(self.word),
+        ).to_inclusive()
+        sentence2_span = ExclusiveSpan(
+            start=self.sentence2_span[0] + unpadded_inputs.cls_offset + word_sep_offset + sent1_sep_offset
             + len(self.word) + len(sentence1_tokens),
-            self.sentence2_span[1] + unpadded_inputs.cls_offset + word_sep_offset + sent1_sep_offset
-            + len(self.word) + len(sentence1_tokens) + end_span_offset,
-        ]
+            end=self.sentence2_span[1] + unpadded_inputs.cls_offset + word_sep_offset + sent1_sep_offset
+            + len(self.word) + len(sentence1_tokens),
+        ).to_inclusive()
 
         return DataRow(
             guid=self.guid,
@@ -164,6 +177,10 @@ class WiCTask(Task):
     LABELS = [False, True]
     LABEL_BIMAP = labels_to_bimap(LABELS)
 
+    @property
+    def num_spans(self):
+        return 2
+
     def get_train_examples(self):
         return self._create_examples(lines=read_json_lines(self.train_path), set_type="train")
 
@@ -177,15 +194,17 @@ class WiCTask(Task):
     def _create_examples(cls, lines, set_type):
         examples = []
         for line in lines:
+            span1 = ExclusiveSpan(int(line["start1"]), int(line["end1"]))
+            span2 = ExclusiveSpan(int(line["start2"]), int(line["end2"]))
+            # Note, the chosen word may be different (e.g. different tenses) in sent1 and sent2,
+            #   hence we don't do an assert here.
             examples.append(Example(
                 guid="%s-%s" % (set_type, line["idx"]),
                 sentence1=line["sentence1"],
                 sentence2=line["sentence2"],
                 word=line["word"],
-                start1=int(line["start1"]),
-                end1=int(line["end1"]),
-                start2=int(line["start2"]),
-                end2=int(line["end2"]),
+                span1=span1,
+                span2=span2,
                 label=line["label"] if set_type != "test" else cls.LABELS[-1],
             ))
         return examples

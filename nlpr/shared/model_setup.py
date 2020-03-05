@@ -61,7 +61,7 @@ def get_model(model_class_spec, config_path, task):
         config.num_labels = 1
     elif task.TASK_TYPE == TaskTypes.SPAN_COMPARISON_CLASSIFICATION:
         config.num_labels = len(task.LABELS)
-        config.num_spans = 2  # todo: this is hardcoded
+        config.num_spans = task.num_spans  # todo: this is hardcoded
     elif task.TASK_TYPE == TaskTypes.MULTIPLE_CHOICE:
         config.num_choices = task.NUM_CHOICES
     elif task.TASK_TYPE == TaskTypes.SPAN_CHOICE_PROB_TASK:

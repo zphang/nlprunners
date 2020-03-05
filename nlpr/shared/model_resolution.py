@@ -173,6 +173,7 @@ MODEL_CLASS_DICT = {
     ModelArchitectures.ROBERTA: {
         TaskTypes.CLASSIFICATION: ptt.RobertaForSequenceClassification,
         TaskTypes.REGRESSION: ptt.RobertaForSequenceClassification,  # ptt is weird
+        TaskTypes.SPAN_COMPARISON_CLASSIFICATION: roberta_models.RobertaForSpanComparisonClassification,
         TaskTypes.MULTIPLE_CHOICE: roberta_models.RobertaForMultipleChoice,
         TaskTypes.SQUAD_STYLE_QA: ptt.RobertaForQuestionAnswering,
         TaskTypes.TAGGING: ptt.RobertaForTokenClassification,

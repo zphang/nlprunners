@@ -266,7 +266,7 @@ def add_cls_token(unpadded_tokens: List[str],
         return UnpaddedInputs(
             unpadded_tokens=[tokenizer.cls_token] + unpadded_tokens,
             unpadded_segment_ids=[feat_spec.cls_token_segment_id] + unpadded_segment_ids,
-            cls_offset=0,
+            cls_offset=1,
         )
 
 
