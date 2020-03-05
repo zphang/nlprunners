@@ -38,6 +38,7 @@ class RunConfiguration(zconf.RunConfig):
     do_val = zconf.attr(action='store_true')
     do_test = zconf.attr(action='store_true')
     do_save = zconf.attr(action="store_true")
+    no_write_preds = zconf.attr(action="store_true")
     eval_every_steps = zconf.attr(type=int, default=0)
     save_every_steps = zconf.attr(type=int, default=0)
     partial_eval_number = zconf.attr(type=int, default=1000)
@@ -185,6 +186,7 @@ def main(args):
                 results=results,
                 output_dir=args.output_dir,
                 verbose=True,
+                do_write_preds=not args.no_write_preds,
             )
 
         if args.do_test:

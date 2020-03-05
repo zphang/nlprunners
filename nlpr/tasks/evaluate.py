@@ -147,6 +147,8 @@ def compute_task_metrics_from_classification_preds_and_labels(task, preds, label
         return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
     elif isinstance(task, tasks.BoolQTask):
         return SimpleAccuracyEval.from_preds_and_labels(preds, labels)
+    elif isinstance(task, tasks.CCGTask):
+        return CCGEval.from_logits_and_labels(preds, labels)
     elif isinstance(task, tasks.CommitmentBankTask):
         return CommitmentBankEval.from_preds_and_labels(preds, labels)
     elif isinstance(task, tasks.ColaTask):
@@ -203,6 +205,8 @@ def compute_task_metrics_from_classification_logits_and_labels(
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.BoolQTask):
         return SimpleAccuracyEval.from_preds_and_labels(get_preds(logits), labels)
+    elif isinstance(task, tasks.CCGTask):
+        return CCGEval.from_logits_and_labels(CCGEval.get_preds(logits), labels)
     elif isinstance(task, tasks.CommitmentBankTask):
         return CommitmentBankEval.from_preds_and_labels(get_preds(logits), labels)
     elif isinstance(task, tasks.ColaTask):
@@ -269,6 +273,13 @@ def get_labels_from_examples(task, examples, tokenizer, feat_spec, phase):
         return get_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.BoolQTask):
         return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.CCGTask):
+        return CCGEval.get_labels_from_examples(
+            examples=examples,
+            tokenizer=tokenizer,
+            feat_spec=feat_spec,
+            phase=phase,
+        )
     elif isinstance(task, tasks.CommitmentBankTask):
         return get_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.ColaTask):
@@ -622,6 +633,46 @@ class SQuADEval(BaseEvaluation):
         return [squad_lib.PartialDataRow.from_data_row(datum["data_row"]) for datum in dataset.data]
 
 
+class CCGEval(BaseEvaluation):
+    # Todo: Generalize to tagging accuracy eval
+
+    @classmethod
+    def get_preds(cls, logits):
+        return np.argmax(logits, axis=-1)
+
+    @classmethod
+    def from_logits_and_labels(cls, preds, labels):
+        label_ids = np.stack([row["label_ids"] for row in labels])
+        label_mask = np.stack([row["label_mask"] for row in labels])
+
+        # Account for smart-truncate
+        assert (label_mask[:, preds.shape[-1]:] == 0).all()
+        label_ids = label_ids[:, :preds.shape[-1]]
+        label_mask = label_mask[:, :preds.shape[-1]]
+
+        bool_mask = label_mask.reshape(-1).astype(bool)
+        flat_preds = preds.reshape(-1)[bool_mask]
+        flat_labels = label_ids.reshape(-1)[bool_mask]
+        return SimpleAccuracyEval.from_preds_and_labels(preds=flat_preds, labels=flat_labels)
+
+    @classmethod
+    def get_labels_from_examples(cls, examples, feat_spec, tokenizer, phase):
+        dataset = nlpr.shared.preprocessing.convert_examples_to_dataset(
+            examples=examples,
+            feat_spec=feat_spec,
+            tokenizer=tokenizer,
+            phase=phase,
+            verbose=True,
+        )
+        return [
+            {
+                "label_ids": datum["data_row"].label_ids,
+                "label_mask": datum["data_row"].label_mask,
+            }
+            for datum in dataset.data
+        ]
+
+
 def get_preds(logits):
     return np.argmax(logits, axis=1)
 
@@ -661,15 +712,16 @@ def write_preds(logits, output_path):
     df.to_csv(output_path, header=False, index=False)
 
 
-def write_val_results(results, output_dir, verbose=True):
+def write_val_results(results, output_dir, verbose=True, do_write_preds=True):
     os.makedirs(output_dir, exist_ok=True)
-    if len(results["logits"].shape) == 2:
-        write_preds(
-            logits=results["logits"],
-            output_path=os.path.join(output_dir, "val_preds.csv"),
-        )
-    else:
-        torch.save(results["logits"], os.path.join(output_dir, "val_preds.p"))
+    if do_write_preds:
+        if len(results["logits"].shape) == 2:
+            write_preds(
+                logits=results["logits"],
+                output_path=os.path.join(output_dir, "val_preds.csv"),
+            )
+        else:
+            torch.save(results["logits"], os.path.join(output_dir, "val_preds.p"))
     write_metrics(
         results=results,
         output_path=os.path.join(output_dir, "val_metrics.json"),

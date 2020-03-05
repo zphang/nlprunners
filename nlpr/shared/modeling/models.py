@@ -56,6 +56,12 @@ def forward_batch_delegate(model: nn.Module, batch, task_type: TaskTypes, omit_l
             end_positions=end_positions,
         )
         return torch.stack(logits, dim=1)
+    elif task_type == TaskTypes.TAGGING:
+        return model(
+            input_ids=batch.input_ids,
+            token_type_ids=batch.segment_ids,
+            attention_mask=batch.input_mask,
+        )[0]
     else:
         raise KeyError(task_type)
 
@@ -77,6 +83,16 @@ def compute_loss_from_model_output(logits, loss_criterion, batch, task_type: Tas
             start_positions=batch.start_position,
             end_positions=batch.end_position,
         )
+    elif task_type == TaskTypes.TAGGING:
+        num_classes = logits.shape[-1]
+        if batch.label_mask is not None:
+            bool_mask = batch.label_mask.view(-1).bool()
+            flat_logits = logits.view(-1, num_classes)[bool_mask]
+            flat_labels = batch.label_ids.reshape(-1)[bool_mask]
+        else:
+            flat_logits = logits.view(-1, num_classes)
+            flat_labels = batch.label_ids.view(-1)
+        loss = loss_criterion(flat_logits, flat_labels)
     else:
         raise KeyError(task_type)
     return loss

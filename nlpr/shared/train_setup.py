@@ -51,6 +51,8 @@ def resolve_loss_function(task_type: TaskTypes):
         return nn.CrossEntropyLoss()
     elif task_type == TaskTypes.SQUAD_STYLE_QA:
         return nn.CrossEntropyLoss()
+    elif task_type == TaskTypes.TAGGING:
+        return nn.CrossEntropyLoss()
     else:
         raise KeyError(task_type)
 

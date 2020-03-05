@@ -23,7 +23,7 @@ class Example(BaseExample):
 
     def tokenize(self, tokenizer):
         tokenized = tokenizer.tokenize(self.text)
-        split_text = self.text.split(" ")
+        split_text = self.text.split(" ")  # CCG data is space-tokenized
         input_flat_stripped = input_flat_strip(split_text)
         flat_stripped, indices = delegate_flat_strip(
             tokens=tokenized,
@@ -69,6 +69,8 @@ class TokenizedExample(BaseTokenizedExample):
             tokenizer=tokenizer,
             feat_spec=feat_spec,
         )
+
+        # Replicate padding / additional tokens for the label ids and mask
         if feat_spec.sep_token_extra:
             label_suffix = [None, None]
             mask_suffix = [0, 0]
@@ -97,8 +99,8 @@ class TokenizedExample(BaseTokenizedExample):
             input_ids=np.array(input_set.input_ids),
             input_mask=np.array(input_set.input_mask),
             segment_ids=np.array(input_set.segment_ids),
-            label_ids=padded_labels,
-            label_mask=padded_label_mask,
+            label_ids=np.array(padded_labels),
+            label_mask=np.array(padded_label_mask),
             tokens=unpadded_inputs.unpadded_tokens,
         )
 
@@ -134,6 +136,10 @@ class CCGTask(Task):
     LABELS = range(1363)
     LABEL_BIMAP = labels_to_bimap(LABELS)
 
+    @property
+    def num_labels(self):
+        return 1363
+
     def get_train_examples(self):
         return self._create_examples(path=self.train_path, set_type="train")
 
@@ -143,8 +149,13 @@ class CCGTask(Task):
     def get_test_examples(self):
         raise NotImplementedError()
 
-    def _create_examples(self, path, set_type):
+    def get_tags_to_id(self):
         tags_to_id = io.read_json(self.path_dict["tags_to_id"])
+        tags_to_id = {k: int(v) for k, v in tags_to_id.items()}
+        return tags_to_id
+
+    def _create_examples(self, path, set_type):
+        tags_to_id = self.get_tags_to_id()
         examples = []
         with open(path, "r") as f:
             for i, line in enumerate(f):
@@ -162,23 +173,23 @@ class CCGTask(Task):
 def map_tags_to_token_position(flat_stripped, indices, split_text):
     char_index = 0
     current_string = flat_stripped
-    result = [None] * len(split_text)
+    positions = [None] * len(split_text)
     for i, token in enumerate(split_text):
         found_index = current_string.find(token.lower())
         assert found_index != -1
-        result[i] = indices[char_index + found_index]
+        positions[i] = indices[char_index + found_index]
         char_index += found_index + len(token)
         current_string = flat_stripped[char_index:]
-    for elem in result:
+    for elem in positions:
         assert elem is not None
-    return result
+    return positions
 
 
 def convert_mapped_tags(positions, tag_ids, length):
     labels = [None] * length
     mask = [0] * length
     for pos, tag_id in zip(positions, tag_ids):
-        labels[pos] = tag_ids
+        labels[pos] = tag_id
         mask[pos] = 1
     return labels, mask
 
@@ -200,6 +211,7 @@ def delegate_flat_strip(tokens, tokenizer, return_indices=False):
 
 def bert_flat_strip(tokens, return_indices=False):
     ls = []
+    count = 0
     indices = []
     for token in tokens:
         if token.startswith("##"):
@@ -207,7 +219,8 @@ def bert_flat_strip(tokens, return_indices=False):
         else:
             pass
         ls.append(token)
-        indices += [len(indices)] * len(token)
+        indices += [count] * len(token)
+        count += 1
     string = "".join(ls).lower()
     if return_indices:
         return string, indices
@@ -217,6 +230,7 @@ def bert_flat_strip(tokens, return_indices=False):
 
 def roberta_flat_strip(tokens, return_indices=False):
     ls = []
+    count = 0
     indices = []
     for token in tokens:
         if token.startswith("Ġ"):
@@ -224,7 +238,8 @@ def roberta_flat_strip(tokens, return_indices=False):
         else:
             pass
         ls.append(token)
-        indices += [len(indices)] * len(token)
+        indices += [count] * len(token)
+        count += 1
     string = "".join(ls).lower()
     if return_indices:
         return string, indices
@@ -234,6 +249,7 @@ def roberta_flat_strip(tokens, return_indices=False):
 
 def albert_flat_strip(tokens, return_indices=False):
     ls = []
+    count = 0
     indices = []
     for token in tokens:
         token = token.replace('"', "``")
@@ -242,7 +258,8 @@ def albert_flat_strip(tokens, return_indices=False):
         else:
             pass
         ls.append(token)
-        indices += [len(indices)] * len(token)
+        indices += [count] * len(token)
+        count += 1
     string = "".join(ls).lower()
     if return_indices:
         return string, indices

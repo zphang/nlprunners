@@ -160,6 +160,7 @@ MODEL_CLASS_DICT = {
         TaskTypes.REGRESSION: bert_models.BertForSequenceRegression,  # ptt is weird
         TaskTypes.SPAN_COMPARISON_CLASSIFICATION: bert_models.BertForSpanComparisonClassification,
         TaskTypes.MULTIPLE_CHOICE: ptt.BertForMultipleChoice,
+        TaskTypes.TAGGING: ptt.BertForTokenClassification,
     },
     ModelArchitectures.XLNET: {
         TaskTypes.CLASSIFICATION: ptt.XLNetForSequenceClassification,
@@ -174,6 +175,7 @@ MODEL_CLASS_DICT = {
         TaskTypes.REGRESSION: ptt.RobertaForSequenceClassification,  # ptt is weird
         TaskTypes.MULTIPLE_CHOICE: roberta_models.RobertaForMultipleChoice,
         TaskTypes.SQUAD_STYLE_QA: ptt.RobertaForQuestionAnswering,
+        TaskTypes.TAGGING: ptt.RobertaForTokenClassification,
     },
     ModelArchitectures.GLOVE_LSTM: {
         TaskTypes.CLASSIFICATION: glove_lstm_modeling.GloveLSTMForSequenceClassification,
@@ -184,6 +186,7 @@ MODEL_CLASS_DICT = {
         TaskTypes.REGRESSION: ptt.AlbertForSequenceClassification,  # ptt is weird
         TaskTypes.MULTIPLE_CHOICE: albert_models.AlbertForMultipleChoice,
         TaskTypes.SQUAD_STYLE_QA: ptt.AlbertForQuestionAnswering,
+        TaskTypes.TAGGING: None,
     },
 }
 

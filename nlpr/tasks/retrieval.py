@@ -3,6 +3,7 @@ import os
 from nlpr.tasks.lib.amazon import AmazonPolarityTask
 from nlpr.tasks.lib.anli import AnliTask
 from nlpr.tasks.lib.boolq import BoolQTask
+from nlpr.tasks.lib.ccg import CCGTask
 from nlpr.tasks.lib.cola import ColaTask
 from nlpr.tasks.lib.commitmentbank import CommitmentBankTask
 from nlpr.tasks.lib.commonsenseqa import CommonsenseQATask
@@ -40,6 +41,7 @@ TASK_DICT = {
     "anli": AnliTask,
     "boolq": BoolQTask,
     "cb": CommitmentBankTask,
+    "ccg": CCGTask,
     "cola": ColaTask,
     "commonsenseqa": CommonsenseQATask,
     "copa": CopaTask,
