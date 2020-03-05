@@ -22,13 +22,9 @@ def forward_batch_delegate(model: nn.Module, batch, task_type: TaskTypes, omit_l
             omit_label_id=omit_label_id,
         )[0]
     elif task_type == TaskTypes.SPAN_COMPARISON_CLASSIFICATION:
-        spans = torch.stack([
-            batch.sentence1_span,
-            batch.sentence2_span,
-        ], dim=-2)
         return model(
             input_ids=batch.input_ids,
-            spans=spans,
+            spans=batch.spans,
             token_type_ids=batch.segment_ids,
             attention_mask=batch.input_mask,
             labels=batch.label_id if not omit_label_id else None,

@@ -7,7 +7,8 @@ from nlpr.tasks.lib.templates.shared import (
     read_json_lines, Task, create_input_set_from_tokens_and_segments, add_cls_token, TaskTypes,
 )
 from ..core import BaseExample, BaseTokenizedExample, BaseDataRow, BatchMixin, labels_to_bimap
-from ..utils import truncate_sequences, convert_char_span_for_bert_tokens
+from ..utils import truncate_sequences, ExclusiveSpan
+import nlpr.tasks.hacky_tokenization_matching as tokenization_utils
 
 
 @dataclass
@@ -21,37 +22,44 @@ class Example(BaseExample):
     label: str
 
     def tokenize(self, tokenizer):
-        text_tokens = self.text.split()
-        bert_tokens = tokenizer.tokenize(self.text)
-        if self.span1_idx == 0:
-            span1_start_idx = 0
-        else:
-            span1_start_idx = len(" ".join(text_tokens[:self.span1_idx]) + " ")
-        if self.span2_idx == 0:
-            span2_start_idx = 0
-        else:
-            span2_start_idx = len(" ".join(text_tokens[:self.span2_idx]) + " ")
-        span1_span = convert_char_span_for_bert_tokens(
-            text=self.text,
-            bert_tokens=bert_tokens,
-            span_ls=[[span1_start_idx, self.span1_text]],
-            check=False,
-        )[0]
-        span2_span = convert_char_span_for_bert_tokens(
-            text=self.text,
-            bert_tokens=bert_tokens,
-            span_ls=[[span2_start_idx, self.span2_text]],
-            check=False,
-        )[0]
+        # clean-up
+        text = self.text.replace("\n", " ")
+        span1_text = self.span1_text.replace("\n", " ")
+        span2_text = self.span2_text.replace("\n", " ")
+
+        space_tokens = text.strip().split()
+        word1 = space_tokens[self.span1_idx]
+        word2 = space_tokens[self.span2_idx]
+        assert word1.lower() in text.lower()
+        assert word2.lower() in text.lower()
+        assert text.strip() == " ".join(space_tokens)
+        char_span1 = extract_char_span(text, span1_text, self.span1_idx)
+        char_span2 = extract_char_span(text, span2_text, self.span2_idx)
+        if self.guid != "val-42":  # Yes, there's an error in this example
+            assert text[slice(*char_span1)].lower() == span1_text.lower()
+            assert text[slice(*char_span2)].lower() == span2_text.lower()
+
+        tokens1, span1_span = tokenization_utils.get_token_span(
+            sentence=text,
+            span=char_span1,
+            tokenizer=tokenizer,
+        )
+        tokens2, span2_span = tokenization_utils.get_token_span(
+            sentence=text,
+            span=char_span2,
+            tokenizer=tokenizer,
+        )
+        assert tokens1 == tokens2
         return TokenizedExample(
             guid=self.guid,
-            tokens=bert_tokens,
+            tokens=tokens1,
             span1_span=span1_span,
             span2_span=span2_span,
             span1_text=self.span1_text,
             span2_text=self.span2_text,
             label_id=WSCTask.LABEL_BIMAP.a[self.label],
         )
+
 
 
 @dataclass
@@ -74,10 +82,10 @@ class TokenizedExample(BaseTokenizedExample):
             maybe_extra_sep_segment_id = []
             special_tokens_count = 2  # CLS, SEP
 
-        tokens = truncate_sequences(
+        tokens, = truncate_sequences(
             tokens_ls=[self.tokens],
             max_length=feat_spec.max_seq_length - special_tokens_count,
-        )[0]
+        )
 
         unpadded_tokens = tokens + [tokenizer.sep_token] + maybe_extra_sep
         unpadded_segment_ids = (
@@ -93,30 +101,29 @@ class TokenizedExample(BaseTokenizedExample):
         )
 
         input_set = create_input_set_from_tokens_and_segments(
-            unpadded_tokens=unpadded_inputs.tokens,
+            unpadded_tokens=unpadded_inputs.unpadded_tokens,
             unpadded_segment_ids=unpadded_inputs.unpadded_segment_ids,
             tokenizer=tokenizer,
             feat_spec=feat_spec,
         )
-
-        end_span_offset = -1  # Inclusive span
-
-        span1_span = [
-            self.span1_span[0] + unpadded_inputs.cls_offset,
-            self.span1_span[1] + unpadded_inputs.cls_offset + end_span_offset,
-        ]
-        span2_span = [
-            self.span2_span[0] + unpadded_inputs.cls_offset,
-            self.span2_span[1] + unpadded_inputs.cls_offset + end_span_offset,
-        ]
+        span1_span = ExclusiveSpan(
+            start=self.span1_span[0] + unpadded_inputs.cls_offset,
+            end=self.span1_span[1] + unpadded_inputs.cls_offset,
+        ).to_inclusive()
+        span2_span = ExclusiveSpan(
+            start=self.span2_span[0] + unpadded_inputs.cls_offset,
+            end=self.span2_span[1] + unpadded_inputs.cls_offset,
+        ).to_inclusive()
 
         return DataRow(
             guid=self.guid,
             input_ids=np.array(input_set.input_ids),
             input_mask=np.array(input_set.input_mask),
             segment_ids=np.array(input_set.segment_ids),
-            span1_span=np.array(span1_span),
-            span2_span=np.array(span2_span),
+            spans=np.array([
+                span1_span,
+                span2_span,
+            ]),
             label_id=self.label_id,
             tokens=unpadded_inputs.unpadded_tokens,
             span1_text=self.span1_text,
@@ -130,8 +137,7 @@ class DataRow(BaseDataRow):
     input_ids: np.ndarray
     input_mask: np.ndarray
     segment_ids: np.ndarray
-    span1_span: np.ndarray
-    span2_span: np.ndarray
+    spans: np.ndarray
     label_id: int
     tokens: List
     span1_text: str
@@ -146,8 +152,7 @@ class Batch(BatchMixin):
     input_ids: torch.LongTensor
     input_mask: torch.LongTensor
     segment_ids: torch.LongTensor
-    span1_span: torch.LongTensor
-    span2_span: torch.LongTensor
+    spans: torch.LongTensor
     label_id: torch.LongTensor
     tokens: List
     span1_text: List
@@ -163,6 +168,10 @@ class WSCTask(Task):
     TASK_TYPE = TaskTypes.SPAN_COMPARISON_CLASSIFICATION
     LABELS = [False, True]
     LABEL_BIMAP = labels_to_bimap(LABELS)
+
+    @property
+    def num_spans(self):
+        return 2
 
     def get_train_examples(self):
         return self._create_examples(lines=read_json_lines(self.train_path), set_type="train")
@@ -187,3 +196,16 @@ class WSCTask(Task):
                 label=line["label"] if set_type != "test" else cls.LABELS[-1],
             ))
         return examples
+
+
+def extract_char_span(full_text, span_text, space_index):
+    space_tokens = full_text.split()
+    extracted_span_text = space_tokens[space_index]
+    assert extracted_span_text.lower() in full_text.lower()
+    span_length = len(span_text)
+    if space_index == 0:
+        start = 0
+    else:
+        start = len(" ".join(space_tokens[:space_index])) + 1
+    # exclusive span
+    return ExclusiveSpan(start=start, end=start + span_length)

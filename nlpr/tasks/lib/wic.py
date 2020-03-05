@@ -7,7 +7,7 @@ from nlpr.tasks.lib.templates.shared import (
     read_json_lines, Task, create_input_set_from_tokens_and_segments, add_cls_token, TaskTypes,
 )
 from ..core import BaseExample, BaseTokenizedExample, BaseDataRow, BatchMixin, labels_to_bimap
-from ..utils import truncate_sequences, get_tokens_start_end, ExclusiveSpan
+from ..utils import truncate_sequences, ExclusiveSpan
 import nlpr.tasks.hacky_tokenization_matching as tokenization_utils
 
 
@@ -22,12 +22,12 @@ class Example(BaseExample):
     label: str
 
     def tokenize(self, tokenizer):
-        sentence1_tokens, sentence1_span = self.get_token_span(
+        sentence1_tokens, sentence1_span = tokenization_utils.get_token_span(
             sentence=self.sentence1,
             span=self.span1,
             tokenizer=tokenizer,
         )
-        sentence2_tokens, sentence2_span = self.get_token_span(
+        sentence2_tokens, sentence2_span = tokenization_utils.get_token_span(
             sentence=self.sentence2,
             span=self.span2,
             tokenizer=tokenizer,
@@ -42,21 +42,6 @@ class Example(BaseExample):
             sentence2_span=sentence2_span,
             label_id=WiCTask.LABEL_BIMAP.a[self.label],
         )
-
-    @classmethod
-    def get_token_span(cls, sentence, span, tokenizer):
-        tokenized = tokenizer.tokenize(sentence)
-        tokenized_start1 = tokenizer.tokenize(sentence[:span.start])
-        tokenized_start2 = tokenizer.tokenize(sentence[:span.end])
-        assert tokenization_utils.starts_with(tokenized, tokenized_start1)
-        # assert starts_with(tokenized, tokenized_start2)  # <- fails because of "does" in "doesn't"
-        word = sentence[span.to_slice()]
-        assert word.lower() in tokenization_utils.delegate_flat_strip(
-            tokenized_start2[len(tokenized_start1):],
-            tokenizer=tokenizer,
-        )
-        token_span = ExclusiveSpan(start=len(tokenized_start1), end=len(tokenized_start2))
-        return tokenized, token_span
 
 
 @dataclass
@@ -134,8 +119,10 @@ class TokenizedExample(BaseTokenizedExample):
             input_ids=np.array(input_set.input_ids),
             input_mask=np.array(input_set.input_mask),
             segment_ids=np.array(input_set.segment_ids),
-            sentence1_span=np.array(sentence1_span),
-            sentence2_span=np.array(sentence2_span),
+            spans=np.array([
+                sentence1_span,
+                sentence2_span,
+            ]),
             label_id=self.label_id,
             tokens=unpadded_inputs.unpadded_tokens,
             word=self.word,
@@ -148,8 +135,7 @@ class DataRow(BaseDataRow):
     input_ids: np.array
     input_mask: np.array
     segment_ids: np.array
-    sentence1_span: np.array
-    sentence2_span: np.array
+    spans: np.array  # num_spans x 2
     label_id: int
     tokens: List
     word: List
@@ -160,8 +146,7 @@ class Batch(BatchMixin):
     input_ids: torch.LongTensor
     input_mask: torch.LongTensor
     segment_ids: torch.LongTensor
-    sentence1_span: torch.LongTensor
-    sentence2_span: torch.LongTensor
+    spans: torch.LongTensor
     label_id: torch.LongTensor
     tokens: List
     word: List
