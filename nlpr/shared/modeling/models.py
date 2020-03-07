@@ -58,6 +58,12 @@ def forward_batch_delegate(model: nn.Module, batch, task_type: TaskTypes, omit_l
             token_type_ids=batch.segment_ids,
             attention_mask=batch.input_mask,
         )[0]
+    elif task_type == TaskTypes.MASKED_LANGUAGE_MODELING:
+        return model(
+            input_ids=batch.input_ids,
+            token_type_ids=batch.segment_ids,
+            attention_mask=batch.input_mask,
+        )[0]
     else:
         raise KeyError(task_type)
 

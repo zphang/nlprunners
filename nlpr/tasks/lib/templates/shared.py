@@ -25,6 +25,7 @@ class TaskTypes(Enum):
     SPAN_CHOICE_PROB_TASK = 5
     SQUAD_STYLE_QA = 6
     TAGGING = 7
+    MASKED_LANGUAGE_MODELING = 8
     UNDEFINED = -1
 
 
