@@ -149,10 +149,10 @@ class SimpleTaskRunner(BaseRunner):
             batch = batch.to(self.device)
             with torch.no_grad():
                 logits = forward_batch_delegate(
-                    model=self.model,
+                    model_wrapper=self.model_wrapper,
                     batch=batch,
                     omit_label_id=True,
-                    task_type=self.task.TASK_TYPE,
+                    task=self.task,
                 )
             logits = logits.detach().cpu().numpy()
             all_logits.append(logits)

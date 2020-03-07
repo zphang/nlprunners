@@ -71,10 +71,10 @@ def run_val(val_dataloader,
 
         with torch.no_grad():
             logits = forward_batch_delegate(
-                model=model_wrapper.model,
+                model_wrapper=model_wrapper,
                 batch=batch,
                 omit_label_id=True,
-                task_type=task.TASK_TYPE,
+                task=task,
             )
             tmp_eval_loss = compute_loss_from_model_output(
                 logits=logits,
@@ -82,8 +82,6 @@ def run_val(val_dataloader,
                 batch=batch,
                 task_type=task.TASK_TYPE,
             )
-        # 1/0
-        # TODO: This is where we are now
         logits = logits.detach().cpu().numpy()
         total_eval_loss += tmp_eval_loss.mean().item()
 

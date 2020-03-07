@@ -45,6 +45,10 @@ class TokenizedExample(BaseTokenizedExample):
             input_ids=np.array(input_set.input_ids),
             input_mask=np.array(input_set.input_mask),
             segment_ids=np.array(input_set.segment_ids),
+            # Masking will be performed on the fly
+            # TODO: Seed if this is better off left to augmentation?
+            # masked_input_ids=np.array(input_set.input_ids),
+            # masked_input_mask=np.array(input_set.input_mask),
             tokens=unpadded_inputs.unpadded_tokens,
         )
 
@@ -55,6 +59,8 @@ class DataRow(BaseDataRow):
     input_ids: np.ndarray
     input_mask: np.ndarray
     segment_ids: np.ndarray
+    # masked_input_ids: np.ndarray
+    # masked_input_mask: np.ndarray
     tokens: list
 
 
@@ -73,6 +79,11 @@ class MLMTask(Task):
     Batch = Batch
 
     TASK_TYPE = TaskTypes.MASKED_LANGUAGE_MODELING
+
+    def __init__(self, name, path_dict,
+                 mlm_probability=0.15):
+        super().__init__(name=name, path_dict=path_dict)
+        self.mlm_probability = mlm_probability
 
     def get_train_examples(self):
         return self._create_examples(path=self.train_path, set_type="train", return_generator=True)
@@ -98,3 +109,39 @@ class MLMTask(Task):
             return generator
         else:
             return list(generator)
+
+
+@dataclass
+class MLMOutputTuple:
+    logits: torch.FloatTensor
+    masked_lm_labels: torch.LongTensor
+    vocab_size: int
+
+
+def mlm_mask_tokens(inputs: torch.Tensor, tokenizer, mlm_probability):
+    """ From HuggingFace """
+    labels = inputs.clone()
+    # We sample a few tokens in each sequence for masked-LM training
+    # (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
+    probability_matrix = torch.full(labels.shape, mlm_probability)
+    special_tokens_mask = [
+        tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
+    ]
+    probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
+    if tokenizer._pad_token is not None:
+        padding_mask = labels.eq(tokenizer.pad_token_id)
+        probability_matrix.masked_fill_(padding_mask, value=0.0)
+    masked_indices = torch.bernoulli(probability_matrix).bool()
+    labels[~masked_indices] = -100  # We only compute loss on masked tokens
+
+    # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+    indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
+    inputs[indices_replaced] = tokenizer.convert_tokens_to_ids(tokenizer.mask_token)
+
+    # 10% of the time, we replace masked input tokens with random word
+    indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
+    random_words = torch.randint(len(tokenizer), labels.shape, dtype=torch.long)
+    inputs[indices_random] = random_words[indices_random]
+
+    # The rest of the time (10% of the time) we keep the masked input tokens unchanged
+    return inputs, labels
