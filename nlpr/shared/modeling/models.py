@@ -110,7 +110,6 @@ def compute_loss_from_model_output(logits, loss_criterion, batch, task_type: Tas
     elif task_type == TaskTypes.MASKED_LANGUAGE_MODELING:
         # TODO: THIS IS A HACK
         mlm_output = logits
-        assert isinstance(mlm_output, mlm_lib.MLMOutputTuple)
         loss = loss_criterion(
             mlm_output.logits.view(-1, mlm_output.vocab_size),
             mlm_output.masked_lm_labels.view(-1),
@@ -121,18 +120,11 @@ def compute_loss_from_model_output(logits, loss_criterion, batch, task_type: Tas
 
 
 def mlm_forward(batch, model_wrapper: ModelWrapper, task):
-    masked_input_ids, masked_lm_labels = mlm_lib.mlm_mask_tokens(
-        inputs=batch.input_ids,
-        tokenizer=model_wrapper.tokenizer,
-        mlm_probability=task.mlm_probability,
-    )
-    logits = model_wrapper.model(
-        input_ids=masked_input_ids,
-        token_type_ids=batch.segment_ids,
-        attention_mask=batch.input_mask,
-        masked_lm_labels=masked_lm_labels,
-    )[0]
-    return logits, batch.masked_lm_labels
+
+    return logits
+
+
+def mlm_compute_loss(logits, )
 
 
 def qa_compute_loss(logits, start_positions, end_positions):

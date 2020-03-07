@@ -53,6 +53,8 @@ def resolve_loss_function(task_type: TaskTypes):
         return nn.CrossEntropyLoss()
     elif task_type == TaskTypes.TAGGING:
         return nn.CrossEntropyLoss()
+    elif task_type == TaskTypes.MASKED_LANGUAGE_MODELING:
+        return nn.CrossEntropyLoss(ignore_index=-100)
     else:
         raise KeyError(task_type)
 

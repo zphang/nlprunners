@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from nlpr.tasks.lib.templates.shared import (
     Task, TaskTypes,
@@ -47,8 +47,8 @@ class TokenizedExample(BaseTokenizedExample):
             segment_ids=np.array(input_set.segment_ids),
             # Masking will be performed on the fly
             # TODO: Seed if this is better off left to augmentation?
-            # masked_input_ids=np.array(input_set.input_ids),
-            # masked_input_mask=np.array(input_set.input_mask),
+            masked_input_ids=None,
+            masked_input_labels=None,
             tokens=unpadded_inputs.unpadded_tokens,
         )
 
@@ -59,8 +59,8 @@ class DataRow(BaseDataRow):
     input_ids: np.ndarray
     input_mask: np.ndarray
     segment_ids: np.ndarray
-    # masked_input_ids: np.ndarray
-    # masked_input_mask: np.ndarray
+    masked_input_ids: Optional[np.ndarray]
+    masked_input_labels: Optional[np.ndarray]
     tokens: list
 
 
@@ -69,6 +69,29 @@ class Batch(BatchMixin):
     input_ids: torch.LongTensor
     input_mask: torch.LongTensor
     segment_ids: torch.LongTensor
+    tokens: list
+
+    def get_masked(self, mlm_probability, tokenizer):
+        masked_input_ids, masked_lm_labels = mlm_mask_tokens(
+            inputs=self.input_ids,
+            tokenizer=tokenizer,
+            mlm_probability=mlm_probability,
+        )
+        return MaskedBatch(
+            masked_input_ids=masked_input_ids,
+            input_mask=self.input_mask,
+            segment_ids=self.segment_ids,
+            masked_lm_labels=masked_lm_labels,
+            tokens=self.tokens,
+        )
+
+
+@dataclass
+class MaskedBatch(BatchMixin):
+    masked_input_ids: torch.LongTensor
+    input_mask: torch.LongTensor
+    segment_ids: torch.LongTensor
+    masked_lm_labels: torch.LongTensor
     tokens: list
 
 
@@ -118,7 +141,7 @@ class MLMOutputTuple:
     vocab_size: int
 
 
-def mlm_mask_tokens(inputs: torch.Tensor, tokenizer, mlm_probability):
+def mlm_mask_tokens(inputs: torch.LongTensor, tokenizer, mlm_probability):
     """ From HuggingFace """
     labels = inputs.clone()
     # We sample a few tokens in each sequence for masked-LM training
