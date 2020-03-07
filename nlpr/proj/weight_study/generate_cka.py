@@ -86,7 +86,7 @@ def main(args):
             model_path=args.model_a_path,
             device=quick_init_out.device,
         )
-        if args.skip_b:
+        if not args.skip_b:
             act_b = compute_activations_from_path(
                 data_obj=data_obj,
                 task=task,
@@ -181,6 +181,16 @@ def get_hidden_act(task: tasks.Task, model_wrapper, batch):
             batch=batch,
             omit_label_id=True,
         )
+    elif task.TASK_TYPE in (
+                tasks.TaskTypes.SPAN_COMPARISON_CLASSIFICATION,
+            ):
+        _, raw_hidden = model_wrapper.model(
+            input_ids=batch.input_ids,
+            spans=batch.spans,
+            token_type_ids=batch.segment_ids,
+            attention_mask=batch.input_mask,
+            labels=None,
+        )
     elif task.TASK_TYPE == tasks.TaskTypes.SQUAD_STYLE_QA:
         start_positions = None
         end_positions = None
@@ -196,6 +206,12 @@ def get_hidden_act(task: tasks.Task, model_wrapper, batch):
             token_type_ids=segment_ids,
             start_positions=start_positions,
             end_positions=end_positions,
+        )
+    elif task.TASK_TYPE == tasks.TaskTypes.TAGGING:
+        _, raw_hidden = model_wrapper.model(
+            input_ids=batch.input_ids,
+            token_type_ids=batch.segment_ids,
+            attention_mask=batch.input_mask,
         )
     else:
         raise KeyError(task.TASK_TYPE)
