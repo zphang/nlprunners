@@ -133,9 +133,9 @@ class MLMTask(Task):
 
     @classmethod
     def _create_examples(cls, path, set_type, return_generator):
-        generator = cls._get_examples_generator(path=path, set_type=set_type)
+        generator = ReusableGenerator(cls._get_examples_generator, path=path, set_type=set_type)
         if return_generator:
-            return ReusableGenerator(generator)
+            return generator
         else:
             return list(generator)
 

@@ -64,35 +64,40 @@ def run_val(val_dataloader,
     model_wrapper.model.eval()
     total_eval_loss = 0
     nb_eval_steps, nb_eval_examples = 0, 0
-    all_logits = []
+    evaluation_scheme = evaluate.get_evaluate_scheme_for_task(task=task)
+    eval_accumulator = evaluation_scheme.get_accumulator()
+
     for step, (batch, batch_metadata) in enumerate(
             maybe_tqdm(val_dataloader, desc="Evaluating (Val)", verbose=verbose)):
         batch = batch.to(device)
 
         with torch.no_grad():
-            logits, eval_loss = delegate_forward_and_compute_loss(
+            batch_logits, batch_loss = delegate_forward_and_compute_loss(
                 model_wrapper=model_wrapper,
                 batch=batch,
                 task=task,
                 loss_criterion=loss_criterion,
 
             )
-        logits = logits.detach().cpu().numpy()
-        total_eval_loss += eval_loss.mean().item()
+        batch_logits = batch_logits.detach().cpu().numpy()
+        batch_loss = batch_loss.mean().item()
+        total_eval_loss += batch_loss
+        eval_accumulator.update(
+            batch_logits=batch_logits,
+            batch_loss=batch_loss,
+            batch=batch,
+        )
 
         nb_eval_examples += len(batch)
         nb_eval_steps += 1
-        all_logits.append(logits)
     eval_loss = total_eval_loss / nb_eval_steps
-    all_logits = np.concatenate(all_logits, axis=0)
 
     return {
-        "logits": all_logits,
+        "accumulator": eval_accumulator,
         "loss": eval_loss,
-        "metrics": evaluate.compute_task_metrics_for_validation(
+        "metrics": evaluation_scheme.compute_metrics_from_accumulator(
             task=task,
-            logits=all_logits,
-            loss=eval_loss,
+            accumulator=eval_accumulator,
             labels=val_labels,
             tokenizer=model_wrapper.tokenizer,
         ),

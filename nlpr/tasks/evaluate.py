@@ -30,7 +30,7 @@ class BaseEvaluation:
 
 
 class BaseAccumulator:
-    def update(self, batch_logits, batch_loss, batch_labels):
+    def update(self, batch_logits, batch_loss, batch):
         raise NotImplementedError()
 
     def get_accumulated(self):
@@ -41,7 +41,7 @@ class ConcatenateLogitsAccumulator(BaseAccumulator):
     def __init__(self):
         self.logits_list = []
 
-    def update(self, batch_logits, batch_loss, batch_labels):
+    def update(self, batch_logits, batch_loss, batch):
         self.logits_list.append(batch_logits)
 
     def get_accumulated(self):
@@ -53,11 +53,11 @@ class ConcatenateLossAccumulator(BaseAccumulator):
     def __init__(self):
         self.loss_list = []
 
-    def update(self, batch_logits, batch_loss, batch_labels):
+    def update(self, batch_logits, batch_loss, batch):
         self.loss_list.append(batch_loss)
 
     def get_accumulated(self):
-        all_loss = np.concatenate(self.loss_list)
+        all_loss = np.array(self.loss_list)
         return all_loss
 
 
@@ -596,6 +596,8 @@ def get_evaluate_scheme_for_task(task) -> BaseEvaluationScheme:
         return MultiRCEvaluationScheme()
     elif isinstance(task, tasks.StsbTask):
         return PearsonAndSpearmanEvaluationScheme()
+    elif isinstance(task, tasks.MLMTask):
+        return MLMEvaluationScheme()
     else:
         raise KeyError(task)
 
