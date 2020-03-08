@@ -1,7 +1,9 @@
 import numpy as np
 import torch
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
+
+from pyutils.datastructures import ReusableGenerator
 
 from nlpr.tasks.lib.templates.shared import (
     Task, TaskTypes,
@@ -133,7 +135,7 @@ class MLMTask(Task):
     def _create_examples(cls, path, set_type, return_generator):
         generator = cls._get_examples_generator(path=path, set_type=set_type)
         if return_generator:
-            return generator
+            return ReusableGenerator(generator)
         else:
             return list(generator)
 
