@@ -1,0 +1,133 @@
+import abc
+
+import torch
+import torch.nn as nn
+
+import transformers as ptt
+
+"""
+In HuggingFace/others, these heads differ slightly across different encoder models.
+We're going to abstract away from that and just choose one implementation.
+"""
+
+
+class BaseHead(nn.Module, metaclass=abc.ABCMeta):
+    def forward(self, pooled, unpooled, batch, compute_loss: bool):
+        raise NotImplementedError()
+
+
+class ClassificationHead(BaseHead):
+    def __init__(self, hidden_size, hidden_dropout_prob, num_labels):
+        """From RobertaClassificationHead """
+        super().__init__()
+        self.dense = nn.Linear(hidden_size, hidden_size)
+        self.dropout = nn.Dropout(hidden_dropout_prob)
+        self.out_proj = nn.Linear(hidden_size, num_labels)
+
+    def forward(self, pooled, unpooled, batch, compute_loss: bool):
+        x = self.dropout(pooled)
+        x = self.dense(x)
+        x = torch.tanh(x)
+        x = self.dropout(x)
+        logits = self.out_proj(x)
+
+        if compute_loss:
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), batch.label_ids.view(-1))
+            return logits, loss
+        else:
+            return logits
+
+
+class RegressionHead(BaseHead):
+    def __init__(self, hidden_size, hidden_dropout_prob):
+        """From RobertaClassificationHead """
+        super().__init__()
+        self.dense = nn.Linear(hidden_size, hidden_size)
+        self.dropout = nn.Dropout(hidden_dropout_prob)
+        self.out_proj = nn.Linear(hidden_size, 1)
+
+    def forward(self, pooled, unpooled, batch, compute_loss: bool):
+        x = self.dropout(pooled)
+        x = self.dense(x)
+        x = torch.tanh(x)
+        x = self.dropout(x)
+        logits = self.out_proj(x)
+
+        if compute_loss:
+            loss_fct = nn.MSELoss()
+            loss = loss_fct(logits.view(-1), batch.label_ids.view(-1))
+            return logits, loss
+        else:
+            return logits
+
+
+class BaseMLMHead(BaseHead, metaclass=abc.ABCMeta):
+    pass
+
+
+class RobertaMLMHead(BaseMLMHead):
+    """From RobertaLMHead"""
+
+    def __init__(self, hidden_size, vocab_size, layer_norm_eps=1e-12):
+        super().__init__()
+        self.dense = nn.Linear(hidden_size, hidden_size)
+        self.layer_norm = ptt.modeling_bert.BertLayerNorm(hidden_size, eps=layer_norm_eps)
+
+        self.decoder = nn.Linear(hidden_size, vocab_size, bias=False)
+        self.bias = nn.Parameter(torch.zeros(vocab_size), requires_grad=True)
+
+        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def forward(self, pooled, unpooled, batch, compute_loss: bool):
+        x = self.dense(unpooled)
+        x = ptt.modeling_bert.gelu(x)
+        x = self.layer_norm(x)
+
+        # project back to size of vocabulary with bias
+        logits = self.decoder(x) + self.bias
+
+        if compute_loss:
+            masked_lm_loss = compute_mlm_loss(logits=logits, masked_lm_labels=batch.masked_lm_labels)
+            return logits, masked_lm_loss
+        else:
+            return logits
+
+
+class AlbertMLMHead(nn.Module):
+    """From AlbertMLMHead"""
+    def __init__(self, hidden_size, embedding_size, vocab_size, hidden_act="gelu"):
+        super().__init__()
+
+        self.LayerNorm = nn.LayerNorm(embedding_size)
+        self.bias = nn.Parameter(torch.zeros(vocab_size), requires_grad=True)
+        self.dense = nn.Linear(hidden_size, embedding_size)
+        self.decoder = nn.Linear(embedding_size, vocab_size)
+        self.activation = ptt.modeling_bert.ACT2FN[hidden_act]
+
+        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def forward(self, pooled, unpooled, batch, compute_loss: bool):
+        hidden_states = self.dense(unpooled)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        hidden_states = self.decoder(hidden_states)
+
+        logits = hidden_states + self.bias
+
+        if compute_loss:
+            masked_lm_loss = compute_mlm_loss(logits=logits, masked_lm_labels=batch.masked_lm_labels)
+            return logits, masked_lm_loss
+        else:
+            return logits
+
+
+def compute_mlm_loss(logits, masked_lm_labels):
+    vocab_size = logits.shape(-1)
+    loss_fct = nn.CrossEntropyLoss()
+    return loss_fct(
+        logits.view(-1, vocab_size),
+        masked_lm_labels.view(-1)
+    )
