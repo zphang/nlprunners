@@ -14,7 +14,7 @@ import pyutils.io as io
 
 from nlpr.shared.pycore import ExtendedDataClassMixin
 from nlpr.shared.model_setup import OptimizerScheduler
-from nlpr.shared.modeling.models import delegate_forward_and_compute_loss
+from nlpr.shared.modeling.models import delegate_forward_and_compute_loss, delegate_forward_batch
 import nlpr.tasks.evaluate as evaluate
 import nlpr.shared.torch_utils as torch_utils
 import nlpr.shared.caching as caching
@@ -64,7 +64,7 @@ def run_val(val_dataloader,
     model_wrapper.model.eval()
     total_eval_loss = 0
     nb_eval_steps, nb_eval_examples = 0, 0
-    evaluation_scheme = evaluate.get_evaluate_scheme_for_task(task=task)
+    evaluation_scheme = evaluate.get_evaluation_scheme_for_task(task=task)
     eval_accumulator = evaluation_scheme.get_accumulator()
 
     for step, (batch, batch_metadata) in enumerate(
@@ -102,6 +102,31 @@ def run_val(val_dataloader,
             tokenizer=model_wrapper.tokenizer,
         ),
     }
+
+
+def run_test(test_dataloader,
+             model_wrapper, task,
+             device, verbose=True):
+    model_wrapper.model.eval()
+    evaluation_scheme = evaluate.get_evaluation_scheme_for_task(task=task)
+    eval_accumulator = evaluation_scheme.get_accumulator()
+    for step, (batch, batch_metadata) in enumerate(
+            maybe_tqdm(test_dataloader, desc="Predictions (Test)", verbose=verbose)):
+        batch = batch.to(device)
+        with torch.no_grad():
+            batch_logits = delegate_forward_batch(
+                model_wrapper=model_wrapper,
+                batch=batch,
+                task=task,
+            )
+        batch_logits = batch_logits.detach().cpu().numpy()
+        eval_accumulator.update(
+            batch_logits=batch_logits,
+            batch_loss=None,
+            batch=batch,
+        )
+
+    return eval_accumulator.get_accumulated()
 
 
 def get_train_dataloader(train_examples, task,

@@ -139,10 +139,12 @@ def main(args: RunConfiguration):
             tokenizer=tokenizer,
             args=args,
         )
+        evaluation_scheme = evaluate.get_evaluation_scheme_for_task(task)
         shared_caching.chunk_and_save(
-            data=evaluate.get_labels_from_cache(
+            data=evaluation_scheme.get_labels_from_cache_and_examples(
                 task=task,
                 cache=shared_caching.ChunkedFilesDataCache(os.path.join(args.output_dir, PHASE.VAL)),
+                examples=val_examples,
             ),
             chunk_size=args.chunk_size,
             data_args=args.to_dict(),

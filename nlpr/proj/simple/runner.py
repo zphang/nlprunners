@@ -1,5 +1,4 @@
 import collections as col
-import numpy as np
 from dataclasses import dataclass
 from typing import Union
 
@@ -13,10 +12,12 @@ from nlpr.shared.runner import (
     TrainGlobalState,
     optim_step_grad_accum,
     run_val,
+    run_test,
     get_train_dataloader_from_cache,
     get_eval_dataloader_from_cache,
 )
-from nlpr.shared.modeling.models import delegate_forward_and_compute_loss
+import nlpr.tasks.evaluate as evaluate
+from nlpr.shared.modeling.models import delegate_forward_and_compute_loss, delegate_forward_batch
 from nlpr.shared.train_setup import TrainSchedule
 
 
@@ -135,23 +136,13 @@ class SimpleTaskRunner(BaseRunner):
         )
 
     def run_test(self, test_cache, verbose=True):
-        test_dataloader = self.get_eval_dataloader(test_cache)
-        self.model.eval()
-        all_logits = []
-        for step, (batch, batch_metadata) in enumerate(
-                maybe_tqdm(test_dataloader, desc="Predictions (Test)", verbose=verbose)):
-            batch = batch.to(self.device)
-            with torch.no_grad():
-                logits = delegate_forward_batch(
-                    model_wrapper=self.model_wrapper,
-                    batch=batch,
-                    task=self.task,
-                )
-            logits = logits.detach().cpu().numpy()
-            all_logits.append(logits)
-
-        all_logits = np.concatenate(all_logits, axis=0)
-        return all_logits
+        return run_test(
+            test_dataloader=self.get_eval_dataloader(test_cache),
+            model_wrapper=self.model_wrapper,
+            task=self.task,
+            device=self.device,
+            verbose=verbose,
+        )
 
     def get_train_dataloader(self, train_cache):
         # Not currently supported distributed parallel
