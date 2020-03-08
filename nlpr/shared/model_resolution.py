@@ -161,6 +161,7 @@ MODEL_CLASS_DICT = {
         TaskTypes.SPAN_COMPARISON_CLASSIFICATION: bert_models.BertForSpanComparisonClassification,
         TaskTypes.MULTIPLE_CHOICE: ptt.BertForMultipleChoice,
         TaskTypes.TAGGING: ptt.BertForTokenClassification,
+        TaskTypes.MASKED_LANGUAGE_MODELING: ptt.BertForMaskedLM,
     },
     ModelArchitectures.XLNET: {
         TaskTypes.CLASSIFICATION: ptt.XLNetForSequenceClassification,
@@ -177,6 +178,7 @@ MODEL_CLASS_DICT = {
         TaskTypes.MULTIPLE_CHOICE: roberta_models.RobertaForMultipleChoice,
         TaskTypes.SQUAD_STYLE_QA: ptt.RobertaForQuestionAnswering,
         TaskTypes.TAGGING: ptt.RobertaForTokenClassification,
+        TaskTypes.MASKED_LANGUAGE_MODELING: ptt.RobertaForMaskedLM,
     },
     ModelArchitectures.GLOVE_LSTM: {
         TaskTypes.CLASSIFICATION: glove_lstm_modeling.GloveLSTMForSequenceClassification,
@@ -188,6 +190,7 @@ MODEL_CLASS_DICT = {
         TaskTypes.MULTIPLE_CHOICE: albert_models.AlbertForMultipleChoice,
         TaskTypes.SQUAD_STYLE_QA: ptt.AlbertForQuestionAnswering,
         TaskTypes.TAGGING: None,
+        TaskTypes.MASKED_LANGUAGE_MODELING: ptt.AlbertForMaskedLM,
     },
 }
 

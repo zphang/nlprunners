@@ -157,9 +157,9 @@ def iter_chunk_tokenize_and_featurize(examples: list,
                                       feat_spec: FeaturizationSpec,
                                       phase,
                                       verbose=False):
-    # TODO: Better solution
-    if isinstance(examples[0], squad_style.Example):
-        for example in maybe_tqdm(examples, desc="Tokenizing", verbose=verbose):
+    for example in maybe_tqdm(examples, desc="Tokenizing", verbose=verbose):
+        # TODO: Better solution
+        if isinstance(example, squad_style.Example):
             # TODO more arguments?
             yield from example.to_feature_list(
                 tokenizer=tokenizer,
@@ -169,6 +169,5 @@ def iter_chunk_tokenize_and_featurize(examples: list,
                 max_query_length=64,
                 set_type=phase,
             )
-    else:
-        for example in maybe_tqdm(examples, desc="Tokenizing", verbose=verbose):
+        else:
             yield example.tokenize(tokenizer).featurize(tokenizer, feat_spec)

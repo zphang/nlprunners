@@ -16,7 +16,7 @@ from nlpr.shared.runner import (
     get_train_dataloader_from_cache,
     get_eval_dataloader_from_cache,
 )
-from nlpr.shared.modeling.models import forward_batch_delegate, compute_loss_from_model_output
+from nlpr.shared.modeling.models import delegate_forward_and_compute_loss
 from nlpr.shared.train_setup import TrainSchedule
 
 
@@ -96,17 +96,11 @@ class SimpleTaskRunner(BaseRunner):
     def run_train_step(self, batch, train_global_state):
         self.model.train()
         batch = batch.to(self.device)
-        logits = forward_batch_delegate(
-            model=self.model,
+        logits, loss = delegate_forward_and_compute_loss(
+            model_wrapper=self.model_wrapper,
             batch=batch,
-            omit_label_id=True,
-            task_type=self.task.TASK_TYPE,
-        )
-        loss = compute_loss_from_model_output(
-            logits=logits,
+            task=self.task,
             loss_criterion=self.loss_criterion,
-            batch=batch,
-            task_type=self.task.TASK_TYPE,
         )
 
         loss = self.complex_backpropagate(loss)
@@ -148,10 +142,9 @@ class SimpleTaskRunner(BaseRunner):
                 maybe_tqdm(test_dataloader, desc="Predictions (Test)", verbose=verbose)):
             batch = batch.to(self.device)
             with torch.no_grad():
-                logits = forward_batch_delegate(
+                logits = delegate_forward_batch(
                     model_wrapper=self.model_wrapper,
                     batch=batch,
-                    omit_label_id=True,
                     task=self.task,
                 )
             logits = logits.detach().cpu().numpy()

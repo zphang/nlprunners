@@ -14,7 +14,7 @@ import pyutils.io as io
 
 from nlpr.shared.pycore import ExtendedDataClassMixin
 from nlpr.shared.model_setup import OptimizerScheduler
-from nlpr.shared.modeling.models import forward_batch_delegate, compute_loss_from_model_output
+from nlpr.shared.modeling.models import delegate_forward_and_compute_loss
 import nlpr.tasks.evaluate as evaluate
 import nlpr.shared.torch_utils as torch_utils
 import nlpr.shared.caching as caching
@@ -70,20 +70,15 @@ def run_val(val_dataloader,
         batch = batch.to(device)
 
         with torch.no_grad():
-            logits = forward_batch_delegate(
+            logits, eval_loss = delegate_forward_and_compute_loss(
                 model_wrapper=model_wrapper,
                 batch=batch,
-                omit_label_id=True,
                 task=task,
-            )
-            tmp_eval_loss = compute_loss_from_model_output(
-                logits=logits,
                 loss_criterion=loss_criterion,
-                batch=batch,
-                task_type=task.TASK_TYPE,
+
             )
         logits = logits.detach().cpu().numpy()
-        total_eval_loss += tmp_eval_loss.mean().item()
+        total_eval_loss += eval_loss.mean().item()
 
         nb_eval_examples += len(batch)
         nb_eval_steps += 1
@@ -94,9 +89,10 @@ def run_val(val_dataloader,
     return {
         "logits": all_logits,
         "loss": eval_loss,
-        "metrics": evaluate.compute_task_metrics_from_classification_logits_and_labels(
+        "metrics": evaluate.compute_task_metrics_for_validation(
             task=task,
             logits=all_logits,
+            loss=eval_loss,
             labels=val_labels,
             tokenizer=model_wrapper.tokenizer,
         ),

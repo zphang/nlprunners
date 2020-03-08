@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from typing import List
 
 from nlpr.tasks.lib.templates.shared import (
-    read_json_lines, Task, create_generic_data_row_from_tokens_and_segments, add_cls_token,
-    TaskTypes,
+    read_json_lines, Task, add_cls_token,
+    TaskTypes, create_input_set_from_tokens_and_segments,
 )
 from ..core import BaseExample, BaseTokenizedExample, BaseDataRow, BatchMixin, labels_to_bimap
 from ..utils import truncate_sequences
@@ -29,6 +29,7 @@ class Example(BaseExample):
             question=tokenizer.tokenize(self.question),
             answer=tokenizer.tokenize(self.answer),
             label_id=MultiRCTask.LABEL_BIMAP.a[self.label],
+            question_id=self.question_id,
         )
 
 
@@ -39,6 +40,7 @@ class TokenizedExample(BaseTokenizedExample):
     question: List
     answer: List
     label_id: int
+    question_id: int
 
     def featurize(self, tokenizer, feat_spec):
 
@@ -74,15 +76,20 @@ class TokenizedExample(BaseTokenizedExample):
             tokenizer=tokenizer,
             feat_spec=feat_spec
         )
-
-        return create_generic_data_row_from_tokens_and_segments(
-            guid=self.guid,
+        input_set = create_input_set_from_tokens_and_segments(
             unpadded_tokens=unpadded_inputs.unpadded_tokens,
             unpadded_segment_ids=unpadded_inputs.unpadded_segment_ids,
-            label_id=self.label_id,
             tokenizer=tokenizer,
             feat_spec=feat_spec,
-            data_row_class=DataRow,
+        )
+        return DataRow(
+            guid=self.guid,
+            input_ids=np.array(input_set.input_ids),
+            input_mask=np.array(input_set.input_mask),
+            segment_ids=np.array(input_set.segment_ids),
+            label_id=self.label_id,
+            tokens=unpadded_inputs.unpadded_tokens,
+            question_id=self.question_id,
         )
 
 
@@ -94,6 +101,7 @@ class DataRow(BaseDataRow):
     segment_ids: np.ndarray
     label_id: int
     tokens: list
+    question_id: int
 
 
 @dataclass

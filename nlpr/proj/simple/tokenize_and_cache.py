@@ -140,13 +140,10 @@ def main(args: RunConfiguration):
             args=args,
         )
         shared_caching.chunk_and_save(
-            data=list(evaluate.get_labels_from_examples(
+            data=evaluate.get_labels_from_cache(
                 task=task,
-                examples=val_examples,
-                feat_spec=feat_spec,
-                tokenizer=tokenizer,
-                phase=PHASE.VAL
-            )),
+                cache=shared_caching.ChunkedFilesDataCache(os.path.join(args.output_dir, PHASE.VAL)),
+            ),
             chunk_size=args.chunk_size,
             data_args=args.to_dict(),
             output_dir=os.path.join(args.output_dir, "val_labels"),

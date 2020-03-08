@@ -1,16 +1,18 @@
 import torch
+import torch.nn as nn
 
 import transformers
 
-from nlpr.shared.model_resolution import ModelArchitectures
 import nlpr.shared.modeling.glove_lstm as glove_lstm_modeling
-from nlpr.tasks.lib.templates.shared import TaskTypes
 import nlpr.tasks as tasks
+from nlpr.shared.model_resolution import ModelArchitectures
+from nlpr.tasks.lib.templates.shared import TaskTypes
 from nlpr.ext.radam import RAdam
 
 
 class ModelWrapper:
     def __init__(self, model, tokenizer):
+        super().__init__()
         self.model = model
         self.tokenizer = tokenizer
 
@@ -70,6 +72,8 @@ def get_model(model_class_spec, config_path, task):
         config.labels = 2
     elif task.TASK_TYPE == TaskTypes.TAGGING:
         config.num_labels = task.num_labels
+    elif task.TASK_TYPE == TaskTypes.MASKED_LANGUAGE_MODELING:
+        pass
     else:
         raise KeyError(task.TASK_TYPE)
 

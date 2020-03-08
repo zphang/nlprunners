@@ -122,6 +122,9 @@ class DataCache:
     def get_all(self):
         raise NotImplementedError()
 
+    def iter_all(self):
+        raise NotImplementedError()
+
     def __len__(self):
         raise NotImplementedError()
 
@@ -132,6 +135,10 @@ class InMemoryDataCache(DataCache):
 
     def get_all(self):
         return self.data
+
+    def iter_all(self):
+        for elem in self.data:
+            yield elem
 
     def __len__(self):
         return len(self.data)
@@ -187,6 +194,12 @@ class ChunkedFilesDataCache(DataCache):
         for i in range(self.num_chunks):
             data += self.load_chunk(i)
         return data
+
+    def iter_all(self):
+        for i in range(self.num_chunks):
+            chunk = self.load_chunk(i)
+            for elem in chunk:
+                yield elem
 
     def __len__(self):
         return self.length

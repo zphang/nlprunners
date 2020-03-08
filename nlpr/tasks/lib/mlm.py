@@ -45,10 +45,10 @@ class TokenizedExample(BaseTokenizedExample):
             input_ids=np.array(input_set.input_ids),
             input_mask=np.array(input_set.input_mask),
             segment_ids=np.array(input_set.segment_ids),
-            # Masking will be performed on the fly
+            # Masking will be performed on the fly in train
             # TODO: Seed if this is better off left to augmentation?
-            masked_input_ids=None,
-            masked_input_labels=None,
+            # masked_input_ids=None,
+            # masked_input_labels=None,
             tokens=unpadded_inputs.unpadded_tokens,
         )
 
@@ -59,8 +59,8 @@ class DataRow(BaseDataRow):
     input_ids: np.ndarray
     input_mask: np.ndarray
     segment_ids: np.ndarray
-    masked_input_ids: Optional[np.ndarray]
-    masked_input_labels: Optional[np.ndarray]
+    # masked_input_ids: Optional[np.ndarray]
+    # masked_input_labels: Optional[np.ndarray]
     tokens: list
 
 
@@ -69,6 +69,9 @@ class Batch(BatchMixin):
     input_ids: torch.LongTensor
     input_mask: torch.LongTensor
     segment_ids: torch.LongTensor
+    # Only if preset
+    # masked_input_ids: Optional[np.ndarray]
+    # masked_input_labels: Optional[np.ndarray]
     tokens: list
 
     def get_masked(self, mlm_probability, tokenizer):
@@ -119,11 +122,12 @@ class MLMTask(Task):
 
     @classmethod
     def _get_examples_generator(cls, path, set_type):
-        for (i, line) in enumerate(path):
-            yield Example(
-                guid="%s-%s" % (set_type, i),
-                text=line.strip(),
-            )
+        with open(path, "r") as f:
+            for (i, line) in enumerate(f):
+                yield Example(
+                    guid="%s-%s" % (set_type, i),
+                    text=line.strip(),
+                )
 
     @classmethod
     def _create_examples(cls, path, set_type, return_generator):
@@ -143,6 +147,8 @@ class MLMOutputTuple:
 
 def mlm_mask_tokens(inputs: torch.LongTensor, tokenizer, mlm_probability):
     """ From HuggingFace """
+    device = inputs.device
+    inputs = inputs.cpu().clone()
     labels = inputs.clone()
     # We sample a few tokens in each sequence for masked-LM training
     # (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
@@ -167,4 +173,4 @@ def mlm_mask_tokens(inputs: torch.LongTensor, tokenizer, mlm_probability):
     inputs[indices_random] = random_words[indices_random]
 
     # The rest of the time (10% of the time) we keep the masked input tokens unchanged
-    return inputs, labels
+    return inputs.to(device), labels.to(device)

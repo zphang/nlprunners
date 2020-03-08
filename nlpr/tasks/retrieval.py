@@ -11,6 +11,7 @@ from nlpr.tasks.lib.copa import CopaTask
 from nlpr.tasks.lib.cosmosqa import CosmosQATask
 from nlpr.tasks.lib.hellaswag import HellaSwagTask
 from nlpr.tasks.lib.imdb import IMDBTask
+from nlpr.tasks.lib.mlm import MLMTask
 from nlpr.tasks.lib.maskedwiki import MaskedWikiTask
 from nlpr.tasks.lib.mnli import MnliTask
 from nlpr.tasks.lib.mrpc import MrpcTask
@@ -49,6 +50,7 @@ TASK_DICT = {
     "hellaswag": HellaSwagTask,
     "imdb": IMDBTask,
     "masked_wiki": MaskedWikiTask,
+    "mlm_wikitext103": MLMTask,
     "mnli": MnliTask,
     "mrc": MultiRCTask,
     "mrpc": MrpcTask,

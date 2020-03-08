@@ -29,6 +29,24 @@ class BaseEvaluation:
     pass
 
 
+def compute_task_metrics_for_validation(task, logits, loss, labels, tokenizer):
+    if isinstance(task, tasks.MLMTask):
+        perplexity = np.exp(loss)
+        return Metrics(
+            major=perplexity,
+            minor={
+                "perplexity": perplexity,
+            }
+        )
+    else:
+        return compute_task_metrics_from_classification_logits_and_labels(
+            task=task,
+            logits=logits,
+            labels=labels,
+            tokenizer=tokenizer,
+        )
+
+
 def compute_task_metrics(task, logits, examples):
     # Todo: move logic to task?
     if isinstance(task, tasks.AnliTask):
@@ -265,6 +283,55 @@ def compute_task_metrics_from_classification_logits_and_labels(
         raise KeyError(task)
 
 
+def get_labels_from_cache(task, cache):
+    if isinstance(task, (
+                tasks.AnliTask,
+                tasks.AmazonPolarityTask,
+                tasks.BoolQTask,
+                tasks.CommitmentBankTask,
+                tasks.ColaTask,
+                tasks.CopaTask,
+                tasks.IMDBTask,
+                tasks.MnliTask,
+                tasks.MrpcTask,
+                tasks.QnliTask,
+                tasks.QqpTask,
+                tasks.RteTask,
+                tasks.SciTailTask,
+                tasks.SnliTask,
+                tasks.SstTask,
+                tasks.WiCTask,
+                tasks.WSCTask,
+                tasks.YelpPolarityTask,
+            )):
+        return get_label_ids_from_cache(task=task, cache=cache)
+    elif isinstance(task, tasks.StsbTask):
+        return get_label_vals_from_cache(cache=cache)
+    elif isinstance(task, tasks.CCGTask):
+        return CCGEval.get_labels_from_cache(cache=cache)
+    elif isinstance(task, (
+                tasks.CommonsenseQATask,
+                tasks.CosmosQATask,
+                tasks.SWAGTask,
+                tasks.HellaSwagTask,
+                tasks.SocialIQATask,
+            )):
+        return get_multiple_choice_labels_from_cache(task=task, cache=cache)
+    elif isinstance(task, tasks.MLMTask):
+        # Labels come from inputs
+        return [None]
+    elif isinstance(task, (
+                tasks.MultiQATask,
+                tasks.SquadTask
+            )):
+        return SQuADEval.get_labels_from_cache(cache=cache)
+    elif isinstance(task, tasks.MultiRCTask):
+        # labels is a lists of dicts
+        return MultiRCEval.get_label_from_cache(cache=cache)
+    else:
+        raise KeyError(task)
+
+
 def get_labels_from_examples(task, examples, tokenizer, feat_spec, phase):
     # Todo: move logic to task?
     if isinstance(task, tasks.AnliTask):
@@ -296,6 +363,8 @@ def get_labels_from_examples(task, examples, tokenizer, feat_spec, phase):
         return get_multiple_choice_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.IMDBTask):
         return get_label_ids(task=task, examples=examples)
+    elif isinstance(task, tasks.MLMTask):
+        return [None] * len(examples)
     elif isinstance(task, tasks.MnliTask):
         return get_label_ids(task=task, examples=examples)
     elif isinstance(task, tasks.MrpcTask):
@@ -416,6 +485,21 @@ class MultiRCEval(BaseEvaluation):
     def get_labels_from_examples(cls, task, examples):
         label_values = get_label_ids(examples=examples, task=task)
         question_ids = np.array([example.question_id for example in examples])
+        assert len(label_values) == len(question_ids)
+        return [
+            {"label_values": lab, "question_ids": qid}
+            for lab, qid in zip(label_values, question_ids)
+        ]
+
+    @classmethod
+    def get_label_from_cache(cls, cache):
+        label_values = []
+        question_ids = []
+        for datum in cache.iter_all():
+            label_values.append(datum["data_row"].label_id)
+            question_ids.append(datum["data_row"].question_id)
+        label_values = np.array(label_values)
+        question_ids = np.array(question_ids)
         assert len(label_values) == len(question_ids)
         return [
             {"label_values": lab, "question_ids": qid}
@@ -630,7 +714,15 @@ class SQuADEval(BaseEvaluation):
             phase=phase,
             verbose=True,
         )
-        return [squad_lib.PartialDataRow.from_data_row(datum["data_row"]) for datum in dataset.data]
+        return [cls.get_label_from_data_row(datum["data_row"]) for datum in dataset.data]
+
+    @classmethod
+    def get_label_from_data_row(cls, data_row):
+        return squad_lib.PartialDataRow.from_data_row(data_row)
+
+    @classmethod
+    def get_labels_from_cache(cls, cache):
+        return [cls.get_label_from_data_row(datum["data_row"]) for datum in cache.iter_all()]
 
 
 class CCGEval(BaseEvaluation):
@@ -672,17 +764,60 @@ class CCGEval(BaseEvaluation):
             for datum in dataset.data
         ]
 
+    @classmethod
+    def get_labels_from_cache(cls, cache):
+        return [
+            {
+                "label_ids": datum["data_row"].label_ids,
+                "label_mask": datum["data_row"].label_mask,
+            }
+            for datum in cache.iter_all()
+        ]
+
 
 def get_preds(logits):
     return np.argmax(logits, axis=1)
 
 
-def get_label_ids(examples, task):
+def get_label_ids(task, examples):
     return np.array([task.LABEL_BIMAP.a[example.label] for example in examples])
 
 
-def get_multiple_choice_label_ids(examples, task):
+def get_label_id_from_data_row(task, data_row):
+    return task.LABEL_BIMAP.a[data_row.label_id]
+
+
+def get_label_ids_from_cache(task, cache):
+    return np.array([
+        get_label_id_from_data_row(data_row=datum["data_row"], task=task)
+        for datum in cache.iter_all()
+    ])
+
+
+def get_label_vals_from_cache(cache):
+    return np.array([
+        get_label_val_from_data_row(data_row=datum["data_row"])
+        for datum in cache.iter_all()
+    ])
+
+
+def get_label_val_from_data_row(data_row):
+    return data_row.label
+
+
+def get_multiple_choice_label_ids(task, examples):
     return np.array([task.CHOICE_BIMAP.a[example.label] for example in examples])
+
+
+def get_multiple_choice_label_id_from_data_row(data_row, task):
+    return task.CHOICE_BIMAP.a[data_row.label_id]
+
+
+def get_multiple_choice_labels_from_cache(task, cache):
+    return np.array([
+        get_multiple_choice_label_id_from_data_row(data_row=datum["data_row"], task=task)
+        for datum in cache.iter_all()
+    ])
 
 
 def get_label_vals(examples):

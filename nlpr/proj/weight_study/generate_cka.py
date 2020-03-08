@@ -179,7 +179,6 @@ def get_hidden_act(task: tasks.Task, model_wrapper, batch):
         _, raw_hidden = shared_models.forward_batch_basic(
             model=model_wrapper.model,
             batch=batch,
-            omit_label_id=True,
         )
     elif task.TASK_TYPE in (
                 tasks.TaskTypes.SPAN_COMPARISON_CLASSIFICATION,

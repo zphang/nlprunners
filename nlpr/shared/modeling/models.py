@@ -1,5 +1,3 @@
-from dataclasses import dataclass
-
 import torch
 import torch.nn as nn
 
@@ -9,24 +7,21 @@ import nlpr.tasks.lib.mlm as mlm_lib
 from nlpr.shared.model_setup import ModelWrapper
 
 
-def forward_batch_basic(model: nn.Module, batch, omit_label_id: bool = False):
+def forward_batch_basic(model: nn.Module, batch):
     return model(
         input_ids=batch.input_ids,
         token_type_ids=batch.segment_ids,
         attention_mask=batch.input_mask,
-        labels=batch.label_id if not omit_label_id else None,
     )
 
 
-def forward_batch_delegate(model_wrapper: ModelWrapper,
+def delegate_forward_batch(model_wrapper: ModelWrapper,
                            batch,
-                           task: Task,
-                           omit_label_id: bool = False):
+                           task: Task):
     if task.TASK_TYPE in [TaskTypes.CLASSIFICATION, TaskTypes.REGRESSION]:
         return forward_batch_basic(
             model=model_wrapper.model,
             batch=batch,
-            omit_label_id=omit_label_id,
         )[0]
     elif task.TASK_TYPE == TaskTypes.SPAN_COMPARISON_CLASSIFICATION:
         return model_wrapper.model(
@@ -34,17 +29,13 @@ def forward_batch_delegate(model_wrapper: ModelWrapper,
             spans=batch.spans,
             token_type_ids=batch.segment_ids,
             attention_mask=batch.input_mask,
-            labels=batch.label_id if not omit_label_id else None,
         )[0]
     elif task.TASK_TYPE == TaskTypes.MULTIPLE_CHOICE:
         return forward_batch_basic(
             model=model_wrapper.model,
             batch=batch,
-            omit_label_id=omit_label_id,
         )[0]
     elif task.TASK_TYPE == TaskTypes.SQUAD_STYLE_QA:
-        start_positions = batch.start_position if not omit_label_id else None
-        end_positions = batch.end_position if not omit_label_id else None
         # TODO: Refactor this wrt model_resolution
         # Actually "xlm", "roberta", "distilbert"
         if model_wrapper.model.__class__.__name__.startswith("Robert"):
@@ -55,8 +46,8 @@ def forward_batch_delegate(model_wrapper: ModelWrapper,
             input_ids=batch.input_ids,
             attention_mask=batch.input_mask,
             token_type_ids=segment_ids,
-            start_positions=start_positions,
-            end_positions=end_positions,
+            start_positions=batch.start_positions,
+            end_positions=batch.end_positions,
         )
         return torch.stack(logits, dim=1)
     elif task.TASK_TYPE == TaskTypes.TAGGING:
@@ -66,16 +57,12 @@ def forward_batch_delegate(model_wrapper: ModelWrapper,
             attention_mask=batch.input_mask,
         )[0]
     elif task.TASK_TYPE == TaskTypes.MASKED_LANGUAGE_MODELING:
-        logits, masked_lm_labels = mlm_forward(
+        logits, _ = mlm_forward(
             batch=batch,
             model_wrapper=model_wrapper,
             task=task,
         )
-        return MLMOutputTuple(
-            logits=logits,
-            masked_lm_labels=masked_lm_labels,
-            vocab_size=model_wrapper.model.config.vocab_size,
-        )
+        return logits
     else:
         raise KeyError(task)
 
@@ -108,7 +95,7 @@ def compute_loss_from_model_output(logits, loss_criterion, batch, task_type: Tas
             flat_labels = batch.label_ids.view(-1)
         loss = loss_criterion(flat_logits, flat_labels)
     elif task_type == TaskTypes.MASKED_LANGUAGE_MODELING:
-        # TODO: THIS IS A HACK
+        assert isinstance(batch, mlm_lib.MaskedBatch), "Can only directly compute loss from MaskedBatch"
         mlm_output = logits
         loss = loss_criterion(
             mlm_output.logits.view(-1, mlm_output.vocab_size),
@@ -119,12 +106,64 @@ def compute_loss_from_model_output(logits, loss_criterion, batch, task_type: Tas
     return loss
 
 
+def delegate_forward_and_compute_loss(model_wrapper: ModelWrapper,
+                                      batch,
+                                      task: Task,
+                                      loss_criterion):
+    if task.TASK_TYPE in [
+            TaskTypes.CLASSIFICATION,
+            TaskTypes.REGRESSION,
+            TaskTypes.SPAN_COMPARISON_CLASSIFICATION,
+            TaskTypes.MULTIPLE_CHOICE,
+            TaskTypes.SQUAD_STYLE_QA,
+            TaskTypes.TAGGING]:
+        logits = delegate_forward_batch(
+            model_wrapper=model_wrapper,
+            batch=batch,
+            task=task,
+        )
+        loss = compute_loss_from_model_output(
+            logits=logits,
+            batch=batch,
+            loss_criterion=loss_criterion,
+            task_type=task.TASK_TYPE,
+        )
+    elif task.TASK_TYPE == TaskTypes.MASKED_LANGUAGE_MODELING:
+        assert (
+            isinstance(batch, mlm_lib.MaskedBatch),
+            "Can only directly compute loss from MaskedBatch"
+        )
+        logits, masked_batch = mlm_forward(
+            batch=batch,
+            model_wrapper=model_wrapper,
+            task=task,
+        )
+        loss = loss_criterion(
+            logits.view(-1, model_wrapper.model.config.vocab_size),
+            masked_batch.masked_lm_labels.view(-1),
+        )
+    else:
+        raise TypeError(type(task))
+    return logits, loss
+
+
 def mlm_forward(batch, model_wrapper: ModelWrapper, task):
-
-    return logits
-
-
-def mlm_compute_loss(logits, )
+    if isinstance(batch, mlm_lib.Batch):
+        masked_batch = batch.get_masked(
+            mlm_probability=task.mlm_probability,
+            tokenizer=model_wrapper.tokenizer,
+        )
+    elif isinstance(batch, mlm_lib.MaskedBatch):
+        masked_batch = batch
+    else:
+        raise TypeError(type(batch))
+    logits = model_wrapper.model(
+        input_ids=masked_batch.masked_input_ids,
+        token_type_ids=masked_batch.segment_ids,
+        attention_mask=masked_batch.input_mask,
+        # masked_lm_labels=masked_batch.masked_lm_labels,
+    )[0]
+    return logits, masked_batch
 
 
 def qa_compute_loss(logits, start_positions, end_positions):
