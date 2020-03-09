@@ -23,6 +23,7 @@ class ClassificationHead(BaseHead):
         self.dense = nn.Linear(hidden_size, hidden_size)
         self.dropout = nn.Dropout(hidden_dropout_prob)
         self.out_proj = nn.Linear(hidden_size, num_labels)
+        self.num_labels = num_labels
 
     def forward(self, pooled):
         x = self.dropout(pooled)

@@ -28,7 +28,10 @@ class ClassificationModel(Submodel):
         logits = self.classification_head(pooled=encoder_output.pooled)
         if compute_loss:
             loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), batch.label_ids.view(-1))
+            loss = loss_fct(
+                logits.view(-1, self.classification_head.num_labels),
+                batch.label_id.view(-1),
+            )
             return logits, loss
         else:
             return logits
@@ -47,7 +50,7 @@ class RegressionModel(Submodel):
         scores = self.regression_head(pooled=encoder_output.pooled)
         if compute_loss:
             loss_fct = nn.MSELoss()
-            loss = loss_fct(scores.view(-1), batch.label_ids.view(-1))
+            loss = loss_fct(scores.view(-1), batch.label_id.view(-1))
             return scores, loss
         else:
             return scores
@@ -82,7 +85,10 @@ class MultipleChoiceModel(Submodel):
 
         if compute_loss:
             loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), batch.label_ids.view(-1))
+            loss = loss_fct(
+                logits.view(-1, self.choice_scoring_head.num_labels),
+                batch.label_ids.view(-1),
+            )
             return logits, loss
         else:
             return logits
@@ -107,7 +113,7 @@ class SpanComparisonModel(Submodel):
             loss_fct = nn.CrossEntropyLoss()
             loss = loss_fct(
                 logits.view(-1, self.span_comparison_head.num_labels),
-                batch.label_ids.view(-1),
+                batch.label_id.view(-1),
             )
             return logits, loss
         else:
@@ -131,7 +137,10 @@ class TokenClassificationModel(Submodel):
         )
         if compute_loss:
             loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), batch.label_ids.view(-1))
+            loss = loss_fct(
+                logits.view(-1, self.token_classification_head.num_labels),
+                batch.label_ids.view(-1),
+            )
             return logits, loss
         else:
             return logits
@@ -175,7 +184,10 @@ class MLMModel(Submodel):
         )
         logits = self.mlm_head(unpooled=encoder_output.unpooled)
         if compute_loss:
-            loss = compute_mlm_loss(logits=logits, masked_lm_labels=masked_batch.masked_lm_labels)
+            loss = compute_mlm_loss(
+                logits=logits,
+                masked_lm_labels=masked_batch.masked_lm_labels,
+            )
             return logits, loss
         else:
             return logits

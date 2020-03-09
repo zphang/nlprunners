@@ -1,78 +1,37 @@
-import collections as col
-from dataclasses import dataclass
 from typing import Union
+
+import torch
 
 from pyutils.display import maybe_tqdm, maybe_trange
 
 from nlpr.shared.runner import (
     BaseRunner,
-    complex_backpropagate,
+)
+from nlpr.proj.simple.runner import (
+    RunnerParameters,
     TrainGlobalState,
+    complex_backpropagate,
     optim_step_grad_accum,
-    run_val,
-    run_test,
     get_train_dataloader_from_cache,
     get_eval_dataloader_from_cache,
 )
-from nlpr.shared.modeling.models import delegate_forward_and_compute_loss
 from nlpr.shared.train_setup import TrainSchedule
+from nlpr.shared.jiant_style_model.primary import JiantStyleModel
+import nlpr.tasks.evaluate as evaluate
 
 
-@dataclass
-class RunnerParameters:
-    feat_spec: int
-    local_rank: int
-    n_gpu: int
-    fp16: bool
-    learning_rate: float
-    eval_batch_size: int
-    max_grad_norm: float
-
-
-class SimpleTaskRunner(BaseRunner):
-    def __init__(self, task, model_wrapper, optimizer_scheduler, loss_criterion,
+class JiantSingleTaskRunner(BaseRunner):
+    def __init__(self, task, jiant_model: JiantStyleModel, optimizer_scheduler, loss_criterion,
                  device, rparams: RunnerParameters, train_schedule: Union[TrainSchedule, None],
                  log_writer):
         self.task = task
-        self.model_wrapper = model_wrapper
+        self.jiant_model = jiant_model
         self.optimizer_scheduler = optimizer_scheduler
         self.loss_criterion = loss_criterion
         self.device = device
         self.rparams = rparams
         self.train_schedule = train_schedule
         self.log_writer = log_writer
-
-        # Convenience
-        self.model = self.model_wrapper.model
-
-    def run_train(self, train_cache, val_cache, val_labels_cache, verbose=True):
-        train_dataloader = self.get_train_dataloader(train_cache)
-        train_global_state = TrainGlobalState()
-
-        for epoch_i in \
-                maybe_trange(int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
-            train_global_state.epoch = epoch_i
-            self.run_train_epoch(train_dataloader, train_global_state)
-            results = self.run_val(val_cache=val_cache, val_labels_cache=val_labels_cache)
-            self.log_writer.write_entry("val_metric", {
-                "epoch": train_global_state.epoch,
-                "metric": results["metrics"].asdict(),
-            })
-            self.log_writer.flush()
-
-    def run_train_val(self, train_cache, val_cache, val_labels_cache, verbose=True):
-        epoch_result_dict = col.OrderedDict()
-        train_global_state = TrainGlobalState()
-        for epoch_i in maybe_trange(
-                int(self.train_schedule.num_train_epochs), desc="Epoch", verbose=verbose):
-            train_global_state.epoch = epoch_i
-            train_dataloader = self.get_train_dataloader(train_cache)
-            self.run_train_epoch(train_dataloader, train_global_state)
-            epoch_result = self.run_val(val_cache=val_cache, val_labels_cache=val_labels_cache)
-            del epoch_result["logits"]
-            epoch_result["metrics"] = epoch_result["metrics"].asdict()
-            epoch_result_dict[epoch_i] = epoch_result
-        return epoch_result_dict
 
     def run_train_epoch(self, train_dataloader, train_global_state, verbose=True):
         for _ in self.run_train_epoch_context(
@@ -92,15 +51,13 @@ class SimpleTaskRunner(BaseRunner):
         train_global_state.step_epoch()
 
     def run_train_step(self, batch, train_global_state):
-        self.model.train()
+        self.jiant_model.train()
         batch = batch.to(self.device)
-        logits, loss = delegate_forward_and_compute_loss(
-            model_wrapper=self.model_wrapper,
+        logits, loss = self.jiant_model(
             batch=batch,
             task=self.task,
-            loss_criterion=self.loss_criterion,
+            compute_loss=True,
         )
-
         loss = self.complex_backpropagate(loss)
         loss_val = loss.item()
         optim_step_grad_accum(
@@ -113,8 +70,6 @@ class SimpleTaskRunner(BaseRunner):
             "epoch_step": train_global_state.epoch_step,
             "global_step": train_global_state.global_step,
             "loss_val": loss_val,
-            # TODO: Why is this here?
-            # "pred_entropy": compute_pred_entropy_clean(logits)
         })
 
     def run_val(self, val_cache, val_labels_cache, subset_num=None, verbose=True):
@@ -124,20 +79,10 @@ class SimpleTaskRunner(BaseRunner):
                 subset_num=subset_num
             ),
             val_labels=val_labels_cache.get_all()[:subset_num],
-            model_wrapper=self.model_wrapper,
+            jiant_model=self.jiant_model,
             task=self.task,
-            loss_criterion=self.loss_criterion,
             device=self.device,
             local_rank=self.rparams.local_rank,
-            verbose=verbose,
-        )
-
-    def run_test(self, test_cache, verbose=True):
-        return run_test(
-            test_dataloader=self.get_eval_dataloader(test_cache),
-            model_wrapper=self.model_wrapper,
-            task=self.task,
-            device=self.device,
             verbose=verbose,
         )
 
@@ -162,9 +107,60 @@ class SimpleTaskRunner(BaseRunner):
         return complex_backpropagate(
             loss=loss,
             optimizer=self.optimizer_scheduler.optimizer,
-            model=self.model,
+            model=self.jiant_model,
             fp16=self.rparams.fp16,
             n_gpu=self.rparams.n_gpu,
             gradient_accumulation_steps=self.train_schedule.gradient_accumulation_steps,
             max_grad_norm=self.rparams.max_grad_norm,
         )
+
+
+def run_val(val_dataloader,
+            val_labels,
+            jiant_model: JiantStyleModel,
+            task,
+            device, local_rank, verbose):
+    # Reminder:
+    #   val_dataloader contains mostly PyTorch-relevant info
+    #   val_labels might contain more details information needed for full evaluation
+    if not local_rank == -1:
+        return
+    jiant_model.eval()
+    total_eval_loss = 0
+    nb_eval_steps, nb_eval_examples = 0, 0
+    evaluation_scheme = evaluate.get_evaluation_scheme_for_task(task=task)
+    eval_accumulator = evaluation_scheme.get_accumulator()
+
+    for step, (batch, batch_metadata) in enumerate(
+            maybe_tqdm(val_dataloader, desc="Evaluating (Val)", verbose=verbose)):
+        batch = batch.to(device)
+
+        with torch.no_grad():
+            batch_logits, batch_loss = jiant_model(
+                batch=batch,
+                task=task,
+                compute_loss=True,
+            )
+        batch_logits = batch_logits.detach().cpu().numpy()
+        batch_loss = batch_loss.mean().item()
+        total_eval_loss += batch_loss
+        eval_accumulator.update(
+            batch_logits=batch_logits,
+            batch_loss=batch_loss,
+            batch=batch,
+        )
+
+        nb_eval_examples += len(batch)
+        nb_eval_steps += 1
+    eval_loss = total_eval_loss / nb_eval_steps
+
+    return {
+        "accumulator": eval_accumulator,
+        "loss": eval_loss,
+        "metrics": evaluation_scheme.compute_metrics_from_accumulator(
+            task=task,
+            accumulator=eval_accumulator,
+            labels=val_labels,
+            tokenizer=jiant_model.tokenizer,
+        ),
+    }

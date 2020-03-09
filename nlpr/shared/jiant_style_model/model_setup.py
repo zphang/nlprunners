@@ -1,7 +1,11 @@
 from dataclasses import dataclass
 from typing import Any
 
+import torch
+import torch.nn as nn
 import transformers as ptt
+
+import pyutils.strings as strings
 
 import nlpr.shared.model_setup as model_setup
 import nlpr.shared.jiant_style_model.primary as primary
@@ -11,7 +15,7 @@ from nlpr.shared.model_setup import ModelArchitectures
 from nlpr.tasks import TaskTypes
 
 
-def setup_jiant_style_model(model_type, config_path, tokenizer_path, task_dict):
+def setup_jiant_style_model(model_type, model_config_path, tokenizer_path, task_dict):
     model_arch = ModelArchitectures.from_model_type(model_type)
     ptt_class_spec = PTT_CLASS_SPEC_DICT[model_arch]
     tokenizer = model_setup.get_tokenizer(
@@ -21,25 +25,72 @@ def setup_jiant_style_model(model_type, config_path, tokenizer_path, task_dict):
     )
     ancestor_model = get_ancestor_model(
         ptt_class_spec=ptt_class_spec,
-        config_path=config_path,
+        model_config_path=model_config_path,
     )
+    encoder = get_encoder(model_arch=model_arch, ancestor_model=ancestor_model)
     submodels_dict = {
         task_name: create_submodel(
             task=task,
             model_arch=model_arch,
-            ancestor_model=ancestor_model,
+            encoder=encoder,
         )
         for task_name, task in task_dict.items()
     }
     return primary.JiantStyleModel(
         task_dict=task_dict,
+        encoder=encoder,
         submodels_dict=submodels_dict,
         tokenizer=tokenizer,
     )
 
 
-def create_submodel(task, model_arch, ancestor_model) -> submodels.Submodel:
-    encoder = get_encoder(model_arch=model_arch, ancestor_model=ancestor_model)
+def setup_jiant_style_model_single(model_type, model_config_path, tokenizer_path, task):
+    return setup_jiant_style_model(
+        model_type=model_type,
+        model_config_path=model_config_path,
+        tokenizer_path=tokenizer_path,
+        task_dict={
+            task.name: task,
+        }
+    )
+
+
+def delegate_load_from_path(jiant_model: primary.JiantStyleModel, weights_path: str, load_mode: str):
+    weights_dict = torch.load(weights_path)
+    return delegate_load(
+        jiant_model=jiant_model,
+        weights_dict=weights_dict,
+        load_mode=load_mode,
+    )
+
+
+def delegate_load(jiant_model, weights_dict: dict, load_mode: str):
+    if load_mode == "from_ptt":
+        return load_encoder_from_ptt_weights(
+            encoder=jiant_model.encoder,
+            weights_dict=weights_dict,
+        )
+    elif load_mode == "all":
+        jiant_model.load_state_dict(weights_dict)
+    else:
+        raise KeyError(load_mode)
+
+
+def load_encoder_from_ptt_weights(encoder: nn.Module, weights_dict: dict, return_remainder=False):
+    remainder_weights_dict = {}
+    load_weights_dict = {}
+    encoder_prefix = MODEL_PREFIX[get_model_arch_from_encoder(encoder=encoder)] + "."
+    for k, v in weights_dict.items():
+        if k.startswith(encoder_prefix):
+            load_weights_dict[strings.remove_prefix(k, encoder_prefix)] = v
+        else:
+            remainder_weights_dict[k] = v
+    encoder = encoder.load_state_dict(load_weights_dict)
+    if return_remainder:
+        return remainder_weights_dict
+
+
+def create_submodel(task, model_arch, encoder) -> submodels.Submodel:
     if task.TASK_TYPE == TaskTypes.CLASSIFICATION:
         classification_head = heads.ClassificationHead(
             hidden_size=encoder.config.hidden_size,
@@ -164,7 +215,25 @@ PTT_CLASS_SPEC_DICT = {
 }
 
 
-def get_ancestor_model(ptt_class_spec, config_path):
-    config = ptt_class_spec.config_class.from_json_file(config_path)
+def get_model_arch_from_encoder(encoder: nn.Module) -> ModelArchitectures:
+    if type(encoder) is ptt.BertModel:
+        return ModelArchitectures.BERT
+    elif type(encoder) is ptt.RobertaModel:
+        return ModelArchitectures.ROBERTA
+    elif type(encoder) is ptt.AlbertModel:
+        return ModelArchitectures.ALBERT
+    else:
+        raise KeyError(type(encoder))
+
+
+MODEL_PREFIX = {
+    ModelArchitectures.BERT: "bert",
+    ModelArchitectures.ROBERTA: "roberta",
+    ModelArchitectures.ALBERT: "albert",
+}
+
+
+def get_ancestor_model(ptt_class_spec, model_config_path):
+    config = ptt_class_spec.config_class.from_json_file(model_config_path)
     model = ptt_class_spec.model_class(config)
     return model

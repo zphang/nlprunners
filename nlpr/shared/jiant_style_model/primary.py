@@ -9,10 +9,12 @@ import nlpr.shared.jiant_style_model.submodels as submodels
 class JiantStyleModel(nn.Module):
     def __init__(self,
                  task_dict: Dict[str, tasks.Task],
+                 encoder: nn.Module,
                  submodels_dict: Dict[str, submodels.Submodel],
                  tokenizer):
         super().__init__()
         self.task_dict = task_dict
+        self.encoder = encoder
         self.submodels_dict = nn.ModuleDict(submodels_dict)
         self.tokenizer = tokenizer
 
@@ -30,4 +32,3 @@ class JiantStyleModel(nn.Module):
             tokenizer=self.tokenizer,
             compute_loss=compute_loss,
         )
-

@@ -339,43 +339,56 @@ def resolve_warmup_steps(t_total, warmup_steps, warmup_proportion):
         raise RuntimeError()
 
 
-def fp16ize(model_wrapper, optimizer_scheduler, fp16_opt_level):
+def fp16ize(model, optimizer, fp16_opt_level):
     try:
         from apex import amp
     except ImportError:
         raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
     model, optimizer = amp.initialize(
-        model_wrapper.model,
-        optimizer_scheduler.optimizer,
+        model,
+        optimizer,
         opt_level=fp16_opt_level
     )
-    model_wrapper.model = model
-    optimizer_scheduler.optimizer = optimizer
+    return model, optimizer
 
 
-def parallelize_gpu(model_wrapper):
-    model_wrapper.model = torch.nn.DataParallel(model_wrapper.model)
+def parallelize_gpu(model):
+    return torch.nn.DataParallel(model)
 
 
-def parallelize_dist(model_wrapper, local_rank):
-    model_wrapper.model = torch.nn.parallel.DistributedDataParallel(
-        model_wrapper.model,
+def parallelize_dist(model, local_rank):
+    return torch.nn.parallel.DistributedDataParallel(
+        model,
         device_ids=[local_rank],
         output_device=local_rank,
         find_unused_parameters=True,
     )
 
 
-def special_model_setup(model_wrapper, optimizer_scheduler,
-                        fp16, fp16_opt_level,
-                        n_gpu, local_rank):
+def raw_special_model_setup(model, optimizer,
+                            fp16, fp16_opt_level,
+                            n_gpu, local_rank):
     if fp16:
-        fp16ize(
-            model_wrapper=model_wrapper,
-            optimizer_scheduler=optimizer_scheduler,
+        model, optimizer = fp16ize(
+            model=model,
+            optimizer=optimizer,
             fp16_opt_level=fp16_opt_level
         )
     if n_gpu > 1:
-        parallelize_gpu(model_wrapper=model_wrapper)
+        model = parallelize_gpu(model=model)
     if local_rank != -1:
-        parallelize_dist(model_wrapper=model_wrapper, local_rank=local_rank)
+        model = parallelize_dist(model=model, local_rank=local_rank)
+    return model, optimizer
+
+
+def special_model_setup(model_wrapper, optimizer_scheduler,
+                        fp16, fp16_opt_level,
+                        n_gpu, local_rank):
+    model, optimizer = raw_special_model_setup(
+        model=model_wrapper.model,
+        optimizer=optimizer_scheduler.optimizer,
+        fp16=fp16, fp16_opt_level=fp16_opt_level,
+        n_gpu=n_gpu, local_rank=local_rank,
+    )
+    model_wrapper.model = model
+    optimizer_scheduler.optimizer = optimizer
