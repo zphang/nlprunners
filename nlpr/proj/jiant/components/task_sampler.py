@@ -4,7 +4,7 @@ import numpy as np
 from typing import Union, Optional
 
 
-class BaseMultiTaskScheduler(metaclass=abc.ABCMeta):
+class BaseMultiTaskSampler(metaclass=abc.ABCMeta):
     def __init__(self,
                  task_dict: dict, rng: Union[int, np.random.RandomState, None]
                  ):
@@ -20,14 +20,14 @@ class BaseMultiTaskScheduler(metaclass=abc.ABCMeta):
         yield self.pop()
 
 
-class UniformMultiTaskScheduler(BaseMultiTaskScheduler):
+class UniformMultiTaskSampler(BaseMultiTaskSampler):
 
     def pop(self):
         task_name = self.rng.choice(self.task_dict)
         return task_name, self.task_dict[task_name]
 
 
-class ProportionalMultiTaskScheduler(BaseMultiTaskScheduler):
+class ProportionalMultiTaskSampler(BaseMultiTaskSampler):
 
     def __init__(self,
                  task_dict: dict, rng: Union[int, np.random.RandomState],
@@ -44,7 +44,7 @@ class ProportionalMultiTaskScheduler(BaseMultiTaskScheduler):
         return task_name, self.task_dict[task_name]
 
 
-class TemperatureMultiTaskScheduler(BaseMultiTaskScheduler):
+class TemperatureMultiTaskSampler(BaseMultiTaskSampler):
 
     def __init__(self,
                  task_dict: dict, rng: Union[int, np.random.RandomState],
@@ -66,24 +66,24 @@ class TemperatureMultiTaskScheduler(BaseMultiTaskScheduler):
         return task_name, self.task_dict[task_name]
 
 
-def create_scheduler(init_dict: dict,
-                     task_dict: dict,
-                     task_to_examples_dict: dict,
-                     rng=None) -> BaseMultiTaskScheduler:
-    scheduler_type = init_dict["scheduler_type"]
-    if scheduler_type == "UniformMultiTaskScheduler":
+def create_sampler(init_dict: dict,
+                   task_dict: dict,
+                   task_to_examples_dict: dict,
+                   rng=None) -> BaseMultiTaskSampler:
+    sampler_type = init_dict["sampler_type"]
+    if sampler_type == "UniformMultiTaskSampler":
         assert len(init_dict) == 1
-        return UniformMultiTaskScheduler(task_dict=task_dict, rng=rng)
-    elif scheduler_type == "ProportionalMultiTaskScheduler":
+        return UniformMultiTaskSampler(task_dict=task_dict, rng=rng)
+    elif sampler_type == "ProportionalMultiTaskSampler":
         assert len(init_dict) == 1
-        return ProportionalMultiTaskScheduler(
+        return ProportionalMultiTaskSampler(
             task_dict=task_dict,
             rng=rng,
             task_to_examples_dict=task_to_examples_dict,
         )
-    elif scheduler_type == "TemperatureMultiTaskScheduler":
+    elif sampler_type == "TemperatureMultiTaskSampler":
         assert len(init_dict) == 3
-        return TemperatureMultiTaskScheduler(
+        return TemperatureMultiTaskSampler(
             task_dict=task_dict,
             rng=rng,
             task_to_examples_dict=task_to_examples_dict,
@@ -91,4 +91,4 @@ def create_scheduler(init_dict: dict,
             examples_cap=init_dict["examples_cap"],
         )
     else:
-        raise KeyError(scheduler_type)
+        raise KeyError(sampler_type)
