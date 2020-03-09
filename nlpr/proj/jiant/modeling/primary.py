@@ -3,7 +3,7 @@ from typing import Dict
 import torch.nn as nn
 
 import nlpr.tasks as tasks
-import nlpr.shared.jiant_style_model.submodels as submodels
+import nlpr.proj.jiant.modeling.submodels as submodels
 
 
 class JiantStyleModel(nn.Module):

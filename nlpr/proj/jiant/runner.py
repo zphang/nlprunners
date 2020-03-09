@@ -2,7 +2,7 @@ from typing import Union
 
 import torch
 
-from pyutils.display import maybe_tqdm, maybe_trange
+from pyutils.display import maybe_tqdm
 
 from nlpr.shared.runner import (
     BaseRunner,
@@ -16,7 +16,7 @@ from nlpr.proj.simple.runner import (
     get_eval_dataloader_from_cache,
 )
 from nlpr.shared.train_setup import TrainSchedule
-from nlpr.shared.jiant_style_model.primary import JiantStyleModel
+from nlpr.proj.jiant.modeling.primary import JiantStyleModel
 import nlpr.tasks.evaluate as evaluate
 
 
@@ -32,6 +32,8 @@ class JiantSingleTaskRunner(BaseRunner):
         self.rparams = rparams
         self.train_schedule = train_schedule
         self.log_writer = log_writer
+
+        self.model = self.jiant_model
 
     def run_train_epoch(self, train_dataloader, train_global_state, verbose=True):
         for _ in self.run_train_epoch_context(

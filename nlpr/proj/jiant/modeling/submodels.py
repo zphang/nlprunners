@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
-import nlpr.shared.jiant_style_model.heads as heads
+import nlpr.proj.jiant.modeling.heads as heads
 
 
 class Submodel(nn.Module, metaclass=abc.ABCMeta):

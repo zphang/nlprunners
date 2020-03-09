@@ -192,7 +192,7 @@ class ChunkedFilesDataCache(DataCache):
     def get_all(self):
         data = []
         for i in range(self.num_chunks):
-            data += self.load_chunk(i)
+            data += list(self.load_chunk(i))
         return data
 
     def iter_all(self):

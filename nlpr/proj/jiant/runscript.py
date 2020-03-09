@@ -13,7 +13,7 @@ import nlpr.tasks.evaluate as evaluate
 import nlpr.proj.simple.runner as simple_runner
 import nlpr.shared.metarunner as metarunner
 import nlpr.shared.caching as caching
-import nlpr.shared.jiant_style_model.model_setup as jiant_model_setup
+import nlpr.proj.jiant.modeling.model_setup as jiant_model_setup
 import nlpr.proj.jiant.runner as jiant_runner
 
 
@@ -106,7 +106,6 @@ def main(args):
             n_gpu=quick_init_out.n_gpu,
         )
         quick_init_out.log_writer.write_entry("text", f"t_total: {train_schedule.t_total}", do_print=True)
-        loss_criterion = train_setup.resolve_loss_function(task_type=task.TASK_TYPE)
         optimizer_scheduler = model_setup.create_optimizer(
             model=jiant_model,
             learning_rate=args.learning_rate,
@@ -139,7 +138,7 @@ def main(args):
             task=task,
             jiant_model=jiant_model,
             optimizer_scheduler=optimizer_scheduler,
-            loss_criterion=loss_criterion,
+            loss_criterion=None,
             device=quick_init_out.device,
             rparams=rparams,
             train_schedule=train_schedule,

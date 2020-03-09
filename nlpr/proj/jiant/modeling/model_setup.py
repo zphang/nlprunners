@@ -8,9 +8,9 @@ import transformers as ptt
 import pyutils.strings as strings
 
 import nlpr.shared.model_setup as model_setup
-import nlpr.shared.jiant_style_model.primary as primary
-import nlpr.shared.jiant_style_model.submodels as submodels
-import nlpr.shared.jiant_style_model.heads as heads
+import nlpr.proj.jiant.modeling.primary as primary
+import nlpr.proj.jiant.modeling.submodels as submodels
+import nlpr.proj.jiant.modeling.heads as heads
 from nlpr.shared.model_setup import ModelArchitectures
 from nlpr.tasks import TaskTypes
 
@@ -85,7 +85,7 @@ def load_encoder_from_ptt_weights(encoder: nn.Module, weights_dict: dict, return
             load_weights_dict[strings.remove_prefix(k, encoder_prefix)] = v
         else:
             remainder_weights_dict[k] = v
-    encoder = encoder.load_state_dict(load_weights_dict)
+    encoder.load_state_dict(load_weights_dict)
     if return_remainder:
         return remainder_weights_dict
 

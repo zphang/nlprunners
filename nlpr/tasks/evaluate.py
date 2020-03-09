@@ -612,7 +612,7 @@ def get_label_ids(task, examples):
 
 
 def get_label_id_from_data_row(task, data_row):
-    return task.LABEL_BIMAP.a[data_row.label_id]
+    return data_row.label_id
 
 
 def get_label_ids_from_cache(task, cache):
@@ -638,7 +638,7 @@ def get_multiple_choice_label_ids_from_examples(task, examples):
 
 
 def get_multiple_choice_label_id_from_data_row(data_row, task):
-    return task.CHOICE_BIMAP.a[data_row.label_id]
+    return data_row.label_id
 
 
 def get_multiple_choice_labels_from_cache(task, cache):
