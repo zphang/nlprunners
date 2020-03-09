@@ -99,6 +99,29 @@ class BaseMLMHead(BaseHead, metaclass=abc.ABCMeta):
     pass
 
 
+class BertMLMHead(BaseMLMHead):
+    """From BertOnlyMLMHead, BertLMPredictionHead, BertPredictionHeadTransform"""
+
+    def __init__(self, hidden_size, vocab_size, layer_norm_eps=1e-12, hidden_act="gelu"):
+        super().__init__()
+        self.dense = nn.Linear(hidden_size, hidden_size)
+        self.transform_act_fn = ptt.modeling_bert.ACT2FN[hidden_act]
+        self.LayerNorm = ptt.modeling_bert.BertLayerNorm(hidden_size, eps=layer_norm_eps)
+
+        self.decoder = nn.Linear(hidden_size, vocab_size, bias=False)
+        self.bias = nn.Parameter(torch.zeros(vocab_size), requires_grad=True)
+
+        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def forward(self, unpooled):
+        hidden_states = self.dense(unpooled)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        logits = self.decoder(hidden_states) + self.bias
+        return logits
+
+
 class RobertaMLMHead(BaseMLMHead):
     """From RobertaLMHead"""
 
@@ -125,6 +148,15 @@ class RobertaMLMHead(BaseMLMHead):
 
 class AlbertMLMHead(nn.Module):
     """From AlbertMLMHead"""
+    def forward(self, unpooled):
+        hidden_states = self.dense(unpooled)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        hidden_states = self.decoder(hidden_states)
+
+        logits = hidden_states + self.bias
+        return logits
+
     def __init__(self, hidden_size, embedding_size, vocab_size, hidden_act="gelu"):
         super().__init__()
 
@@ -136,12 +168,3 @@ class AlbertMLMHead(nn.Module):
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
-
-    def forward(self, unpooled):
-        hidden_states = self.dense(unpooled)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
-        hidden_states = self.decoder(hidden_states)
-
-        logits = hidden_states + self.bias
-        return logits
