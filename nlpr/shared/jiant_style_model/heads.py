@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 
 import transformers as ptt
+from nlpr.ext.allennlp import SelfAttentiveSpanExtractor
 
 """
 In HuggingFace/others, these heads differ slightly across different encoder models.
@@ -12,8 +13,7 @@ We're going to abstract away from that and just choose one implementation.
 
 
 class BaseHead(nn.Module, metaclass=abc.ABCMeta):
-    def forward(self, pooled, unpooled, batch, compute_loss: bool):
-        raise NotImplementedError()
+    pass
 
 
 class ClassificationHead(BaseHead):
@@ -24,19 +24,13 @@ class ClassificationHead(BaseHead):
         self.dropout = nn.Dropout(hidden_dropout_prob)
         self.out_proj = nn.Linear(hidden_size, num_labels)
 
-    def forward(self, pooled, unpooled, batch, compute_loss: bool):
+    def forward(self, pooled):
         x = self.dropout(pooled)
         x = self.dense(x)
         x = torch.tanh(x)
         x = self.dropout(x)
         logits = self.out_proj(x)
-
-        if compute_loss:
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), batch.label_ids.view(-1))
-            return logits, loss
-        else:
-            return logits
+        return logits
 
 
 class RegressionHead(BaseHead):
@@ -47,19 +41,58 @@ class RegressionHead(BaseHead):
         self.dropout = nn.Dropout(hidden_dropout_prob)
         self.out_proj = nn.Linear(hidden_size, 1)
 
-    def forward(self, pooled, unpooled, batch, compute_loss: bool):
+    def forward(self, pooled):
         x = self.dropout(pooled)
         x = self.dense(x)
         x = torch.tanh(x)
         x = self.dropout(x)
-        logits = self.out_proj(x)
+        scores = self.out_proj(x)
+        return scores
 
-        if compute_loss:
-            loss_fct = nn.MSELoss()
-            loss = loss_fct(logits.view(-1), batch.label_ids.view(-1))
-            return logits, loss
-        else:
-            return logits
+
+class SpanComparisonHead(BaseHead):
+    def __init__(self, hidden_size, num_spans, num_labels):
+        """From RobertaForSpanComparisonClassification """
+        super().__init__()
+        self.num_spans = num_spans
+        self.num_labels = num_labels
+        self.span_attention_extractor = SelfAttentiveSpanExtractor(hidden_size)
+        self.classifier = nn.Linear(hidden_size * self.num_spans, self.num_labels)
+
+    def forward(self, unpooled, spans):
+        span_embeddings = self.span_attention_extractor(unpooled, spans)
+        span_embeddings = span_embeddings.view(-1, self.num_spans * self.config.hidden_size)
+        span_embeddings = self.dropout(span_embeddings)
+        logits = self.classifier(span_embeddings)
+        return logits
+
+
+class TokenClassificationHead(BaseHead):
+    def __init__(self, hidden_size, num_labels, hidden_dropout_prob):
+        """From RobertaForTokenClassification """
+        super().__init__()
+        self.num_labels = num_labels
+        self.dropout = nn.Dropout(hidden_dropout_prob)
+        self.classifier = nn.Linear(hidden_size, num_labels)
+
+    def forward(self, unpooled):
+        unpooled = self.dropout(unpooled)
+        logits = self.classifier(unpooled)
+        return logits
+
+
+class QAHead(BaseHead):
+    def __init__(self, hidden_size):
+        """From RobertaForQuestionAnswering """
+        super().__init__()
+        self.qa_outputs = nn.Linear(hidden_size, 2)
+
+    def forward(self, unpooled):
+        logits = self.qa_outputs(unpooled)
+        # bs x seq_len x 2
+        logits = logits.permute(0, 2, 1).unsqueeze(1)
+        # bs x 2 x seq_len x 1
+        return logits
 
 
 class BaseMLMHead(BaseHead, metaclass=abc.ABCMeta):
@@ -80,19 +113,14 @@ class RobertaMLMHead(BaseMLMHead):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def forward(self, pooled, unpooled, batch, compute_loss: bool):
+    def forward(self, unpooled):
         x = self.dense(unpooled)
         x = ptt.modeling_bert.gelu(x)
         x = self.layer_norm(x)
 
         # project back to size of vocabulary with bias
         logits = self.decoder(x) + self.bias
-
-        if compute_loss:
-            masked_lm_loss = compute_mlm_loss(logits=logits, masked_lm_labels=batch.masked_lm_labels)
-            return logits, masked_lm_loss
-        else:
-            return logits
+        return logits
 
 
 class AlbertMLMHead(nn.Module):
@@ -109,25 +137,11 @@ class AlbertMLMHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def forward(self, pooled, unpooled, batch, compute_loss: bool):
+    def forward(self, unpooled):
         hidden_states = self.dense(unpooled)
         hidden_states = self.activation(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
         hidden_states = self.decoder(hidden_states)
 
         logits = hidden_states + self.bias
-
-        if compute_loss:
-            masked_lm_loss = compute_mlm_loss(logits=logits, masked_lm_labels=batch.masked_lm_labels)
-            return logits, masked_lm_loss
-        else:
-            return logits
-
-
-def compute_mlm_loss(logits, masked_lm_labels):
-    vocab_size = logits.shape(-1)
-    loss_fct = nn.CrossEntropyLoss()
-    return loss_fct(
-        logits.view(-1, vocab_size),
-        masked_lm_labels.view(-1)
-    )
+        return logits
