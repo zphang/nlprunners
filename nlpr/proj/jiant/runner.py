@@ -1,110 +1,175 @@
-from typing import Optional
+from dataclasses import dataclass
 
 import torch
 
 from pyutils.display import maybe_tqdm
+from pyutils.datastructures import InfiniteYield
 
 from nlpr.shared.runner import (
     BaseRunner,
 )
 from nlpr.proj.simple.runner import (
-    RunnerParameters,
-    TrainGlobalState,
     complex_backpropagate,
-    optim_step_grad_accum,
     get_train_dataloader_from_cache,
     get_eval_dataloader_from_cache,
 )
-from nlpr.shared.train_setup import TrainSchedule
+import nlpr.shared.pycore as pycore
 from nlpr.proj.jiant.modeling.primary import JiantStyleModel
 import nlpr.tasks.evaluate as evaluate
+from nlpr.proj.jiant.components.task_setup import JiantTaskContainer
+from nlpr.constants import PHASE
+
+
+@dataclass
+class RunnerParameters(pycore.ExtendedDataClassMixin):
+    local_rank: int
+    n_gpu: int
+    fp16: bool
+    max_grad_norm: float
+
+
+@dataclass
+class GlobalTrainConfig(pycore.ExtendedDataClassMixin):
+    max_steps: int
+    warmup_steps: int
+
+
+class TrainState:
+    def __init__(self, task_name_list):
+        self.global_steps = 0
+        self.task_steps = {
+            task_name: 0
+            for task_name in task_name_list
+        }
+
+    def step(self, task_name):
+        self.task_steps[task_name] += 1
+        self.global_steps += 1
 
 
 class JiantRunner(BaseRunner):
-    def __init__(self, task, jiant_model: JiantStyleModel, optimizer_scheduler,
-                 device, rparams: RunnerParameters, train_schedule: Optional[TrainSchedule],
+    def __init__(self,
+                 jiant_task_container: JiantTaskContainer,
+                 jiant_model: JiantStyleModel,
+                 optimizer_scheduler,
+                 device,
+                 global_train_config: GlobalTrainConfig,
+                 rparams: RunnerParameters,
                  log_writer):
-        self.task = task
+        self.jiant_task_container = jiant_task_container
         self.jiant_model = jiant_model
         self.optimizer_scheduler = optimizer_scheduler
         self.device = device
+        self.global_train_config = global_train_config
         self.rparams = rparams
-        self.train_schedule = train_schedule
         self.log_writer = log_writer
 
         self.model = self.jiant_model
 
-    def run_train_epoch_context(self, train_dataloader,
-                                train_global_state: TrainGlobalState, verbose=True):
-        for batch, batch_metadata in maybe_tqdm(train_dataloader, desc="Training", verbose=verbose):
-            self.run_train_step(
-                batch=batch,
-                train_global_state=train_global_state,
-            )
-            yield batch, train_global_state
-        train_global_state.step_epoch()
+    def run_train_context(self, verbose=True):
+        train_dataloader_dict = self.get_train_dataloader_dict()
+        train_state = TrainState(list(self.jiant_task_container.task_dict))
+        for _ in maybe_tqdm(range(self.global_train_config.max_steps), desc="Training", verbose=verbose):
+            self.run_train_step(train_dataloader_dict=train_dataloader_dict, train_state=train_state, )
+            yield train_state
 
-    def run_train_step(self, batch, train_global_state):
+    def run_train_step(self, train_dataloader_dict: dict, train_state: TrainState):
         self.jiant_model.train()
-        batch = batch.to(self.device)
-        logits, loss = self.jiant_model(
-            batch=batch,
-            task=self.task,
-            compute_loss=True,
-        )
-        loss = self.complex_backpropagate(loss)
-        loss_val = loss.item()
-        optim_step_grad_accum(
-            optimizer_scheduler=self.optimizer_scheduler,
-            train_global_state=train_global_state,
-            gradient_accumulation_steps=self.train_schedule.gradient_accumulation_steps,
-        )
+        task_name, task = self.jiant_task_container.task_sampler.pop()
+        task_specific_config = self.jiant_task_container.task_specific_config[task_name]
+
+        loss_val = 0
+        for i in range(task_specific_config.gradient_accumulation_steps):
+            batch, batch_metadata = train_dataloader_dict[task_name].pop()
+            batch = batch.to(self.device)
+            logits, loss = self.jiant_model(
+                batch=batch,
+                task=task,
+                compute_loss=True,
+            )
+            loss = self.complex_backpropagate(
+                loss=loss,
+                gradient_accumulation_steps=task_specific_config.gradient_accumulation_steps,
+            )
+            loss_val += loss.item()
+
+        self.optimizer_scheduler.step()
+        self.optimizer_scheduler.optimizer.zero_grad()
+
+        train_state.step(task_name=task_name)
         self.log_writer.write_entry("loss_train", {
-            "epoch": train_global_state.epoch,
-            "epoch_step": train_global_state.epoch_step,
-            "global_step": train_global_state.global_step,
-            "loss_val": loss_val,
+            "task": task_name,
+            "task_step": train_state.task_steps[task_name],
+            "global_step": train_state.global_steps,
+            "loss_val": loss_val / task_specific_config.gradient_accumulation_steps,
         })
 
-    def run_val(self, val_cache, val_labels_cache, subset_num=None, verbose=True):
-        return run_val(
-            val_dataloader=self.get_eval_dataloader(
-                eval_cache=val_cache,
-                subset_num=subset_num
-            ),
-            val_labels=val_labels_cache.get_all()[:subset_num],
-            jiant_model=self.jiant_model,
-            task=self.task,
-            device=self.device,
-            local_rank=self.rparams.local_rank,
-            verbose=verbose,
-        )
+    def run_val(self, use_subset=None, verbose=True):
+        evaluate_dict = {}
+        val_dataloader_dict = self.get_val_dataloader_dict(use_subset=use_subset)
+        val_labels_dict = self.get_val_labels_dict(use_subset=use_subset)
+        for task_name, task in self.jiant_task_container.task_dict.items():
+            evaluate_dict[task_name] = run_val(
+                val_dataloader=val_dataloader_dict[task_name],
+                val_labels=val_labels_dict,
+                jiant_model=self.jiant_model,
+                task=task,
+                device=self.device,
+                local_rank=self.rparams.local_rank,
+                verbose=verbose,
+            )
 
-    def get_train_dataloader(self, train_cache):
+    def get_train_dataloader_dict(self):
         # Not currently supported distributed parallel
-        return get_train_dataloader_from_cache(
-            train_cache=train_cache,
-            task=self.task,
-            train_batch_size=self.train_schedule.train_batch_size,
-        )
+        train_dataloader_dict = {}
+        for task_name, task in self.jiant_task_container.task_dict.items():
+            train_cache = self.jiant_task_container.task_cache_dict[task_name][PHASE.TRAIN]
+            train_batch_size = self.jiant_task_container.task_specific_config[task_name].train_batch_size
+            train_dataloader_dict[task_name] = InfiniteYield(get_train_dataloader_from_cache(
+                train_cache=train_cache,
+                task=task,
+                train_batch_size=train_batch_size,
+            ))
+        return train_dataloader_dict
 
-    def get_eval_dataloader(self, eval_cache, subset_num=None, explicit_subset=None):
-        return get_eval_dataloader_from_cache(
-            eval_cache=eval_cache,
-            task=self.task,
-            subset_num=subset_num,
-            explicit_subset=explicit_subset,
-            eval_batch_size=self.rparams.eval_batch_size,
-        )
+    def _get_eval_dataloader_dict(self, phase, use_subset=False):
+        val_dataloader_dict = {}
+        for task_name, task in self.jiant_task_container.task_dict.items():
+            eval_cache = self.jiant_task_container.task_cache_dict[task_name][phase]
+            task_specific_config = self.jiant_task_container.task_specific_config[task_name]
+            val_dataloader_dict[task_name] = get_eval_dataloader_from_cache(
+                eval_cache=eval_cache,
+                task=task,
+                eval_batch_size=task_specific_config.eval_batch_size,
+                subset_num=task_specific_config.eval_subset_num if use_subset else None
+            )
+        return val_dataloader_dict
 
-    def complex_backpropagate(self, loss):
+    def get_val_dataloader_dict(self, use_subset=False):
+        return self._get_eval_dataloader_dict(phase=PHASE.VAL, use_subset=use_subset)
+
+    def get_val_labels_dict(self, use_subset=False):
+        val_labels_dict = {}
+        for task_name, task in self.jiant_task_container.task_dict.items():
+            task_specific_config = self.jiant_task_container.task_specific_config[task_name]
+            val_labels_cache = self.jiant_task_container.task_cache_dict[task_name]["val_labels"]
+            val_labels = val_labels_cache.get_all()
+            if use_subset:
+                val_labels = val_labels[task_specific_config.eval_subset_num]
+            val_labels_dict[task_name] = val_labels
+        return val_labels_dict
+
+    def get_test_dataloader_dict(self):
+        return self._get_eval_dataloader_dict(phase=PHASE.TEST)
+
+    def complex_backpropagate(self, loss, gradient_accumulation_steps):
         return complex_backpropagate(
             loss=loss,
             optimizer=self.optimizer_scheduler.optimizer,
             model=self.jiant_model,
             fp16=self.rparams.fp16,
             n_gpu=self.rparams.n_gpu,
-            gradient_accumulation_steps=self.train_schedule.gradient_accumulation_steps,
+            gradient_accumulation_steps=gradient_accumulation_steps,
             max_grad_norm=self.rparams.max_grad_norm,
         )
 

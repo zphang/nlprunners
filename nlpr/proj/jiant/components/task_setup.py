@@ -11,33 +11,20 @@ from nlpr.constants import PHASE
 
 
 @dataclass
+class TaskSpecificConfig(pycore.ExtendedDataClassMixin):
+    train_batch_size: int
+    eval_batch_size: int
+    gradient_accumulation_steps: int
+    eval_subset_num: int
+
+
+@dataclass
 class JiantTaskContainer:
     task_dict: Dict[str, tasks.Task]
     task_sampler: jiant_task_sampler.BaseMultiTaskSampler
     train_schedule: shared_train_setup.TrainSchedule
     task_cache_dict: Dict
-
-
-@dataclass
-class RunnerParameters:
-    local_rank: int
-    n_gpu: int
-    fp16: bool
-    learning_rate: float
-    max_grad_norm: float
-
-
-@dataclass
-class GlobalTrainConfig(pycore.ExtendedDataClassMixin):
-    max_steps: int
-    warmup_steps: int
-
-
-@dataclass
-class TaskSpecificConfig(pycore.ExtendedDataClassMixin):
-    train_batch_size: int
-    eval_batch_size: int
-    gradient_accumulation_steps: int
+    task_specific_config: Dict[str, TaskSpecificConfig]
 
 
 def create_task_dict(task_config_dict: dict,
@@ -55,7 +42,7 @@ def create_task_cache_dict(task_cache_config_dict: Dict) -> Dict:
     task_cache_dict = {}
     for task_name, task_cache_config in task_cache_config_dict.items():
         single_task_cache_dict = {}
-        for phase in [PHASE.TRAIN, PHASE.VAL, PHASE.TEST]:
+        for phase in [PHASE.TRAIN, PHASE.VAL, "val_labels", PHASE.TEST]:
             if phase in task_cache_config_dict:
                 single_task_cache_dict[phase] = caching.ChunkedFilesDataCache(
                     task_cache_config_dict[phase],
