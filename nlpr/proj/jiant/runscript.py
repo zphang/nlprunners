@@ -6,16 +6,13 @@ import zconf
 import nlpr.shared.initialization as initialization
 import nlpr.shared.distributed as distributed
 import nlpr.shared.model_setup as model_setup
-import nlpr.shared.model_resolution as model_resolution
-import nlpr.shared.train_setup as train_setup
 import nlpr.tasks as tasks
 import nlpr.tasks.evaluate as evaluate
-import nlpr.proj.simple.runner as simple_runner
-import nlpr.shared.metarunner as metarunner
-import nlpr.shared.caching as caching
+import nlpr.proj.simple.simple_metarunner as simple_metarunner
 import nlpr.proj.jiant.modeling.model_setup as jiant_model_setup
 import nlpr.proj.jiant.runner as jiant_runner
-import nlpr.proj.jiant.components.task_sampler as jiant_task_sampler
+import nlpr.proj.jiant.components.task_setup as jiant_task_setup
+import nlpr.proj.jiant.metarunner as jiant_metarunner
 
 
 @zconf.run_config
@@ -33,7 +30,6 @@ class RunConfiguration(zconf.RunConfig):
     model_tokenizer_path = zconf.attr(default=None, type=str)
     model_load_mode = zconf.attr(default="from_ptt", type=str)
     model_save_mode = zconf.attr(default="all", type=str)
-    max_seq_length = zconf.attr(default=128, type=int)
 
     # === Running Setup === #
     do_train = zconf.attr(action='store_true')
@@ -42,20 +38,13 @@ class RunConfiguration(zconf.RunConfig):
     no_write_preds = zconf.attr(action="store_true")
     eval_every_steps = zconf.attr(type=int, default=0)
     save_every_steps = zconf.attr(type=int, default=0)
-    partial_eval_number = zconf.attr(type=int, default=1000)
-    train_batch_size = zconf.attr(default=8, type=int)  # per gpu
-    eval_batch_size = zconf.attr(default=8, type=int)  # per gpu
     force_overwrite = zconf.attr(action="store_true")
     seed = zconf.attr(type=int, default=-1)
 
     # === Training Learning Parameters === #
     learning_rate = zconf.attr(default=1e-5, type=float)
-    num_train_epochs = zconf.attr(default=3, type=int)
-    max_steps = zconf.attr(default=-1, type=int)  ## Change to None
     adam_epsilon = zconf.attr(default=1e-8, type=float)
     max_grad_norm = zconf.attr(default=1.0, type=float)
-    warmup_steps = zconf.attr(default=None, type=int)
-    warmup_proportion = zconf.attr(default=0.1, type=float)
     optimizer_type = zconf.attr(default="adam", type=str)
 
     # Specialized config
@@ -91,30 +80,20 @@ def main(args):
             )
             jiant_model.to(quick_init_out.device)
 
-        task_sampler = jiant_task_sampler.create_task_sampler ## WIP
-
-        if args.task_train_cache_path is not None:
-            task_train_cache_path = args.task_train_cache_path
-        else:
-            task_train_cache_path = os.path.join(args.task_cache_data_path, "train")
-        train_cache = caching.ChunkedFilesDataCache(task_train_cache_path)
-        num_train_examples = len(train_cache)
-
-        train_schedule = train_setup.get_train_schedule(
-            num_train_examples=num_train_examples,
-            max_steps=args.max_steps,
-            num_train_epochs=args.num_train_epochs,
-            gradient_accumulation_steps=args.gradient_accumulation_steps,
-            per_gpu_train_batch_size=args.train_batch_size,
-            n_gpu=quick_init_out.n_gpu,
+        jiant_task_container = jiant_task_setup.create_jiant_task_container_from_paths(
+            task_config_dict_path=args.task_config_dict_path,
+            task_cache_config_dict_path=args.task_cache_config_dict_path,
+            sampler_config_path=args.sampler_config_path,
+            global_train_config_dict_path=args.global_train_config_dict_path,
+            task_specific_configs_dict_path=args.task_specific_configs_dict_path,
+            metric_aggregator_config_path=args.metric_aggregator_config_path,
         )
-        quick_init_out.log_writer.write_entry("text", f"t_total: {train_schedule.t_total}", do_print=True)
         optimizer_scheduler = model_setup.create_optimizer(
             model=jiant_model,
             learning_rate=args.learning_rate,
-            t_total=train_schedule.t_total,
-            warmup_steps=args.warmup_steps,
-            warmup_proportion=args.warmup_proportion,
+            t_total=jiant_task_container.global_train_config.max_steps,
+            warmup_steps=jiant_task_container.global_train_config.warmup_steps,
+            warmup_proportion=None,
             optimizer_type=args.optimizer_type,
             verbose=True,
         )
@@ -125,46 +104,32 @@ def main(args):
             n_gpu=quick_init_out.n_gpu, local_rank=args.local_rank,
         )
         optimizer_scheduler.optimizer = optimizer
-        rparams = simple_runner.RunnerParameters(
-            feat_spec=model_resolution.build_featurization_spec(
-                model_type=args.model_type,
-                max_seq_length=args.max_seq_length,
-            ),
+        rparams = jiant_runner.RunnerParameters(
             local_rank=args.local_rank,
             n_gpu=quick_init_out.n_gpu,
             fp16=args.fp16,
-            learning_rate=args.learning_rate,
-            eval_batch_size=args.eval_batch_size,
             max_grad_norm=args.max_grad_norm,
         )
-        runner = jiant_runner.JiantSingleTaskRunner(
-            task=task,
+        runner = jiant_runner.JiantRunner(
+            jiant_task_container=jiant_task_container,
             jiant_model=jiant_model,
             optimizer_scheduler=optimizer_scheduler,
-            loss_criterion=None,
             device=quick_init_out.device,
             rparams=rparams,
-            train_schedule=train_schedule,
             log_writer=quick_init_out.log_writer,
         )
 
         if args.do_train:
-            val_cache = caching.ChunkedFilesDataCache(os.path.join(args.task_cache_data_path, "val"))
-            val_labels_cache = caching.ChunkedFilesDataCache(os.path.join(args.task_cache_data_path, "val_labels"))
-            metarunner.MetaRunner(
+            jiant_metarunner.JiantMetarunner(
                 runner=runner,
-                train_cache=train_cache,
-                val_cache=val_cache,
-                val_labels_cache=val_labels_cache,
-                partial_eval_number=args.partial_eval_number,
-                should_save_func=metarunner.get_should_save_func(args.save_every_steps),
-                should_eval_func=metarunner.get_should_eval_func(args.eval_every_steps),
+                should_save_func=simple_metarunner.get_should_save_func(args.save_every_steps),
+                should_eval_func=simple_metarunner.get_should_eval_func(args.eval_every_steps),
                 output_dir=args.output_dir,
                 verbose=True,
                 save_best_model=args.do_save,
                 load_best_model=True,
                 log_writer=quick_init_out.log_writer,
-            ).train_val_save_every()
+            ).run_train_loop()
 
         if args.do_save:
             torch.save(
@@ -173,12 +138,7 @@ def main(args):
             )
 
         if args.do_val:
-            val_cache = caching.ChunkedFilesDataCache(os.path.join(args.task_cache_data_path, "val"))
-            val_labels_cache = caching.ChunkedFilesDataCache(os.path.join(args.task_cache_data_path, "val_labels"))
-            results = runner.run_val(
-                val_cache=val_cache,
-                val_labels_cache=val_labels_cache,
-            )
+            results = runner.run_val()
             evaluate.write_val_results(
                 results=results,
                 output_dir=args.output_dir,

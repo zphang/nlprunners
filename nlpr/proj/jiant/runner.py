@@ -28,12 +28,6 @@ class RunnerParameters(pycore.ExtendedDataClassMixin):
     max_grad_norm: float
 
 
-@dataclass
-class GlobalTrainConfig(pycore.ExtendedDataClassMixin):
-    max_steps: int
-    warmup_steps: int
-
-
 class TrainState:
     def __init__(self, task_name_list):
         self.global_steps = 0
@@ -53,14 +47,12 @@ class JiantRunner(BaseRunner):
                  jiant_model: JiantStyleModel,
                  optimizer_scheduler,
                  device,
-                 global_train_config: GlobalTrainConfig,
                  rparams: RunnerParameters,
                  log_writer):
         self.jiant_task_container = jiant_task_container
         self.jiant_model = jiant_model
         self.optimizer_scheduler = optimizer_scheduler
         self.device = device
-        self.global_train_config = global_train_config
         self.rparams = rparams
         self.log_writer = log_writer
 
@@ -69,7 +61,8 @@ class JiantRunner(BaseRunner):
     def run_train_context(self, verbose=True):
         train_dataloader_dict = self.get_train_dataloader_dict()
         train_state = TrainState(list(self.jiant_task_container.task_dict))
-        for _ in maybe_tqdm(range(self.global_train_config.max_steps), desc="Training", verbose=verbose):
+        for _ in maybe_tqdm(range(self.jiant_task_container.global_train_config.max_steps),
+                            desc="Training", verbose=verbose):
             self.run_train_step(train_dataloader_dict=train_dataloader_dict, train_state=train_state, )
             yield train_state
 
@@ -118,6 +111,7 @@ class JiantRunner(BaseRunner):
                 local_rank=self.rparams.local_rank,
                 verbose=verbose,
             )
+        return evaluate_dict
 
     def get_train_dataloader_dict(self):
         # Not currently supported distributed parallel

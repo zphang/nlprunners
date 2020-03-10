@@ -1,7 +1,7 @@
 import abc
 import numpy as np
 
-from typing import Union, Optional
+from typing import Union, Optional, Dict
 
 
 class BaseMultiTaskSampler(metaclass=abc.ABCMeta):
@@ -94,3 +94,40 @@ def create_task_sampler(sampler_config: dict,
         )
     else:
         raise KeyError(sampler_type)
+
+
+class BaseMetricAggregator(metaclass=abc.ABCMeta):
+    def aggregate(self, major_metrics_dict: Dict[str: float]):
+        raise NotImplementedError()
+
+
+class EqualMetricAggregator(BaseMetricAggregator):
+    def aggregate(self, major_metrics_dict: Dict[str: float]):
+        return np.mean([x for x in major_metrics_dict.values()])
+
+
+class WeightedMetricAggregator(BaseMetricAggregator):
+
+    def __init__(self, weights_dict: Dict[str: float]):
+        self.weights_dict = weights_dict
+        self.total_weights = sum([x for x in weights_dict.values()])
+
+    def aggregate(self, major_metrics_dict: Dict[str: float]):
+        return np.mean([
+            x * self.weights_dict[task_name]
+            for task_name, x in major_metrics_dict.items()
+        ]) / self.total_weights
+
+
+def create_metric_aggregator(metric_aggregator_config: Dict) -> BaseMetricAggregator:
+    metric_aggregator_type = metric_aggregator_config["metric_aggregator_type"]
+    if metric_aggregator_type == "EqualMetricAggregator":
+        assert len(metric_aggregator_config) == 1
+        return EqualMetricAggregator()
+    elif metric_aggregator_type == "WeightedMetricAggregator":
+        assert len(metric_aggregator_config) == 2
+        return WeightedMetricAggregator(
+            weights_dict=metric_aggregator_config["weights_dict"]
+        )
+    else:
+        raise KeyError(metric_aggregator_type)
