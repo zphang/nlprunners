@@ -39,7 +39,7 @@ def experimental_smart_truncate(dataset: torch_utils.ListDataset,
         return dataset, max_seq_length
 
     new_datum_ls = []
-    for datum in tqdm.tqdm(dataset.data, desc="Smart truncate datum"):
+    for datum in tqdm.tqdm(dataset.data, desc="Smart truncate data"):
         new_datum_ls.append(experimental_smart_truncate_datum(
             datum=datum,
             max_seq_length=max_seq_length,

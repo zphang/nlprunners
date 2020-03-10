@@ -4,7 +4,6 @@ from pyutils.functional import always_false
 from zproto.zlogv1 import BaseZLogger, PRINT_LOGGER
 
 from nlpr.shared.runner import (
-    TrainGlobalState,
     save_model_with_metadata,
     compare_steps_max_steps,
 )
@@ -12,23 +11,24 @@ from nlpr.shared.pycore import ExtendedDataClassMixin
 from nlpr.shared.torch_utils import copy_state_dict, CPU_DEVICE
 from nlpr.shared.metarunner_v2 import AbstractMetarunner
 import nlpr.proj.jiant.runner as jiant_runner
+import nlpr.proj.jiant.components.task_sampler as jiant_task_sampler
 
 
 @dataclass
 class ValState(ExtendedDataClassMixin):
     score: float
-    train_global_state: TrainGlobalState
+    train_state: jiant_runner.TrainState
 
     def new(self):
         return self.__class__(
             score=self.score,
-            train_global_state=self.train_global_state.new(),
+            train_state=self.train_state.new(),
         )
 
-    def asdict(self):
+    def to_dict(self):
         return {
             "score": float(self.score),
-            "train_global_state": self.train_global_state.to_dict(),
+            "train_state": self.train_state.to_dict(),
         }
 
 
@@ -113,10 +113,10 @@ class JiantMetarunner(AbstractMetarunner):
     def should_break_training(self) -> bool:
         if self.global_train_config.max_steps is not None and \
                 self.global_train_config.max_steps != -1 and \
-                self.train_state.global_step >= self.global_train_config.max_steps:
+                self.train_state.global_steps >= self.global_train_config.max_steps:
             return True
         elif compare_steps_max_steps(
-                step=self.train_state.global_step,
+                step=self.train_state.global_steps,
                 max_steps=self.global_train_config.max_steps):
             return True
         else:
@@ -145,18 +145,15 @@ class JiantMetarunner(AbstractMetarunner):
 
     def eval_save(self):
         val_results_dict = self.runner.run_val(use_subset=True)
-        val_major_metrics_dict = {
-            task_name: val_results["metrics"].major
-            for task_name, val_results in val_results_dict.items()
-        }
-        aggregated_major = self.runner.jiant_task_container.metrics_aggregator.aggregate(
-            major_metrics_dict=val_major_metrics_dict,
+        aggregated_major = jiant_task_sampler.compute_aggregate_major_metrics_from_results_dict(
+            metrics_aggregator=self.runner.jiant_task_container.metrics_aggregator,
+            results_dict=val_results_dict,
         )
         val_state = ValState(
             score=float(aggregated_major),
-            train_global_state=self.train_state.new(),
+            train_state=self.train_state.new(),
         )
-        self.log_writer.write_entry("train_val", val_state.asdict())
+        self.log_writer.write_entry("train_val", val_state.to_dict())
         self.log_writer.flush()
         if self.best_val_state is None or val_state.score > self.best_val_state.score:
             self.best_val_state = val_state.new()

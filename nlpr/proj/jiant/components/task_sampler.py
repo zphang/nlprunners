@@ -23,7 +23,7 @@ class BaseMultiTaskSampler(metaclass=abc.ABCMeta):
 class UniformMultiTaskSampler(BaseMultiTaskSampler):
 
     def pop(self):
-        task_name = self.rng.choice(self.task_dict)
+        task_name = self.rng.choice(list(self.task_dict))
         return task_name, self.task_dict[task_name]
 
 
@@ -97,22 +97,22 @@ def create_task_sampler(sampler_config: dict,
 
 
 class BaseMetricAggregator(metaclass=abc.ABCMeta):
-    def aggregate(self, major_metrics_dict: Dict[str: float]):
+    def aggregate(self, major_metrics_dict: Dict[str, float]):
         raise NotImplementedError()
 
 
 class EqualMetricAggregator(BaseMetricAggregator):
-    def aggregate(self, major_metrics_dict: Dict[str: float]):
+    def aggregate(self, major_metrics_dict: Dict[str, float]):
         return np.mean([x for x in major_metrics_dict.values()])
 
 
 class WeightedMetricAggregator(BaseMetricAggregator):
 
-    def __init__(self, weights_dict: Dict[str: float]):
+    def __init__(self, weights_dict: Dict[str, float]):
         self.weights_dict = weights_dict
         self.total_weights = sum([x for x in weights_dict.values()])
 
-    def aggregate(self, major_metrics_dict: Dict[str: float]):
+    def aggregate(self, major_metrics_dict: Dict[str, float]):
         return np.mean([
             x * self.weights_dict[task_name]
             for task_name, x in major_metrics_dict.items()
@@ -131,3 +131,11 @@ def create_metric_aggregator(metric_aggregator_config: Dict) -> BaseMetricAggreg
         )
     else:
         raise KeyError(metric_aggregator_type)
+
+
+def compute_aggregate_major_metrics_from_results_dict(metrics_aggregator, results_dict):
+    val_major_metrics_dict = {
+        task_name: val_results["metrics"].major
+        for task_name, val_results in results_dict.items()
+    }
+    return metrics_aggregator.aggregate(major_metrics_dict=val_major_metrics_dict)

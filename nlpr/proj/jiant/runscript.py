@@ -6,21 +6,22 @@ import zconf
 import nlpr.shared.initialization as initialization
 import nlpr.shared.distributed as distributed
 import nlpr.shared.model_setup as model_setup
-import nlpr.tasks as tasks
-import nlpr.tasks.evaluate as evaluate
-import nlpr.proj.simple.simple_metarunner as simple_metarunner
 import nlpr.proj.jiant.modeling.model_setup as jiant_model_setup
 import nlpr.proj.jiant.runner as jiant_runner
 import nlpr.proj.jiant.components.task_setup as jiant_task_setup
 import nlpr.proj.jiant.metarunner as jiant_metarunner
+import nlpr.proj.jiant.components.evaluate as jiant_evaluate
 
 
 @zconf.run_config
 class RunConfiguration(zconf.RunConfig):
     # === Required parameters === #
-    task_config_path = zconf.attr(type=str, required=True)
-    task_cache_data_path = zconf.attr(type=str, default=None)
-    task_train_cache_path = zconf.attr(type=str, default=None)
+    task_config_path_dict_path = zconf.attr(type=str, required=True)
+    task_cache_config_dict_path = zconf.attr(type=str, required=True)
+    sampler_config_path = zconf.attr(type=str, required=True)
+    global_train_config_path = zconf.attr(type=str, required=True)
+    task_specific_configs_dict_path = zconf.attr(type=str, required=True)
+    metric_aggregator_config_path = zconf.attr(type=str, required=True)
     output_dir = zconf.attr(type=str, required=True)
 
     # === Model parameters === #
@@ -60,18 +61,21 @@ class RunConfiguration(zconf.RunConfig):
 def main(args):
     quick_init_out = initialization.quick_init(args=args, verbose=True)
     with quick_init_out.log_writer.log_context():
-        task = tasks.create_task_from_config_path(
-            config_path=args.task_config_path,
-            verbose=True,
+        jiant_task_container = jiant_task_setup.create_jiant_task_container_from_paths(
+            task_config_path_dict_path=args.task_config_path_dict_path,
+            task_cache_config_dict_path=args.task_cache_config_dict_path,
+            sampler_config_path=args.sampler_config_path,
+            global_train_config_path=args.global_train_config_path,
+            task_specific_configs_dict_path=args.task_specific_configs_dict_path,
+            metric_aggregator_config_path=args.metric_aggregator_config_path,
         )
-
         with distributed.only_first_process(local_rank=args.local_rank):
             # load the model
-            jiant_model = jiant_model_setup.setup_jiant_style_model_single(
+            jiant_model = jiant_model_setup.setup_jiant_style_model(
                 model_type=args.model_type,
                 model_config_path=args.model_config_path,
                 tokenizer_path=args.model_tokenizer_path,
-                task=task,
+                task_dict=jiant_task_container.task_dict,
             )
             jiant_model_setup.delegate_load_from_path(
                 jiant_model=jiant_model,
@@ -80,14 +84,6 @@ def main(args):
             )
             jiant_model.to(quick_init_out.device)
 
-        jiant_task_container = jiant_task_setup.create_jiant_task_container_from_paths(
-            task_config_dict_path=args.task_config_dict_path,
-            task_cache_config_dict_path=args.task_cache_config_dict_path,
-            sampler_config_path=args.sampler_config_path,
-            global_train_config_dict_path=args.global_train_config_dict_path,
-            task_specific_configs_dict_path=args.task_specific_configs_dict_path,
-            metric_aggregator_config_path=args.metric_aggregator_config_path,
-        )
         optimizer_scheduler = model_setup.create_optimizer(
             model=jiant_model,
             learning_rate=args.learning_rate,
@@ -122,8 +118,8 @@ def main(args):
         if args.do_train:
             jiant_metarunner.JiantMetarunner(
                 runner=runner,
-                should_save_func=simple_metarunner.get_should_save_func(args.save_every_steps),
-                should_eval_func=simple_metarunner.get_should_eval_func(args.eval_every_steps),
+                should_save_func=jiant_metarunner.get_should_save_func(args.save_every_steps),
+                should_eval_func=jiant_metarunner.get_should_eval_func(args.eval_every_steps),
                 output_dir=args.output_dir,
                 verbose=True,
                 save_best_model=args.do_save,
@@ -138,12 +134,12 @@ def main(args):
             )
 
         if args.do_val:
-            results = runner.run_val()
-            evaluate.write_val_results(
-                results=results,
+            val_results_dict = runner.run_val()
+            jiant_evaluate.write_val_results(
+                val_results_dict=val_results_dict,
+                metrics_aggregator=jiant_task_container.metrics_aggregator,
                 output_dir=args.output_dir,
                 verbose=True,
-                do_write_preds=not args.no_write_preds,
             )
 
 
