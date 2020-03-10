@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Optional
 
 import torch
 
@@ -20,27 +20,19 @@ from nlpr.proj.jiant.modeling.primary import JiantStyleModel
 import nlpr.tasks.evaluate as evaluate
 
 
-class JiantSingleTaskRunner(BaseRunner):
-    def __init__(self, task, jiant_model: JiantStyleModel, optimizer_scheduler, loss_criterion,
-                 device, rparams: RunnerParameters, train_schedule: Union[TrainSchedule, None],
+class JiantRunner(BaseRunner):
+    def __init__(self, task, jiant_model: JiantStyleModel, optimizer_scheduler,
+                 device, rparams: RunnerParameters, train_schedule: Optional[TrainSchedule],
                  log_writer):
         self.task = task
         self.jiant_model = jiant_model
         self.optimizer_scheduler = optimizer_scheduler
-        self.loss_criterion = loss_criterion
         self.device = device
         self.rparams = rparams
         self.train_schedule = train_schedule
         self.log_writer = log_writer
 
         self.model = self.jiant_model
-
-    def run_train_epoch(self, train_dataloader, train_global_state, verbose=True):
-        for _ in self.run_train_epoch_context(
-                train_dataloader=train_dataloader,
-                train_global_state=train_global_state,
-                verbose=verbose):
-            pass
 
     def run_train_epoch_context(self, train_dataloader,
                                 train_global_state: TrainGlobalState, verbose=True):

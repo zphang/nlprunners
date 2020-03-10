@@ -15,6 +15,7 @@ import nlpr.shared.metarunner as metarunner
 import nlpr.shared.caching as caching
 import nlpr.proj.jiant.modeling.model_setup as jiant_model_setup
 import nlpr.proj.jiant.runner as jiant_runner
+import nlpr.proj.jiant.components.task_sampler as jiant_task_sampler
 
 
 @zconf.run_config
@@ -89,6 +90,8 @@ def main(args):
                 load_mode=args.model_load_mode
             )
             jiant_model.to(quick_init_out.device)
+
+        task_sampler = jiant_task_sampler.create_task_sampler ## WIP
 
         if args.task_train_cache_path is not None:
             task_train_cache_path = args.task_train_cache_path

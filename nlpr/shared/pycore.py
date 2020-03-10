@@ -1,3 +1,6 @@
+import warnings
+
+
 class ExtendedDataClassMixin:
 
     @classmethod
@@ -9,10 +12,18 @@ class ExtendedDataClassMixin:
         return cls.__annotations__
 
     def asdict(self):
+        warnings.warn("Use .to_dict()", DeprecationWarning)
+        return self.to_dict()
+
+    def to_dict(self):
         return {
             k: getattr(self, k)
             for k in self.get_fields()
         }
+
+    @classmethod
+    def from_dict(cls, kwargs):
+        return cls(**kwargs)
 
     def new(self, **new_kwargs):
         kwargs = {

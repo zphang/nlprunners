@@ -34,6 +34,7 @@ class ProportionalMultiTaskSampler(BaseMultiTaskSampler):
                  task_to_examples_dict: dict,
                  ):
         super().__init__(task_dict=task_dict, rng=rng)
+        assert task_dict.keys() == task_to_examples_dict.keys()
         self.task_to_examples_dict = task_to_examples_dict
         self.task_names = list(task_to_examples_dict.keys())
         self.task_num_examples = np.array([task_to_examples_dict[k] for k in self.task_names])
@@ -53,6 +54,7 @@ class TemperatureMultiTaskSampler(BaseMultiTaskSampler):
                  examples_cap: Optional[int],
                  ):
         super().__init__(task_dict=task_dict, rng=rng)
+        assert task_dict.keys() == task_to_examples_dict.keys()
         self.task_to_examples_dict = task_to_examples_dict
         self.temperature = temperature
         self.examples_cap = examples_cap
@@ -66,29 +68,29 @@ class TemperatureMultiTaskSampler(BaseMultiTaskSampler):
         return task_name, self.task_dict[task_name]
 
 
-def create_sampler(init_dict: dict,
-                   task_dict: dict,
-                   task_to_examples_dict: dict,
-                   rng=None) -> BaseMultiTaskSampler:
-    sampler_type = init_dict["sampler_type"]
+def create_task_sampler(sampler_config: dict,
+                        task_dict: dict,
+                        task_to_examples_dict: dict,
+                        rng=None) -> BaseMultiTaskSampler:
+    sampler_type = sampler_config["sampler_type"]
     if sampler_type == "UniformMultiTaskSampler":
-        assert len(init_dict) == 1
+        assert len(sampler_config) == 1
         return UniformMultiTaskSampler(task_dict=task_dict, rng=rng)
     elif sampler_type == "ProportionalMultiTaskSampler":
-        assert len(init_dict) == 1
+        assert len(sampler_config) == 1
         return ProportionalMultiTaskSampler(
             task_dict=task_dict,
             rng=rng,
             task_to_examples_dict=task_to_examples_dict,
         )
     elif sampler_type == "TemperatureMultiTaskSampler":
-        assert len(init_dict) == 3
+        assert len(sampler_config) == 3
         return TemperatureMultiTaskSampler(
             task_dict=task_dict,
             rng=rng,
             task_to_examples_dict=task_to_examples_dict,
-            temperature=init_dict["temperature"],
-            examples_cap=init_dict["examples_cap"],
+            temperature=sampler_config["temperature"],
+            examples_cap=sampler_config["examples_cap"],
         )
     else:
         raise KeyError(sampler_type)
