@@ -50,7 +50,7 @@ class RegressionModel(Submodel):
         scores = self.regression_head(pooled=encoder_output.pooled)
         if compute_loss:
             loss_fct = nn.MSELoss()
-            loss = loss_fct(scores.view(-1), batch.label_id.view(-1))
+            loss = loss_fct(scores.view(-1), batch.label.view(-1))
             return scores, loss
         else:
             return scores
@@ -86,8 +86,8 @@ class MultipleChoiceModel(Submodel):
         if compute_loss:
             loss_fct = nn.CrossEntropyLoss()
             loss = loss_fct(
-                logits.view(-1, self.choice_scoring_head.num_labels),
-                batch.label_ids.view(-1),
+                logits.view(-1, self.num_choices),
+                batch.label_id.view(-1),
             )
             return logits, loss
         else:
@@ -121,6 +121,7 @@ class SpanComparisonModel(Submodel):
 
 
 class TokenClassificationModel(Submodel):
+    """ From RobertaForTokenClassification """
     def __init__(self, encoder,
                  token_classification_head: heads.TokenClassificationHead):
         super().__init__(encoder=encoder)
@@ -131,15 +132,17 @@ class TokenClassificationModel(Submodel):
             encoder=self.encoder,
             batch=batch,
         )
-        logits = self.span_comparison_head(
+        logits = self.token_classification_head(
             unpooled=encoder_output.unpooled,
-            spans=batch.spans,
         )
         if compute_loss:
             loss_fct = nn.CrossEntropyLoss()
+            active_loss = batch.label_mask.view(-1) == 1
+            active_logits = logits.view(-1, self.token_classification_head.num_labels)[active_loss]
+            active_labels = batch.label_ids.view(-1)[active_loss]
             loss = loss_fct(
-                logits.view(-1, self.token_classification_head.num_labels),
-                batch.label_ids.view(-1),
+                active_logits,
+                active_labels,
             )
             return logits, loss
         else:
@@ -178,9 +181,11 @@ class MLMModel(Submodel):
             mlm_probability=task.mlm_probability,
             tokenizer=tokenizer,
         )
-        encoder_output = get_output_from_encoder_and_batch(
+        encoder_output = get_output_from_encoder(
             encoder=self.encoder,
-            batch=masked_batch,
+            input_ids=masked_batch.masked_input_ids,
+            segment_ids=masked_batch.segment_ids,
+            input_mask=masked_batch.input_mask,
         )
         logits = self.mlm_head(unpooled=encoder_output.unpooled)
         if compute_loss:
@@ -224,7 +229,7 @@ def get_output_from_encoder(encoder, input_ids, segment_ids, input_mask) -> Enco
 
 
 def compute_mlm_loss(logits, masked_lm_labels):
-    vocab_size = logits.shape(-1)
+    vocab_size = logits.shape[-1]
     loss_fct = nn.CrossEntropyLoss()
     return loss_fct(
         logits.view(-1, vocab_size),

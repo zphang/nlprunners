@@ -123,6 +123,7 @@ def create_submodel(task, model_arch, encoder) -> submodels.Submodel:
     elif task.TASK_TYPE == TaskTypes.SPAN_COMPARISON_CLASSIFICATION:
         span_comparison_head = heads.SpanComparisonHead(
             hidden_size=encoder.config.hidden_size,
+            hidden_dropout_prob=encoder.config.hidden_dropout_prob,
             num_spans=task.num_spans,
             num_labels=len(task.LABELS),
         )
