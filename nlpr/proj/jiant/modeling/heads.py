@@ -93,7 +93,7 @@ class QAHead(BaseHead):
     def forward(self, unpooled):
         logits = self.qa_outputs(unpooled)
         # bs x seq_len x 2
-        logits = logits.permute(0, 2, 1).unsqueeze(1)
+        logits = logits.permute(0, 2, 1)
         # bs x 2 x seq_len x 1
         return logits
 
