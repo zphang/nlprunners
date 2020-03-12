@@ -84,13 +84,13 @@ class JiantRunner(BaseRunner):
         for i in range(task_specific_config.gradient_accumulation_steps):
             batch, batch_metadata = train_dataloader_dict[task_name].pop()
             batch = batch.to(self.device)
-            logits, loss = self.jiant_model(
+            model_output = self.jiant_model(
                 batch=batch,
                 task=task,
                 compute_loss=True,
             )
             loss = self.complex_backpropagate(
-                loss=loss,
+                loss=model_output.loss,
                 gradient_accumulation_steps=task_specific_config.gradient_accumulation_steps,
             )
             loss_val += loss.item()
@@ -198,13 +198,13 @@ def run_val(val_dataloader,
         batch = batch.to(device)
 
         with torch.no_grad():
-            batch_logits, batch_loss = jiant_model(
+            model_output = jiant_model(
                 batch=batch,
                 task=task,
                 compute_loss=True,
             )
-        batch_logits = batch_logits.detach().cpu().numpy()
-        batch_loss = batch_loss.mean().item()
+        batch_logits = model_output.logits.detach().cpu().numpy()
+        batch_loss = model_output.loss.mean().item()
         total_eval_loss += batch_loss
         eval_accumulator.update(
             batch_logits=batch_logits,

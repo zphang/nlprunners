@@ -1,9 +1,25 @@
 import abc
 from dataclasses import dataclass
+from typing import NamedTuple, Any
 
 import torch
 import torch.nn as nn
 import nlpr.proj.jiant.modeling.heads as heads
+
+
+class BaseModelOutput(metaclass=abc.ABCMeta):
+    pass
+
+
+class LogitsOutput(NamedTuple, BaseModelOutput):
+    logits: torch.Tensor
+    other: Any = None
+
+
+class LogitsAndLossOutput(NamedTuple, BaseModelOutput):
+    logits: torch.Tensor
+    loss: torch.Tensor
+    other: Any = None
 
 
 class Submodel(nn.Module, metaclass=abc.ABCMeta):
@@ -32,9 +48,9 @@ class ClassificationModel(Submodel):
                 logits.view(-1, self.classification_head.num_labels),
                 batch.label_id.view(-1),
             )
-            return logits, loss
+            return LogitsAndLossOutput(logits=logits, loss=loss, other=encoder_output.other)
         else:
-            return logits
+            return LogitsOutput(logits=logits, other=encoder_output.other)
 
 
 class RegressionModel(Submodel):
@@ -47,13 +63,13 @@ class RegressionModel(Submodel):
             encoder=self.encoder,
             batch=batch,
         )
-        scores = self.regression_head(pooled=encoder_output.pooled)
+        logits = self.regression_head(pooled=encoder_output.pooled)
         if compute_loss:
             loss_fct = nn.MSELoss()
-            loss = loss_fct(scores.view(-1), batch.label.view(-1))
-            return scores, loss
+            loss = loss_fct(logits.view(-1), batch.label.view(-1))
+            return LogitsAndLossOutput(logits=logits, loss=loss, other=encoder_output.other)
         else:
-            return scores
+            return LogitsOutput(logits=logits, other=encoder_output.other)
 
 
 class MultipleChoiceModel(Submodel):
@@ -68,6 +84,7 @@ class MultipleChoiceModel(Submodel):
         input_mask = batch.input_mask
 
         choice_score_list = []
+        encoder_output_other_ls = []
         for i in range(self.num_choices):
             encoder_output = get_output_from_encoder(
                 encoder=self.encoder,
@@ -77,6 +94,7 @@ class MultipleChoiceModel(Submodel):
             )
             choice_score = self.choice_scoring_head(pooled=encoder_output.pooled)
             choice_score_list.append(choice_score)
+            encoder_output_other_ls.append(encoder_output.other)
 
         logits = torch.cat([
             choice_score.unsqueeze(1).squeeze(-1)
@@ -89,9 +107,9 @@ class MultipleChoiceModel(Submodel):
                 logits.view(-1, self.num_choices),
                 batch.label_id.view(-1),
             )
-            return logits, loss
+            return LogitsAndLossOutput(logits=logits, loss=loss, other=encoder_output_other_ls)
         else:
-            return logits
+            return LogitsOutput(logits=logits, other=encoder_output_other_ls)
 
 
 class SpanComparisonModel(Submodel):
@@ -115,9 +133,9 @@ class SpanComparisonModel(Submodel):
                 logits.view(-1, self.span_comparison_head.num_labels),
                 batch.label_id.view(-1),
             )
-            return logits, loss
+            return LogitsAndLossOutput(logits=logits, loss=loss, other=encoder_output.other)
         else:
-            return logits
+            return LogitsOutput(logits=logits, other=encoder_output.other)
 
 
 class TokenClassificationModel(Submodel):
@@ -144,9 +162,9 @@ class TokenClassificationModel(Submodel):
                 active_logits,
                 active_labels,
             )
-            return logits, loss
+            return LogitsAndLossOutput(logits=logits, loss=loss, other=encoder_output.other)
         else:
-            return logits
+            return LogitsOutput(logits=logits, other=encoder_output.other)
 
 
 class QAModel(Submodel):
@@ -166,9 +184,9 @@ class QAModel(Submodel):
                 start_positions=batch.start_position,
                 end_positions=batch.end_position,
             )
-            return logits, loss
+            return LogitsAndLossOutput(logits=logits, loss=loss, other=encoder_output.other)
         else:
-            return logits
+            return LogitsOutput(logits=logits, other=encoder_output.other)
 
 
 class MLMModel(Submodel):
@@ -193,15 +211,16 @@ class MLMModel(Submodel):
                 logits=logits,
                 masked_lm_labels=masked_batch.masked_lm_labels,
             )
-            return logits, loss
+            return LogitsAndLossOutput(logits=logits, loss=loss, other=encoder_output.other)
         else:
-            return logits
+            return LogitsOutput(logits=logits, other=encoder_output.other)
 
 
 @dataclass
 class EncoderOutput:
     pooled: torch.Tensor
     unpooled: torch.Tensor
+    other: Any = None
     # Extend later with attention, hidden_acts, etc
 
 
@@ -220,12 +239,20 @@ def get_output_from_encoder(encoder, input_ids, segment_ids, input_mask) -> Enco
         token_type_ids=segment_ids,
         attention_mask=input_mask,
     )
-    # Extend later with attention, hidden_acts, etc
-    assert len(output) == 2
-    return EncoderOutput(
-        pooled=output[1],
-        unpooled=output[0],
-    )
+    if len(output) == 2:
+        return EncoderOutput(
+            pooled=output[1],
+            unpooled=output[0],
+        )
+    elif len(output) > 2:
+        # Extend later with attention, hidden_acts, etc
+        return EncoderOutput(
+            pooled=output[1],
+            unpooled=output[0],
+            other=output[2:]
+        )
+    else:
+        raise RuntimeError()
 
 
 def compute_mlm_loss(logits, masked_lm_labels):
