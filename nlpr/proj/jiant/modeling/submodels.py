@@ -7,7 +7,7 @@ import torch.nn as nn
 import nlpr.proj.jiant.modeling.heads as heads
 
 
-class BaseModelOutput(metaclass=abc.ABCMeta):
+class BaseModelOutput:
     pass
 
 
@@ -96,6 +96,14 @@ class MultipleChoiceModel(Submodel):
             choice_score_list.append(choice_score)
             encoder_output_other_ls.append(encoder_output.other)
 
+        reshaped_outputs = []
+        for j in range(len(encoder_output_other_ls[0])):
+            reshaped_outputs.append([
+                torch.stack([misc[j][layer_i] for misc in encoder_output_other_ls], dim=1)
+                for layer_i in range(len(encoder_output_other_ls[0][0]))
+            ])
+        reshaped_outputs = tuple(reshaped_outputs)
+
         logits = torch.cat([
             choice_score.unsqueeze(1).squeeze(-1)
             for choice_score in choice_score_list
@@ -107,9 +115,9 @@ class MultipleChoiceModel(Submodel):
                 logits.view(-1, self.num_choices),
                 batch.label_id.view(-1),
             )
-            return LogitsAndLossOutput(logits=logits, loss=loss, other=encoder_output_other_ls)
+            return LogitsAndLossOutput(logits=logits, loss=loss, other=reshaped_outputs)
         else:
-            return LogitsOutput(logits=logits, other=encoder_output_other_ls)
+            return LogitsOutput(logits=logits, other=reshaped_outputs)
 
 
 class SpanComparisonModel(Submodel):

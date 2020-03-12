@@ -7,11 +7,11 @@ from dataclasses import dataclass
 from typing import Sequence
 
 import zconf
+from pyutils.datastructures import take_one
 
 import nlpr.shared.initialization as initialization
-import nlpr.shared.model_setup as model_setup
 import nlpr.proj.jiant.modeling.model_setup as jiant_model_setup
-import nlpr.shared.modeling.models as shared_models
+from nlpr.proj.jiant.modeling.primary import JiantStyleModel
 import nlpr.tasks as tasks
 import nlpr.shared.runner as shared_runner
 import nlpr.shared.caching as caching
@@ -34,7 +34,9 @@ class RunConfiguration(zconf.RunConfig):
     model_tokenizer_path = zconf.attr(default=None, type=str)
 
     model_a_path = zconf.attr(type=str, required=True)
+    model_a_load_mode = zconf.attr(type=str, default="partial")
     model_b_path = zconf.attr(type=str, required=True)
+    model_b_load_mode = zconf.attr(type=str, default="partial")
 
     # === Running Setup === #
     batch_size = zconf.attr(default=8, type=int)
@@ -66,12 +68,6 @@ def main(args):
             tokenizer_path=args.model_tokenizer_path,
             task_dict={task.name: task},
         )
-        jiant_model_setup.delegate_load_from_path(
-            jiant_model=jiant_model,
-            weights_path=args.model_path,
-            load_mode=args.model_load_mode
-        )
-        jiant_model.to(quick_init_out.device)
         jiant_model.encoder.encoder.output_hidden_states = True
         data_obj = DataObj.from_path(
             task=task,
@@ -86,6 +82,7 @@ def main(args):
             task=task,
             jiant_model=jiant_model,
             model_path=args.model_a_path,
+            model_load_mode=args.model_a_load_mode,
             device=quick_init_out.device,
         )
         if not args.skip_b:
@@ -94,6 +91,7 @@ def main(args):
                 task=task,
                 jiant_model=jiant_model,
                 model_path=args.model_b_path,
+                model_load_mode=args.model_b_load_mode,
                 device=quick_init_out.device,
             )
         if not args.skip_cka:
@@ -144,18 +142,20 @@ def get_num_inputs(task: tasks.Task):
 
 def compute_activations_from_path(data_obj: DataObj,
                                   task: tasks.Task,
-                                  jiant_model: jiant_model_setup.primary.JiantStyleModel,
+                                  jiant_model: JiantStyleModel,
                                   model_path: str,
+                                  model_load_mode: str,
                                   device):
     load_model(
-        model_wrapper=model_wrapper,
+        jiant_model=jiant_model,
         model_path=model_path,
+        model_load_mode=model_load_mode,
         device=device,
     )
     return compute_activations_from_model(
         data_obj=data_obj,
         task=task,
-        model_wrapper=model_wrapper,
+        jiant_model=jiant_model,
         device=device,
     )
 
@@ -172,69 +172,31 @@ def compute_cka(act_a, act_b, device):
     return collated
 
 
-def get_hidden_act(task: tasks.Task, model_wrapper, batch):
-    if task.TASK_TYPE in (
-                tasks.TaskTypes.CLASSIFICATION,
-                tasks.TaskTypes.MULTIPLE_CHOICE,
-                tasks.TaskTypes.REGRESSION,
-            ):
-        _, raw_hidden = shared_models.forward_batch_basic(
-            model=model_wrapper.model,
-            batch=batch,
-        )
-    elif task.TASK_TYPE in (
-                tasks.TaskTypes.SPAN_COMPARISON_CLASSIFICATION,
-            ):
-        _, raw_hidden = model_wrapper.model(
-            input_ids=batch.input_ids,
-            spans=batch.spans,
-            token_type_ids=batch.segment_ids,
-            attention_mask=batch.input_mask,
-            labels=None,
-        )
-    elif task.TASK_TYPE == tasks.TaskTypes.SQUAD_STYLE_QA:
-        start_positions = None
-        end_positions = None
-        # TODO: Refactor this wrt model_resolution
-        # Actually "xlm", "roberta", "distilbert"
-        if model_wrapper.model.__class__.__name__.startswith("Robert"):
-            segment_ids = None
-        else:
-            segment_ids = batch.segment_ids
-        _, _, raw_hidden = model_wrapper.model(
-            input_ids=batch.input_ids,
-            attention_mask=batch.input_mask,
-            token_type_ids=segment_ids,
-            start_positions=start_positions,
-            end_positions=end_positions,
-        )
-    elif task.TASK_TYPE == tasks.TaskTypes.TAGGING:
-        _, raw_hidden = model_wrapper.model(
-            input_ids=batch.input_ids,
-            token_type_ids=batch.segment_ids,
-            attention_mask=batch.input_mask,
-        )
-    else:
-        raise KeyError(task.TASK_TYPE)
-    hidden_act = torch.stack(raw_hidden, dim=2)
+def get_hidden_act(task: tasks.Task, jiant_model: JiantStyleModel, batch):
+    model_output = jiant_model(
+        batch=batch,
+        task=task,
+        compute_loss=False,
+    )
+    hidden_act = torch.stack(take_one(model_output.other), dim=2)
     return hidden_act
 
 
 def compute_activations_from_model(data_obj: DataObj,
                                    task: tasks.Task,
-                                   model_wrapper: model_setup.ModelWrapper,
+                                   jiant_model: JiantStyleModel,
                                    device):
     num_inputs_per_example = get_num_inputs(task)
     collected_acts = []
     with torch.no_grad():
-        model_wrapper.model.eval()
+        jiant_model.eval()
         example_i = 0
         for batch, batch_metadata in tqdm.tqdm(data_obj.dataloader, desc="Computing Activation"):
             batch = batch.to(device)
 
             hidden_act = get_hidden_act(
                 task=task,
-                model_wrapper=model_wrapper,
+                jiant_model=jiant_model,
                 batch=batch,
             )
 
@@ -267,19 +229,27 @@ def compute_activations_from_model(data_obj: DataObj,
     return np.concatenate(collected_acts)
 
 
-def load_model(model_wrapper, model_path, device):
+def load_model(jiant_model, model_path, model_load_mode, device):
     if model_path.endswith("split_dict"):
         state_dict = split_dict.load_split_dict(model_path)
     else:
         state_dict = torch.load(model_path, map_location="cpu")
-    model_setup.simple_load_model(
-        model=model_wrapper.model,
-        model_load_mode="safe",
-        state_dict=state_dict,
-        verbose=False,
-    )
-    model_wrapper.model.to(device)
-    return model_wrapper
+
+    if model_load_mode == "partial":
+        jiant_model_setup.load_partial_heads(
+            jiant_model=jiant_model,
+            weights_dict=state_dict,
+            allow_missing_head_model=True,
+        )
+    elif model_load_mode == "ptt":
+        jiant_model_setup.load_encoder_from_ptt_weights(
+            encoder=jiant_model.encoder,
+            weights_dict=state_dict,
+        )
+    else:
+        raise KeyError(model_load_mode)
+    jiant_model.to(device)
+    return jiant_model
 
 
 if __name__ == "__main__":

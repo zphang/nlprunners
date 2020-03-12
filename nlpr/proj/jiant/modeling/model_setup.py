@@ -72,6 +72,25 @@ def delegate_load(jiant_model, weights_dict: dict, load_mode: str):
         )
     elif load_mode == "all":
         jiant_model.load_state_dict(weights_dict)
+    elif load_mode == "partial_weights":
+        return load_partial_heads(
+            jiant_model=jiant_model,
+            weights_dict=weights_dict,
+            allow_missing_head_weights=True,
+        )
+    elif load_mode == "partial_heads":
+        return load_partial_heads(
+            jiant_model=jiant_model,
+            weights_dict=weights_dict,
+            allow_missing_head_model=True,
+        )
+    elif load_mode == "partial":
+        return load_partial_heads(
+            jiant_model=jiant_model,
+            weights_dict=weights_dict,
+            allow_missing_head_weights=True,
+            allow_missing_head_model=True,
+        )
     else:
         raise KeyError(load_mode)
 
@@ -88,6 +107,26 @@ def load_encoder_from_ptt_weights(encoder: nn.Module, weights_dict: dict, return
     encoder.load_state_dict(load_weights_dict)
     if return_remainder:
         return remainder_weights_dict
+
+
+def load_partial_heads(jiant_model, weights_dict,
+                       allow_missing_head_weights=False,
+                       allow_missing_head_model=False):
+    mismatch = jiant_model.load_state_dict(weights_dict, strict=False)
+    result = {}
+    if mismatch.missing_keys:
+        assert allow_missing_head_weights
+        missing_head_weights = set()
+        for k in mismatch.missing_keys:
+            missing_head_weights.add(k.split(".")[1])
+        result["missing_head_weights"] = list(missing_head_weights)
+    if mismatch.unexpected_keys:
+        assert allow_missing_head_model
+        missing_heads_model = set()
+        for k in mismatch.unexpected_keys:
+            missing_heads_model.add(k.split(".")[1])
+        result["missing_heads_model"] = list(missing_heads_model)
+    return result
 
 
 def create_submodel(task, model_arch, encoder) -> submodels.Submodel:
