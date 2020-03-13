@@ -70,6 +70,17 @@ def delegate_load(jiant_model, weights_dict: dict, load_mode: str):
             encoder=jiant_model.encoder,
             weights_dict=weights_dict,
         )
+    elif load_mode == "from_ptt_with_mlm":
+        remainder = load_encoder_from_ptt_weights(
+            encoder=jiant_model.encoder,
+            weights_dict=weights_dict,
+            return_remainder=True,
+        )
+        x = load_lm_heads_from_ptt_weights(
+            jiant_model=jiant_model,
+            weights_dict=remainder,
+        )
+        return
     elif load_mode == "all":
         jiant_model.load_state_dict(weights_dict)
     elif load_mode == "partial_weights":
@@ -95,10 +106,14 @@ def delegate_load(jiant_model, weights_dict: dict, load_mode: str):
         raise KeyError(load_mode)
 
 
-def load_encoder_from_ptt_weights(encoder: nn.Module, weights_dict: dict, return_remainder=False):
+def load_encoder_from_ptt_weights(encoder: nn.Module,
+                                  weights_dict: dict,
+                                  with_lm=False, return_remainder=False):
     remainder_weights_dict = {}
     load_weights_dict = {}
-    encoder_prefix = MODEL_PREFIX[get_model_arch_from_encoder(encoder=encoder)] + "."
+    model_arch = get_model_arch_from_encoder(encoder=encoder)
+    encoder_prefix = MODEL_PREFIX[model_arch] + "."
+    # Encoder
     for k, v in weights_dict.items():
         if k.startswith(encoder_prefix):
             load_weights_dict[strings.remove_prefix(k, encoder_prefix)] = v
@@ -107,6 +122,41 @@ def load_encoder_from_ptt_weights(encoder: nn.Module, weights_dict: dict, return
     encoder.load_state_dict(load_weights_dict)
     if return_remainder:
         return remainder_weights_dict
+
+
+def load_lm_heads_from_ptt_weights(jiant_model, weights_dict):
+    model_arch = get_model_arch_from_jiant_model(jiant_model=jiant_model)
+    if model_arch == ModelArchitectures.BERT:
+        mlm_weights_dict = {
+            'bias': "cls.predictions.bias",
+            'dense.weight': "cls.predictions.transform.dense.weight",
+            'dense.bias': "cls.predictions.transform.dense.bias",
+            'LayerNorm.weight': "cls.predictions.transform.LayerNorm.weight",
+            'LayerNorm.bias': "cls.predictions.transform.LayerNorm.bias",
+            'decoder.weight': "cls.predictions.decoder.weight",
+            # 'decoder.bias' <-- linked directly to bias
+        }
+    elif model_arch == ModelArchitectures.ROBERTA:
+        mlm_weights_dict = {
+            strings.remove_prefix(k, "lm_head."): v
+            for k, v in weights_dict.items()
+        }
+        mlm_weights_dict["decoder.bias"] = mlm_weights_dict["bias"]
+    elif model_arch == ModelArchitectures.ALBERT:
+        mlm_weights_dict = {
+            strings.remove_prefix(k, "predictions."): v
+            for k, v in weights_dict.items()
+        }
+    else:
+        raise KeyError(model_arch)
+    missed = set()
+    for submodel_name, submodel in jiant_model.submodels_dict.items():
+        if not isinstance(submodel, submodels.MLMModel):
+            continue
+        mismatch = submodel.mlm_head.load_state_dict(mlm_weights_dict)
+        assert not mismatch.missing_keys
+        missed.update(mismatch.unexpected_keys)
+    return list(missed)
 
 
 def load_partial_heads(jiant_model, weights_dict,
@@ -264,6 +314,10 @@ def get_model_arch_from_encoder(encoder: nn.Module) -> ModelArchitectures:
         return ModelArchitectures.ALBERT
     else:
         raise KeyError(type(encoder))
+
+
+def get_model_arch_from_jiant_model(jiant_model: nn.Module) -> ModelArchitectures:
+    return get_model_arch_from_encoder(encoder=jiant_model.encoder)
 
 
 MODEL_PREFIX = {
