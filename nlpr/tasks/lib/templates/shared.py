@@ -188,14 +188,7 @@ def double_sentence_featurize(guid: str,
 def construct_single_input_tokens_and_segment_ids(input_tokens: List[str],
                                                   tokenizer,
                                                   feat_spec: FeaturizationSpec):
-    if feat_spec.sep_token_extra:
-        maybe_extra_sep = [tokenizer.sep_token]
-        maybe_extra_sep_segment_id = [feat_spec.sequence_a_segment_id]
-        special_tokens_count = 3  # CLS, SEP-SEP  (ok this is a little weird, let's leave it for now)
-    else:
-        maybe_extra_sep = []
-        maybe_extra_sep_segment_id = []
-        special_tokens_count = 2  # CLS, SEP
+    special_tokens_count = 2  # CLS, SEP
 
     input_tokens, = truncate_sequences(
         tokens_ls=[input_tokens],
@@ -203,11 +196,10 @@ def construct_single_input_tokens_and_segment_ids(input_tokens: List[str],
     )
 
     return add_cls_token(
-        unpadded_tokens=input_tokens + [tokenizer.sep_token] + maybe_extra_sep,
+        unpadded_tokens=input_tokens + [tokenizer.sep_token],
         unpadded_segment_ids=(
             [feat_spec.sequence_a_segment_id]
             + [feat_spec.sequence_a_segment_id] * (len(input_tokens))
-            + maybe_extra_sep_segment_id
         ),
         tokenizer=tokenizer,
         feat_spec=feat_spec,
