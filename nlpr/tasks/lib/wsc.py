@@ -61,7 +61,6 @@ class Example(BaseExample):
         )
 
 
-
 @dataclass
 class TokenizedExample(BaseTokenizedExample):
     guid: str

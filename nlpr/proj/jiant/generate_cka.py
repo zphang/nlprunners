@@ -240,6 +240,7 @@ def load_model(jiant_model, model_path, model_load_mode, device):
             jiant_model=jiant_model,
             weights_dict=state_dict,
             allow_missing_head_model=True,
+            allow_missing_head_weights=True,
         )
     elif model_load_mode == "ptt":
         jiant_model_setup.load_encoder_from_ptt_weights(

@@ -97,12 +97,13 @@ class MultipleChoiceModel(Submodel):
             encoder_output_other_ls.append(encoder_output.other)
 
         reshaped_outputs = []
-        for j in range(len(encoder_output_other_ls[0])):
-            reshaped_outputs.append([
-                torch.stack([misc[j][layer_i] for misc in encoder_output_other_ls], dim=1)
-                for layer_i in range(len(encoder_output_other_ls[0][0]))
-            ])
-        reshaped_outputs = tuple(reshaped_outputs)
+        if encoder_output_other_ls[0]:
+            for j in range(len(encoder_output_other_ls[0])):
+                reshaped_outputs.append([
+                    torch.stack([misc[j][layer_i] for misc in encoder_output_other_ls], dim=1)
+                    for layer_i in range(len(encoder_output_other_ls[0][0]))
+                ])
+            reshaped_outputs = tuple(reshaped_outputs)
 
         logits = torch.cat([
             choice_score.unsqueeze(1).squeeze(-1)
