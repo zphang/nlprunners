@@ -27,6 +27,7 @@ class RunConfiguration(zconf.RunConfig):
     force_overwrite = zconf.attr(action="store_true")
     smart_truncate = zconf.attr(action="store_true")
     do_iter = zconf.attr(action="store_true")
+    skip_write_output_paths = zconf.attr(action="store_true")
 
 
 def chunk_and_save(phase, examples, feat_spec, tokenizer, args: RunConfiguration):
@@ -122,6 +123,9 @@ def main(args: RunConfiguration):
     )
     phases = args.phases.split(",")
     assert set(phases) < {PHASE.TRAIN, PHASE.VAL, PHASE.TEST}
+
+    paths_dict = {}
+
     if PHASE.TRAIN in phases:
         chunk_and_save(
             phase=PHASE.TRAIN,
@@ -130,6 +134,8 @@ def main(args: RunConfiguration):
             tokenizer=tokenizer,
             args=args,
         )
+        paths_dict["train"] = os.path.join(args.output_dir, PHASE.TRAIN)
+
     if PHASE.VAL in phases:
         val_examples = task.get_val_examples()
         chunk_and_save(
@@ -150,6 +156,9 @@ def main(args: RunConfiguration):
             data_args=args.to_dict(),
             output_dir=os.path.join(args.output_dir, "val_labels"),
         )
+        paths_dict[PHASE.VAL] = os.path.join(args.output_dir, PHASE.VAL)
+        paths_dict["val_labels"] = os.path.join(args.output_dir, "val_labels")
+
     if PHASE.TEST in phases:
         chunk_and_save(
             phase=PHASE.TEST,
@@ -157,6 +166,14 @@ def main(args: RunConfiguration):
             feat_spec=feat_spec,
             tokenizer=tokenizer,
             args=args,
+        )
+        paths_dict[PHASE.TEST] = os.path.join(args.output_dir, PHASE.TEST)
+
+    if not args.skip_write_output_paths:
+        print(os.path.join(args.output_dir, "paths.json"))
+        io.write_json(
+            data=paths_dict,
+            path=os.path.join(args.output_dir, "paths.json")
         )
 
 
