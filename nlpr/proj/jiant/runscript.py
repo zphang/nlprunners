@@ -153,9 +153,7 @@ def run_loop(args: RunConfiguration, checkpoint=None):
             )
             if is_resumed:
                 metarunner.train_state = checkpoint["runner_state"]["train_state"]
-                metarunner.run_train_loop()
-            else:
-                metarunner.run_train_loop()
+            metarunner.run_train_loop()
 
         if args.do_save:
             torch.save(
@@ -171,24 +169,6 @@ def run_loop(args: RunConfiguration, checkpoint=None):
                 output_dir=args.output_dir,
                 verbose=True,
             )
-
-    if args.do_train:
-        metarunner.run_train_loop()
-
-    if args.do_save:
-        torch.save(
-            runner.jiant_model.state_dict(),
-            os.path.join(args.output_dir, "model.p")
-        )
-
-    if args.do_val:
-        val_results_dict = runner.run_val()
-        jiant_evaluate.write_val_results(
-            val_results_dict=val_results_dict,
-            metrics_aggregator=runner.jiant_task_container.metrics_aggregator,
-            output_dir=args.output_dir,
-            verbose=True,
-        )
 
     if args.delete_checkpoint_if_done:
         shutil.rmtree(os.path.join(args.output_dir, "checkpoint.p"))
