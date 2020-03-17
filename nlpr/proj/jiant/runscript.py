@@ -1,4 +1,5 @@
 import os
+import shutil
 import torch
 
 import zconf
@@ -39,6 +40,8 @@ class RunConfiguration(zconf.RunConfig):
     no_write_preds = zconf.attr(action="store_true")
     eval_every_steps = zconf.attr(type=int, default=0)
     save_every_steps = zconf.attr(type=int, default=0)
+    save_checkpoint_every_steps = zconf.attr(type=int, default=0)
+    delete_checkpoint_if_done = zconf.attr(action="store_true")
     force_overwrite = zconf.attr(action="store_true")
     seed = zconf.attr(type=int, default=-1)
 
@@ -58,78 +61,105 @@ class RunConfiguration(zconf.RunConfig):
     server_port = zconf.attr(default='', type=str)
 
 
-def main(args):
+@zconf.run_config
+class ResumeConfiguration(zconf.RunConfig):
+    checkpoint_path = zconf.attr(type=str)
+
+
+def setup_runner(args: RunConfiguration, quick_init_out) -> jiant_runner.JiantRunner:
+    jiant_task_container = jiant_task_setup.create_jiant_task_container_from_paths(
+        task_config_path_dict_path=args.task_config_path_dict_path,
+        task_cache_config_dict_path=args.task_cache_config_dict_path,
+        sampler_config_path=args.sampler_config_path,
+        global_train_config_path=args.global_train_config_path,
+        task_specific_configs_dict_path=args.task_specific_configs_dict_path,
+        metric_aggregator_config_path=args.metric_aggregator_config_path,
+    )
+    with distributed.only_first_process(local_rank=args.local_rank):
+        # load the model
+        jiant_model = jiant_model_setup.setup_jiant_style_model(
+            model_type=args.model_type,
+            model_config_path=args.model_config_path,
+            tokenizer_path=args.model_tokenizer_path,
+            task_dict=jiant_task_container.task_dict,
+        )
+        jiant_model_setup.delegate_load_from_path(
+            jiant_model=jiant_model,
+            weights_path=args.model_path,
+            load_mode=args.model_load_mode
+        )
+        jiant_model.to(quick_init_out.device)
+
+    optimizer_scheduler = model_setup.create_optimizer(
+        model=jiant_model,
+        learning_rate=args.learning_rate,
+        t_total=jiant_task_container.global_train_config.max_steps,
+        warmup_steps=jiant_task_container.global_train_config.warmup_steps,
+        warmup_proportion=None,
+        optimizer_type=args.optimizer_type,
+        verbose=True,
+    )
+    jiant_model, optimizer = model_setup.raw_special_model_setup(
+        model=jiant_model,
+        optimizer=optimizer_scheduler.optimizer,
+        fp16=args.fp16, fp16_opt_level=args.fp16_opt_level,
+        n_gpu=quick_init_out.n_gpu, local_rank=args.local_rank,
+    )
+    optimizer_scheduler.optimizer = optimizer
+    rparams = jiant_runner.RunnerParameters(
+        local_rank=args.local_rank,
+        n_gpu=quick_init_out.n_gpu,
+        fp16=args.fp16,
+        max_grad_norm=args.max_grad_norm,
+    )
+    runner = jiant_runner.JiantRunner(
+        jiant_task_container=jiant_task_container,
+        jiant_model=jiant_model,
+        optimizer_scheduler=optimizer_scheduler,
+        device=quick_init_out.device,
+        rparams=rparams,
+        log_writer=quick_init_out.log_writer,
+    )
+    return runner
+
+
+def run_loop(args: RunConfiguration, checkpoint=None):
+    is_resumed = checkpoint is not None
     quick_init_out = initialization.quick_init(args=args, verbose=True)
     with quick_init_out.log_writer.log_context():
-        jiant_task_container = jiant_task_setup.create_jiant_task_container_from_paths(
-            task_config_path_dict_path=args.task_config_path_dict_path,
-            task_cache_config_dict_path=args.task_cache_config_dict_path,
-            sampler_config_path=args.sampler_config_path,
-            global_train_config_path=args.global_train_config_path,
-            task_specific_configs_dict_path=args.task_specific_configs_dict_path,
-            metric_aggregator_config_path=args.metric_aggregator_config_path,
+        runner = setup_runner(
+            args=args,
+            quick_init_out=quick_init_out,
         )
-        with distributed.only_first_process(local_rank=args.local_rank):
-            # load the model
-            jiant_model = jiant_model_setup.setup_jiant_style_model(
-                model_type=args.model_type,
-                model_config_path=args.model_config_path,
-                tokenizer_path=args.model_tokenizer_path,
-                task_dict=jiant_task_container.task_dict,
-            )
-            jiant_model_setup.delegate_load_from_path(
-                jiant_model=jiant_model,
-                weights_path=args.model_path,
-                load_mode=args.model_load_mode
-            )
-            jiant_model.to(quick_init_out.device)
-
-        optimizer_scheduler = model_setup.create_optimizer(
-            model=jiant_model,
-            learning_rate=args.learning_rate,
-            t_total=jiant_task_container.global_train_config.max_steps,
-            warmup_steps=jiant_task_container.global_train_config.warmup_steps,
-            warmup_proportion=None,
-            optimizer_type=args.optimizer_type,
-            verbose=True,
+        if is_resumed:
+            runner.load_state(checkpoint["runner_state"])
+        checkpoint_saver = jiant_runner.CheckpointSaver(
+            metadata={"args": args.to_dict()},
+            save_path=os.path.join(args.output_dir, "checkpoint.p"),
         )
-        jiant_model, optimizer = model_setup.raw_special_model_setup(
-            model=jiant_model,
-            optimizer=optimizer_scheduler.optimizer,
-            fp16=args.fp16, fp16_opt_level=args.fp16_opt_level,
-            n_gpu=quick_init_out.n_gpu, local_rank=args.local_rank,
-        )
-        optimizer_scheduler.optimizer = optimizer
-        rparams = jiant_runner.RunnerParameters(
-            local_rank=args.local_rank,
-            n_gpu=quick_init_out.n_gpu,
-            fp16=args.fp16,
-            max_grad_norm=args.max_grad_norm,
-        )
-        runner = jiant_runner.JiantRunner(
-            jiant_task_container=jiant_task_container,
-            jiant_model=jiant_model,
-            optimizer_scheduler=optimizer_scheduler,
-            device=quick_init_out.device,
-            rparams=rparams,
-            log_writer=quick_init_out.log_writer,
-        )
-
         if args.do_train:
-            jiant_metarunner.JiantMetarunner(
+            metarunner = jiant_metarunner.JiantMetarunner(
                 runner=runner,
                 should_save_func=jiant_metarunner.get_should_save_func(args.save_every_steps),
                 should_eval_func=jiant_metarunner.get_should_eval_func(args.eval_every_steps),
+                should_save_checkpoint_func=jiant_metarunner.get_should_save_checkpoint_func(
+                    args.save_checkpoint_every_steps),
+                checkpoint_saver=checkpoint_saver,
                 output_dir=args.output_dir,
                 verbose=True,
                 save_best_model=args.do_save,
                 load_best_model=True,
                 log_writer=quick_init_out.log_writer,
-            ).run_train_loop()
+            )
+            if is_resumed:
+                metarunner.train_state = checkpoint["runner_state"]["train_state"]
+                metarunner.run_train_loop()
+            else:
+                metarunner.run_train_loop()
 
         if args.do_save:
             torch.save(
-                jiant_model.state_dict(),
+                runner.jiant_model.state_dict(),
                 os.path.join(args.output_dir, "model.p")
             )
 
@@ -137,11 +167,48 @@ def main(args):
             val_results_dict = runner.run_val()
             jiant_evaluate.write_val_results(
                 val_results_dict=val_results_dict,
-                metrics_aggregator=jiant_task_container.metrics_aggregator,
+                metrics_aggregator=runner.jiant_task_container.metrics_aggregator,
                 output_dir=args.output_dir,
                 verbose=True,
             )
 
+    if args.do_train:
+        metarunner.run_train_loop()
+
+    if args.do_save:
+        torch.save(
+            runner.jiant_model.state_dict(),
+            os.path.join(args.output_dir, "model.p")
+        )
+
+    if args.do_val:
+        val_results_dict = runner.run_val()
+        jiant_evaluate.write_val_results(
+            val_results_dict=val_results_dict,
+            metrics_aggregator=runner.jiant_task_container.metrics_aggregator,
+            output_dir=args.output_dir,
+            verbose=True,
+        )
+
+    if args.delete_checkpoint_if_done:
+        shutil.rmtree(os.path.join(args.output_dir, "checkpoint.p"))
+
+
+def run_resume(args: ResumeConfiguration):
+    checkpoint = torch.load(args.checkpoint_path)
+    args = RunConfiguration.from_dict(checkpoint["metadata"]["args"])
+    run_loop(args=args, checkpoint=checkpoint)
+
+
+def main():
+    mode, cl_args = zconf.get_mode_and_cl_args()
+    if mode == "run":
+        run_loop(RunConfiguration.default_run_cli(cl_args=cl_args))
+    elif mode == "continue":
+        run_resume(ResumeConfiguration.default_run_cli(cl_args=cl_args))
+    else:
+        raise zconf.ModeLookupError(mode)
+
 
 if __name__ == "__main__":
-    main(args=RunConfiguration.run_cli_json_prepend())
+    main()

@@ -72,7 +72,17 @@ class JiantRunner(BaseRunner):
         train_state = TrainState.from_task_name_list(list(self.jiant_task_container.task_dict))
         for _ in maybe_tqdm(range(self.jiant_task_container.global_train_config.max_steps),
                             desc="Training", verbose=verbose):
-            self.run_train_step(train_dataloader_dict=train_dataloader_dict, train_state=train_state, )
+            self.run_train_step(train_dataloader_dict=train_dataloader_dict, train_state=train_state)
+            yield train_state
+
+    def resume_train_context(self, train_state, verbose=True):
+        train_dataloader_dict = self.get_train_dataloader_dict()
+        start_position = train_state.global_steps
+        for _ in maybe_tqdm(range(start_position, self.jiant_task_container.global_train_config.max_steps),
+                            desc="Training", initial=start_position,
+                            total=self.jiant_task_container.global_train_config.max_steps,
+                            verbose=verbose):
+            self.run_train_step(train_dataloader_dict=train_dataloader_dict, train_state=train_state)
             yield train_state
 
     def run_train_step(self, train_dataloader_dict: dict, train_state: TrainState):
@@ -175,6 +185,32 @@ class JiantRunner(BaseRunner):
             gradient_accumulation_steps=gradient_accumulation_steps,
             max_grad_norm=self.rparams.max_grad_norm,
         )
+
+    def get_runner_state(self, train_state: TrainState):
+        # Todo: Add fp16
+        state = {
+            "model": self.jiant_model.state_dict(),
+            "optimizer": self.optimizer_scheduler.optimizer.state_dict(),
+            "train_state": train_state,
+        }
+        return state
+
+    def load_state(self, runner_state):
+        self.jiant_model.load_state_dict(runner_state["model"])
+        self.optimizer_scheduler.optimizer.load_state_dict(runner_state["optimizer"])
+
+
+class CheckpointSaver:
+    def __init__(self, metadata, save_path):
+        self.metadata = metadata
+        self.save_path = save_path
+
+    def save(self, runner_state: dict):
+        to_save = {
+            "runner_state": runner_state,
+            "metadata": self.metadata
+        }
+        torch.save(to_save, self.save_path)
 
 
 def run_val(val_dataloader,

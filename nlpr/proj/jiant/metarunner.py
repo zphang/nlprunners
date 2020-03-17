@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 
 from pyutils.functional import always_false
@@ -46,11 +47,20 @@ def get_should_eval_func(eval_every_steps: int):
         return lambda tgs: (tgs.global_steps + 1) % eval_every_steps == 0
 
 
+def get_should_save_checkpoint_func(save_checkpoint_every_steps: int):
+    if save_checkpoint_every_steps == 0:
+        return always_false
+    else:
+        return lambda tgs: (tgs.global_steps + 1) % save_checkpoint_every_steps == 0
+
+
 class JiantMetarunner(AbstractMetarunner):
     def __init__(self,
                  runner: jiant_runner.JiantRunner,
                  should_save_func,
                  should_eval_func,
+                 should_save_checkpoint_func,
+                 checkpoint_saver,
                  output_dir,
                  verbose: bool = True,
                  save_best_model: bool = True,
@@ -60,6 +70,8 @@ class JiantMetarunner(AbstractMetarunner):
         self.runner = runner
         self.should_save_func = should_save_func
         self.should_eval_func = should_eval_func
+        self.should_save_checkpoint_func = should_save_checkpoint_func
+        self.checkpoint_saver = checkpoint_saver
         self.output_dir = output_dir
         self.verbose = verbose
         self.save_best_model = save_best_model
@@ -82,7 +94,15 @@ class JiantMetarunner(AbstractMetarunner):
         self.single_use_check = True
 
     def yield_train_step(self):
-        for train_state in self.runner.run_train_context(verbose=self.verbose):
+        if self.train_state is None:
+            # Fresh run
+            train_iterator = self.runner.run_train_context(verbose=self.verbose)
+        else:
+            train_iterator = self.runner.resume_train_context(
+                train_state=self.train_state,
+                verbose=self.verbose,
+            )
+        for train_state in train_iterator:
             self.train_state = train_state
             self.inject_at_step()
             yield
@@ -99,10 +119,12 @@ class JiantMetarunner(AbstractMetarunner):
         )
 
     def should_save_checkpoint(self) -> bool:
-        return False
+        return self.should_save_checkpoint_func(self.train_state)
 
     def save_checkpoint(self):
-        raise NotImplementedError()
+        runner_state = self.runner.get_runner_state(train_state=self.train_state)
+        print("Saving State")
+        self.checkpoint_saver.save(runner_state=runner_state)
 
     def should_eval_model(self) -> bool:
         return self.should_eval_func(self.train_state)
