@@ -207,6 +207,7 @@ class MLMModel(Submodel):
         masked_batch = batch.get_masked(
             mlm_probability=task.mlm_probability,
             tokenizer=tokenizer,
+            do_mask=task.do_mask,
         )
         encoder_output = get_output_from_encoder(
             encoder=self.encoder,

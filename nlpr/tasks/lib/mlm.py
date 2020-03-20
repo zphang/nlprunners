@@ -76,19 +76,29 @@ class Batch(BatchMixin):
     # masked_input_labels: Optional[np.ndarray]
     tokens: list
 
-    def get_masked(self, mlm_probability, tokenizer):
-        masked_input_ids, masked_lm_labels = mlm_mask_tokens(
-            inputs=self.input_ids,
-            tokenizer=tokenizer,
-            mlm_probability=mlm_probability,
-        )
-        return MaskedBatch(
-            masked_input_ids=masked_input_ids,
-            input_mask=self.input_mask,
-            segment_ids=self.segment_ids,
-            masked_lm_labels=masked_lm_labels,
-            tokens=self.tokens,
-        )
+    def get_masked(self, mlm_probability, tokenizer, do_mask):
+        if do_mask:
+            masked_input_ids, masked_lm_labels = mlm_mask_tokens(
+                inputs=self.input_ids,
+                tokenizer=tokenizer,
+                mlm_probability=mlm_probability,
+            )
+            return MaskedBatch(
+                masked_input_ids=masked_input_ids,
+                input_mask=self.input_mask,
+                segment_ids=self.segment_ids,
+                masked_lm_labels=masked_lm_labels,
+                tokens=self.tokens,
+            )
+        else:
+            # Potentially, the mask_lm_labels should all be -100
+            return MaskedBatch(
+                masked_input_ids=self.input_ids,
+                input_mask=self.input_mask,
+                segment_ids=self.segment_ids,
+                masked_lm_labels=self.input_ids,
+                tokens=self.tokens,
+            )
 
 
 @dataclass
@@ -109,9 +119,10 @@ class MLMTask(Task):
     TASK_TYPE = TaskTypes.MASKED_LANGUAGE_MODELING
 
     def __init__(self, name, path_dict,
-                 mlm_probability=0.15):
+                 mlm_probability=0.15, do_mask=True):
         super().__init__(name=name, path_dict=path_dict)
         self.mlm_probability = mlm_probability
+        self.do_mask = do_mask
 
     def get_train_examples(self):
         return self._create_examples(path=self.train_path, set_type="train", return_generator=True)
