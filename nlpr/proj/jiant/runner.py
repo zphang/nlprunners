@@ -20,6 +20,7 @@ from nlpr.proj.jiant.modeling.primary import JiantStyleModel
 import nlpr.tasks.evaluate as evaluate
 from nlpr.proj.jiant.components.task_setup import JiantTaskContainer
 from nlpr.constants import PHASE
+import nlpr.shared.torch_utils as torch_utils
 
 
 @dataclass
@@ -210,7 +211,7 @@ class CheckpointSaver:
             "runner_state": runner_state,
             "metadata": self.metadata
         }
-        torch.save(to_save, self.save_path)
+        torch_utils.safe_save(to_save, self.save_path)
 
 
 def run_val(val_dataloader,
