@@ -40,6 +40,7 @@ class RunConfiguration(zconf.RunConfig):
     batch_size = zconf.attr(default=8, type=int)
     skip_b = zconf.attr(action="store_true")
     skip_cka = zconf.attr(action="store_true")
+    cka_kernel = zconf.attr(default="linear", type=str)
     save_acts = zconf.attr(action="store_true")
 
     # Specialized config
@@ -100,6 +101,7 @@ def main(args):
                 act_a=act_a,
                 act_b=act_b,
                 device=quick_init_out.device,
+                cka_kernel=args.cka_kernel,
             )
             torch.save(cka_outputs, os.path.join(args.output_dir, "cka.p"))
         if args.save_acts:
@@ -158,7 +160,7 @@ def compute_activations_from_path(data_obj: DataObj,
     )
 
 
-def compute_cka(act_a, act_b, device):
+def compute_cka(act_a, act_b, device, cka_kernel):
     assert act_a.shape[1] == act_b.shape[1]
     num_layers = act_a.shape[1]
     collated = np.empty([num_layers, num_layers])
@@ -166,7 +168,10 @@ def compute_cka(act_a, act_b, device):
         act_a_tensor = torch.Tensor(act_a[:, i].copy()).float().to(device)
         for j in tqdm.tqdm(range(num_layers)):
             act_b_tensor = torch.Tensor(act_b[:, j].copy()).float().to(device)
-            collated[i, j] = cka.linear_CKA(act_a_tensor, act_b_tensor).item()
+            collated[i, j] = cka.compute_cka(
+                x=act_a_tensor, y=act_b_tensor,
+                kernel=cka_kernel,
+            ).item()
     return collated
 
 
