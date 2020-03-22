@@ -76,7 +76,7 @@ def delegate_load(jiant_model, weights_dict: dict, load_mode: str):
             weights_dict=weights_dict,
             return_remainder=True,
         )
-        x = load_lm_heads_from_ptt_weights(
+        load_lm_heads_from_ptt_weights(
             jiant_model=jiant_model,
             weights_dict=remainder,
         )

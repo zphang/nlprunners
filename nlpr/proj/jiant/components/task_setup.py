@@ -82,10 +82,12 @@ def create_jiant_task_container(task_config_path_dict_path: Dict,
                                 sampler_config: Dict,
                                 global_train_config: Dict,
                                 task_specific_configs_dict: Dict,
-                                metric_aggregator_config: Dict) \
+                                metric_aggregator_config: Dict,
+                                verbose: bool = True) \
         -> JiantTaskContainer:
     task_dict = create_task_dict(
         task_config_dict=task_config_path_dict_path,
+        verbose=verbose,
     )
     task_cache_dict = create_task_cache_dict(
         task_cache_config_dict=task_cache_config_dict,
@@ -120,7 +122,8 @@ def create_jiant_task_container_from_paths(task_config_path_dict_path: Dict,
                                            sampler_config_path: Dict,
                                            global_train_config_path: Dict,
                                            task_specific_configs_dict_path: Dict,
-                                           metric_aggregator_config_path: Dict) \
+                                           metric_aggregator_config_path: Dict,
+                                           verbose: bool = True) \
         -> JiantTaskContainer:
     return create_jiant_task_container(
         task_config_path_dict_path=io.read_json(task_config_path_dict_path),
@@ -129,4 +132,5 @@ def create_jiant_task_container_from_paths(task_config_path_dict_path: Dict,
         global_train_config=io.read_json(global_train_config_path),
         task_specific_configs_dict=io.read_json(task_specific_configs_dict_path),
         metric_aggregator_config=io.read_json(metric_aggregator_config_path),
+        verbose=verbose,
     )

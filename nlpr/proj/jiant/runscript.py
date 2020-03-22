@@ -66,7 +66,8 @@ class ResumeConfiguration(zconf.RunConfig):
     checkpoint_path = zconf.attr(type=str)
 
 
-def setup_runner(args: RunConfiguration, quick_init_out) -> jiant_runner.JiantRunner:
+def setup_runner(args: RunConfiguration, quick_init_out,
+                 verbose: bool = True) -> jiant_runner.JiantRunner:
     jiant_task_container = jiant_task_setup.create_jiant_task_container_from_paths(
         task_config_path_dict_path=args.task_config_path_dict_path,
         task_cache_config_dict_path=args.task_cache_config_dict_path,
@@ -74,6 +75,7 @@ def setup_runner(args: RunConfiguration, quick_init_out) -> jiant_runner.JiantRu
         global_train_config_path=args.global_train_config_path,
         task_specific_configs_dict_path=args.task_specific_configs_dict_path,
         metric_aggregator_config_path=args.metric_aggregator_config_path,
+        verbose=verbose,
     )
     with distributed.only_first_process(local_rank=args.local_rank):
         # load the model
@@ -97,7 +99,7 @@ def setup_runner(args: RunConfiguration, quick_init_out) -> jiant_runner.JiantRu
         warmup_steps=jiant_task_container.global_train_config.warmup_steps,
         warmup_proportion=None,
         optimizer_type=args.optimizer_type,
-        verbose=True,
+        verbose=verbose,
     )
     jiant_model, optimizer = model_setup.raw_special_model_setup(
         model=jiant_model,
@@ -133,6 +135,8 @@ def run_loop(args: RunConfiguration, checkpoint=None):
         )
         if is_resumed:
             runner.load_state(checkpoint["runner_state"])
+            del checkpoint["runner_state"]["model"]
+            del checkpoint["runner_state"]["optimizer"]
         checkpoint_saver = jiant_runner.CheckpointSaver(
             metadata={"args": args.to_dict()},
             save_path=os.path.join(args.output_dir, "checkpoint.p"),
