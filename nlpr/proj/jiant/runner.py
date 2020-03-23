@@ -187,12 +187,11 @@ class JiantRunner(BaseRunner):
             max_grad_norm=self.rparams.max_grad_norm,
         )
 
-    def get_runner_state(self, train_state: TrainState):
+    def get_runner_state(self):
         # Todo: Add fp16
         state = {
             "model": self.jiant_model.state_dict(),
             "optimizer": self.optimizer_scheduler.optimizer.state_dict(),
-            "train_state": train_state,
         }
         return state
 
@@ -206,9 +205,10 @@ class CheckpointSaver:
         self.metadata = metadata
         self.save_path = save_path
 
-    def save(self, runner_state: dict):
+    def save(self, runner_state: dict, metarunner_state: dict):
         to_save = {
             "runner_state": runner_state,
+            "metarunner_state": metarunner_state,
             "metadata": self.metadata
         }
         torch_utils.safe_save(to_save, self.save_path)

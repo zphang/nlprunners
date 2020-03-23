@@ -122,9 +122,22 @@ class JiantMetarunner(AbstractMetarunner):
         return self.should_save_checkpoint_func(self.train_state)
 
     def save_checkpoint(self):
-        runner_state = self.runner.get_runner_state(train_state=self.train_state)
+        runner_state = self.runner.get_runner_state()
+        metarunner_state = self.get_state()
         print("Saving State")
-        self.checkpoint_saver.save(runner_state=runner_state)
+        self.checkpoint_saver.save(runner_state=runner_state, metarunner_state=metarunner_state)
+
+    def get_state(self):
+        return {
+            "best_val_state": self.best_val_state,
+            "best_state_dict": self.best_state_dict,
+            "train_state": self.train_state,
+        }
+
+    def load_state(self, metarunner_state):
+        self.best_val_state = metarunner_state["best_val_state"]
+        self.best_state_dict = metarunner_state["best_state_dict"]
+        self.train_state = metarunner_state["train_state"]
 
     def should_eval_model(self) -> bool:
         return self.should_eval_func(self.train_state)
