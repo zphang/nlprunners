@@ -156,6 +156,7 @@ def load_lm_heads_from_ptt_weights(jiant_model, weights_dict):
         mismatch = submodel.mlm_head.load_state_dict(mlm_weights_dict)
         assert not mismatch.missing_keys
         missed.update(mismatch.unexpected_keys)
+        submodel.mlm_head.decoder.weight = jiant_model.encoder.embeddings.word_embeddings.weight
     return list(missed)
 
 
