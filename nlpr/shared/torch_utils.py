@@ -1,7 +1,6 @@
 import copy
 import math
 import os
-import shutil
 
 import torch
 import torch.nn as nn
@@ -112,5 +111,5 @@ def safe_save(obj, path, temp_path=None):
         temp_path = path + "._temp"
     torch.save(obj, temp_path)
     if os.path.exists(path):
-        shutil.rmtree(path)
+        os.remove(path)
     os.rename(temp_path, path)
