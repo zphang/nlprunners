@@ -75,14 +75,27 @@ def cka_from_gram(gram_x, gram_y):
     return hsic / torch.sqrt(var1 * var2)
 
 
-def compute_cka(x, y, kernel="linear"):
+def center_columns(matrix):
+    """ Center matrix columns
+
+    :param matrix: torch.FloatTensor, an [N, D] activation matrix
+    :return: torch.FloatTensor, an [N, D] activation matrix
+    """
+    return matrix - matrix.mean(1)[None, :]
+
+
+def compute_cka(x, y, kernel="linear", do_center_columns=True):
     """ Compute CKA between activation matrices x and y
 
     :param x: torch.FloatTensor, the first [N, D] activation matrix
     :param y: torch.FloatTensor, the second [N, D] activation matrix
     :param kernel: "linear" or "rbf" for kernel
+    :param do_center_columns: bool, whether to center the x and y matrices
     :return: torch.FloatTensor, the CKA similarity
     """
+    if do_center_columns:
+        x = center_columns(x)
+        y = center_columns(y)
     if kernel == "linear":
         gram_x, gram_y = compute_linear_gram(x), compute_linear_gram(y)
     elif kernel == "rbf":
