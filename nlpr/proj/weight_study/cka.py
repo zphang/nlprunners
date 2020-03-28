@@ -81,7 +81,7 @@ def center_columns(matrix):
     :param matrix: torch.FloatTensor, an [N, D] activation matrix
     :return: torch.FloatTensor, an [N, D] activation matrix
     """
-    return matrix - matrix.mean(1)[None, :]
+    return matrix - matrix.mean(0)[None, :]
 
 
 def compute_cka(x, y, kernel="linear", do_center_columns=True):
