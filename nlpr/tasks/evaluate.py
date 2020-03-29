@@ -546,7 +546,8 @@ class MLMEvaluationScheme(BaseEvaluationScheme):
         average_loss = mean(loss_list)
         perplexity = np.exp(average_loss)
         return Metrics(
-            major=perplexity,
+            # Major = negative perplexity
+            major=-perplexity,
             minor={
                 "perplexity": perplexity,
             }
