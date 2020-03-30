@@ -84,6 +84,24 @@ def center_columns(matrix):
     return matrix - matrix.mean(0)[None, :]
 
 
+def faster_linear_cka(x, y):
+    """ Compute linear CKA using the simplified version from Eq 14:
+
+    \frac{
+        ||Y.T X||_F^2
+    }{
+        ||X.T X||_F ||X.T X||_F
+    }
+
+    :param x: torch.FloatTensor, the first [N, D] activation matrix
+    :param y: torch.FloatTensor, the second [N, D] activation matrix
+    :return: torch.FloatTensor, the CKA similarity
+    """
+    numerator = torch.pow(y.T@x, 2).sum()
+    denominator = torch.sqrt(torch.pow(x.T@x, 2).sum() * torch.pow(y.T@y, 2).sum())
+    return numerator / denominator
+
+
 def compute_cka(x, y, kernel="linear", do_center_columns=True):
     """ Compute CKA between activation matrices x and y
 
@@ -96,10 +114,13 @@ def compute_cka(x, y, kernel="linear", do_center_columns=True):
     if do_center_columns:
         x = center_columns(x)
         y = center_columns(y)
-    if kernel == "linear":
+    if kernel == "faster_linear":
+        return faster_linear_cka(x=x, y=y)
+    elif kernel == "linear":
         gram_x, gram_y = compute_linear_gram(x), compute_linear_gram(y)
+        return cka_from_gram(gram_x=gram_x, gram_y=gram_y)
     elif kernel == "rbf":
         gram_x, gram_y = compute_rbf_gram(x), compute_rbf_gram(y)
+        return cka_from_gram(gram_x=gram_x, gram_y=gram_y)
     else:
         raise KeyError(kernel)
-    return cka_from_gram(gram_x=gram_x, gram_y=gram_y)
