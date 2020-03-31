@@ -31,6 +31,7 @@ from nlpr.tasks.lib.swag import SWAGTask
 from nlpr.tasks.lib.wic import WiCTask
 from nlpr.tasks.lib.wnli import WnliTask
 from nlpr.tasks.lib.wsc import WSCTask
+from nlpr.tasks.lib.xnli import XnliTask
 from nlpr.tasks.lib.yelp import YelpPolarityTask
 from nlpr.tasks.lib.templates.shared import Task
 
@@ -81,8 +82,9 @@ TASK_DICT = {
     "stsb": StsbTask,
     "swag": SWAGTask,
     "wic": WiCTask,
-    "wsc": WSCTask,
     "wnli": WnliTask,
+    "wsc": WSCTask,
+    "xnli": XnliTask,
     "yelp": YelpPolarityTask,
 }
 
@@ -111,7 +113,7 @@ def create_task_from_config(config: dict, base_path=None, verbose=False):
         print(task_class.__name__)
         for k, v in config["paths"].items():
             print(f"  [{k}]: {v}")
-    return task_class(name=config["task"], path_dict=config["paths"], **task_kwargs)
+    return task_class(name=config["name"], path_dict=config["paths"], **task_kwargs)
 
 
 def create_task_from_config_path(config_path: str, verbose=False):
