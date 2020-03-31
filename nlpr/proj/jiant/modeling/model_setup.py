@@ -136,7 +136,7 @@ def load_lm_heads_from_ptt_weights(jiant_model, weights_dict):
             'decoder.weight': "cls.predictions.decoder.weight",
             # 'decoder.bias' <-- linked directly to bias
         }
-    elif model_arch == ModelArchitectures.ROBERTA:
+    elif model_arch in (ModelArchitectures.ROBERTA, ModelArchitectures.XLM_ROBERTA):
         mlm_weights_dict = {
             strings.remove_prefix(k, "lm_head."): v
             for k, v in weights_dict.items()
@@ -260,6 +260,12 @@ def create_submodel(task, model_arch, encoder) -> submodels.Submodel:
                 vocab_size=encoder.config.vocab_size,
                 hidden_act=encoder.config.hidden_act,
             )
+        elif model_arch == ModelArchitectures.XLM_ROBERTA:
+            mlm_head = heads.RobertaMLMHead(
+                hidden_size=encoder.config.hidden_size,
+                vocab_size=encoder.config.vocab_size,
+                layer_norm_eps=encoder.config.layer_norm_eps,
+            )
         else:
             raise KeyError(model_arch)
         submodel = submodels.MLMModel(
@@ -278,6 +284,10 @@ def get_encoder(model_arch, ancestor_model):
         return ancestor_model.roberta
     elif model_arch == ModelArchitectures.ALBERT:
         return ancestor_model.albert
+    elif model_arch == ModelArchitectures.XLM_ROBERTA:
+        return ancestor_model.roberta
+    else:
+        raise KeyError()
 
 
 @dataclass
@@ -303,6 +313,11 @@ PTT_CLASS_SPEC_DICT = {
         tokenizer_class=ptt.AlbertTokenizer,
         model_class=ptt.AlbertForMaskedLM,
     ),
+    ModelArchitectures.XLM_ROBERTA: PttClassSpec(
+        config_class=ptt.XLMRobertaConfig,
+        tokenizer_class=ptt.XLMRobertaTokenizer,
+        model_class=ptt.XLMRobertaForMaskedLM,
+    ),
 }
 
 
@@ -313,6 +328,8 @@ def get_model_arch_from_encoder(encoder: nn.Module) -> ModelArchitectures:
         return ModelArchitectures.ROBERTA
     elif type(encoder) is ptt.AlbertModel:
         return ModelArchitectures.ALBERT
+    elif type(encoder) is ptt.XLMRobertaModel:
+        return ModelArchitectures.XLM_ROBERTA
     else:
         raise KeyError(type(encoder))
 
@@ -325,6 +342,7 @@ MODEL_PREFIX = {
     ModelArchitectures.BERT: "bert",
     ModelArchitectures.ROBERTA: "roberta",
     ModelArchitectures.ALBERT: "albert",
+    ModelArchitectures.XLM_ROBERTA: "xlm-roberta",
 }
 
 

@@ -19,6 +19,7 @@ class ModelArchitectures(Enum):
     ROBERTA = 4
     GLOVE_LSTM = 5
     ALBERT = 6
+    XLM_ROBERTA = 7
 
     @classmethod
     def from_model_type(cls, model_type):
@@ -26,7 +27,7 @@ class ModelArchitectures(Enum):
             return cls.BERT
         elif model_type.startswith("xlnet-"):
             return cls.XLNET
-        elif model_type.startswith("xlm-"):
+        elif model_type.startswith("xlm-") and not model_type.startswith("xlm-roberta"):
             return cls.XLM
         elif model_type.startswith("roberta-"):
             return cls.ROBERTA
@@ -34,6 +35,8 @@ class ModelArchitectures(Enum):
             return cls.ALBERT
         elif model_type == "glove_lstm":
             return cls.GLOVE_LSTM
+        elif model_type.startswith("xlm-roberta-"):
+            return cls.XLM_ROBERTA
         else:
             raise KeyError(model_type)
 
@@ -45,10 +48,13 @@ class ModelArchitectures(Enum):
         elif isinstance(ptt_model, ptt.XLNetPreTrainedModel):
             return cls.XLNET
         elif isinstance(ptt_model, ptt.XLMPreTrainedModel):
-            return cls.XLM
+            return cls.XLM_ROBERTA
         elif isinstance(ptt_model, ptt.BertPreTrainedModel) \
                 and ptt_model.__class__.__name__.startswith("Robert"):
             return cls.ROBERTA
+        elif isinstance(ptt_model, ptt.BertPreTrainedModel) \
+                and ptt_model.__class__.__name__.startswith("XLMRoberta"):
+            return cls.XLM_ROBERTA
         elif isinstance(ptt_model, glove_lstm_modeling.GloveLSTMModel):
             return cls.GLOVE_LSTM
         elif isinstance(ptt_model, transformers.modeling_albert.AlbertPreTrainedModel):
@@ -64,6 +70,7 @@ class ModelArchitectures(Enum):
             cls.XLM,
             cls.ROBERTA,
             cls.ALBERT,
+            cls.XLM_ROBERTA,
         ]
 
 
@@ -150,6 +157,23 @@ def build_featurization_spec(model_type, max_seq_length):
             sequence_b_segment_id=1,   # I think?
             sep_token_extra=False,
         )
+    elif model_arch == ModelArchitectures.XLM_ROBERTA:
+        # RoBERTa is weird
+        # token 0 = '<s>' which is the cls_token
+        # token 1 = '</s>' which is the sep_token
+        # Also two '</s>'s are used between sentences. Yes, not '</s><s>'.
+        return FeaturizationSpec(
+            max_seq_length=max_seq_length,
+            cls_token_at_end=False,
+            pad_on_left=False,
+            cls_token_segment_id=0,
+            pad_token_segment_id=0,
+            pad_token_id=1,  # Roberta uses pad_token_id = 1
+            pad_token_mask_id=0,
+            sequence_a_segment_id=0,
+            sequence_b_segment_id=0,  # RoBERTa has no token_type_ids
+            sep_token_extra=True,
+        )
     else:
         raise KeyError(model_arch)
 
@@ -191,6 +215,8 @@ MODEL_CLASS_DICT = {
         TaskTypes.SQUAD_STYLE_QA: ptt.AlbertForQuestionAnswering,
         TaskTypes.TAGGING: None,
         TaskTypes.MASKED_LANGUAGE_MODELING: ptt.AlbertForMaskedLM,
+    },
+    ModelArchitectures.XLM_ROBERTA: {
     },
 }
 
@@ -249,6 +275,13 @@ def resolve_model_setup_classes(model_type, task_type):
             tokenizer_class=ptt.AlbertTokenizer,
             # TODO: resolve correct model
             model_class=MODEL_CLASS_DICT[ModelArchitectures.ALBERT][task_type],
+        )
+    elif model_arch == ModelArchitectures.XLM_ROBERTA:
+        model_class_spec = ModelClassSpec(
+            config_class=ptt.XLMRobertaConfig,
+            tokenizer_class=ptt.XLMRobertaTokenizer,
+            # TODO: resolve correct model
+            model_class=None,
         )
     else:
         raise KeyError(model_arch)

@@ -6,17 +6,6 @@ import transformers as tfm
 import pyutils.io as io
 import zconf
 
-
-CLASS_LOOKUP = {
-    "bert": (tfm.BertForPreTraining, tfm.BertTokenizer),
-    "xlnet": (tfm.XLNetLMHeadModel, tfm.XLNetTokenizer),
-    "xlm": (tfm.XLMWithLMHeadModel, tfm.XLMTokenizer),
-    "roberta": (tfm.RobertaForMaskedLM, tfm.RobertaTokenizer),
-    "distilbert": (tfm.DistilBertForMaskedLM, tfm.DistilBertTokenizer),
-    "albert": (tfm.AlbertForMaskedLM, tfm.AlbertTokenizer),
-}
-
-
 @zconf.run_config
 class RunConfiguration(zconf.RunConfig):
     model_type = zconf.attr(type=str)
@@ -56,7 +45,22 @@ def export_model(model_type, output_base_path, model_class, tokenizer_class):
 
 
 def get_model_and_tokenizer_classes(model_type):
-    return CLASS_LOOKUP[model_type.split("-")[0]]
+    class_lookup = {
+        "bert": (tfm.BertForPreTraining, tfm.BertTokenizer),
+        "xlnet": (tfm.XLNetLMHeadModel, tfm.XLNetTokenizer),
+        "xlm-clm-": (tfm.XLMWithLMHeadModel, tfm.XLMTokenizer),
+        "roberta": (tfm.RobertaForMaskedLM, tfm.RobertaTokenizer),
+        "distilbert": (tfm.DistilBertForMaskedLM, tfm.DistilBertTokenizer),
+        "albert": (tfm.AlbertForMaskedLM, tfm.AlbertTokenizer),
+    }
+    if model_type.split("-")[0] in class_lookup:
+        return class_lookup[model_type.split("-")[0]]
+    elif model_type.startswith("xlm-mlm-") or model_type.startswith("xlm-clm-"):
+        return tfm.XLMWithLMHeadModel, tfm.XLMTokenizer
+    elif model_type.startswith("xlm-roberta-"):
+        return tfm.XLMRobertaForMaskedLM, tfm.XLMRobertaTokenizer
+    else:
+        raise KeyError()
 
 
 def main():
