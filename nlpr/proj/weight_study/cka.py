@@ -29,6 +29,10 @@ def old_centering(K):
 def center_gram(gram_matrix):
     """ Center a symmetric Gram matrix
 
+    Quote:
+        "This is equivalent to centering the (possibly infinite-dimensional) features
+         induced by the kernel before computing the Gram matrix."
+
     :param gram_matrix: torch.FloatTensor, an [N, N] Gram matrix
     :return: torch.FloatTensor, an [N, N] centered Gram matrix
     """
@@ -102,20 +106,16 @@ def faster_linear_cka(x, y):
     return numerator / denominator
 
 
-def compute_cka(x, y, kernel="linear", do_center_columns=True):
+def compute_cka(x, y, kernel="linear"):
     """ Compute CKA between activation matrices x and y
 
     :param x: torch.FloatTensor, the first [N, D] activation matrix
     :param y: torch.FloatTensor, the second [N, D] activation matrix
     :param kernel: "linear" or "rbf" for kernel
-    :param do_center_columns: bool, whether to center the x and y matrices
     :return: torch.FloatTensor, the CKA similarity
     """
-    if do_center_columns:
-        x = center_columns(x)
-        y = center_columns(y)
     if kernel == "faster_linear":
-        return faster_linear_cka(x=x, y=y)
+        return faster_linear_cka(x=center_columns(x), y=center_columns(y))
     elif kernel == "linear":
         gram_x, gram_y = compute_linear_gram(x), compute_linear_gram(y)
         return cka_from_gram(gram_x=gram_x, gram_y=gram_y)
