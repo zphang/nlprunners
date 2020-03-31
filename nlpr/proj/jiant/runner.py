@@ -117,10 +117,10 @@ class JiantRunner(BaseRunner):
             "loss_val": loss_val / task_specific_config.gradient_accumulation_steps,
         })
 
-    def run_val(self, use_subset=None, verbose=True):
+    def run_val(self, task_name_list, use_subset=None, verbose=True):
         evaluate_dict = {}
-        val_dataloader_dict = self.get_val_dataloader_dict(use_subset=use_subset)
-        val_labels_dict = self.get_val_labels_dict(use_subset=use_subset)
+        val_dataloader_dict = self.get_val_dataloader_dict(task_name_list=task_name_list, use_subset=use_subset)
+        val_labels_dict = self.get_val_labels_dict(task_name_list=task_name_list, use_subset=use_subset)
         for task_name, task in self.jiant_task_container.task_dict.items():
             evaluate_dict[task_name] = run_val(
                 val_dataloader=val_dataloader_dict[task_name],
@@ -136,7 +136,8 @@ class JiantRunner(BaseRunner):
     def get_train_dataloader_dict(self):
         # Not currently supported distributed parallel
         train_dataloader_dict = {}
-        for task_name, task in self.jiant_task_container.task_dict.items():
+        for task_name in self.jiant_task_container.task_run_config.train_task_list:
+            task = self.jiant_task_container.task_dict[task_name]
             train_cache = self.jiant_task_container.task_cache_dict[task_name]["train"]
             train_batch_size = self.jiant_task_container.task_specific_configs[task_name].train_batch_size
             train_dataloader_dict[task_name] = InfiniteYield(get_train_dataloader_from_cache(
@@ -146,9 +147,10 @@ class JiantRunner(BaseRunner):
             ))
         return train_dataloader_dict
 
-    def _get_eval_dataloader_dict(self, phase, use_subset=False):
+    def _get_eval_dataloader_dict(self, phase, task_name_list, use_subset=False):
         val_dataloader_dict = {}
-        for task_name, task in self.jiant_task_container.task_dict.items():
+        for task_name in task_name_list:
+            task = self.jiant_task_container.task_dict[task_name]
             eval_cache = self.jiant_task_container.task_cache_dict[task_name][phase]
             task_specific_config = self.jiant_task_container.task_specific_configs[task_name]
             val_dataloader_dict[task_name] = get_eval_dataloader_from_cache(
@@ -159,12 +161,16 @@ class JiantRunner(BaseRunner):
             )
         return val_dataloader_dict
 
-    def get_val_dataloader_dict(self, use_subset=False):
-        return self._get_eval_dataloader_dict(phase="val", use_subset=use_subset)
+    def get_val_dataloader_dict(self, task_name_list, use_subset=False):
+        return self._get_eval_dataloader_dict(
+            phase="val",
+            task_name_list=task_name_list,
+            use_subset=use_subset,
+        )
 
-    def get_val_labels_dict(self, use_subset=False):
+    def get_val_labels_dict(self, task_name_list, use_subset=False):
         val_labels_dict = {}
-        for task_name, task in self.jiant_task_container.task_dict.items():
+        for task_name in task_name_list:
             task_specific_config = self.jiant_task_container.task_specific_configs[task_name]
             val_labels_cache = self.jiant_task_container.task_cache_dict[task_name]["val_labels"]
             val_labels = val_labels_cache.get_all()
@@ -174,7 +180,10 @@ class JiantRunner(BaseRunner):
         return val_labels_dict
 
     def get_test_dataloader_dict(self):
-        return self._get_eval_dataloader_dict(phase=PHASE.TEST)
+        return self._get_eval_dataloader_dict(
+            task_name_list=self.jiant_task_container.task_run_config.test_task_list,
+            phase=PHASE.TEST,
+        )
 
     def complex_backpropagate(self, loss, gradient_accumulation_steps):
         return complex_backpropagate(

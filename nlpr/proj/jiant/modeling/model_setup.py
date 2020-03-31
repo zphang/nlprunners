@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Dict
 
 import torch
 import torch.nn as nn
@@ -12,10 +12,15 @@ import nlpr.proj.jiant.modeling.primary as primary
 import nlpr.proj.jiant.modeling.submodels as submodels
 import nlpr.proj.jiant.modeling.heads as heads
 from nlpr.shared.model_setup import ModelArchitectures
-from nlpr.tasks import TaskTypes
+from nlpr.tasks import Task, TaskTypes
 
 
-def setup_jiant_style_model(model_type, model_config_path, tokenizer_path, task_dict):
+def setup_jiant_style_model(model_type: str,
+                            model_config_path: str,
+                            tokenizer_path: str,
+                            task_dict: Dict[str, Task],
+                            task_to_submodel_map: Dict[str, str],
+                            ):
     model_arch = ModelArchitectures.from_model_type(model_type)
     ptt_class_spec = PTT_CLASS_SPEC_DICT[model_arch]
     tokenizer = model_setup.get_tokenizer(
@@ -30,16 +35,17 @@ def setup_jiant_style_model(model_type, model_config_path, tokenizer_path, task_
     encoder = get_encoder(model_arch=model_arch, ancestor_model=ancestor_model)
     submodels_dict = {
         task_name: create_submodel(
-            task=task,
+            task=task_dict[task_name],
             model_arch=model_arch,
             encoder=encoder,
         )
-        for task_name, task in task_dict.items()
+        for task_name in sorted(list(task_to_submodel_map.values()))
     }
     return primary.JiantStyleModel(
         task_dict=task_dict,
         encoder=encoder,
         submodels_dict=submodels_dict,
+        task_to_submodel_map=task_to_submodel_map,
         tokenizer=tokenizer,
     )
 
@@ -49,9 +55,8 @@ def setup_jiant_style_model_single(model_type, model_config_path, tokenizer_path
         model_type=model_type,
         model_config_path=model_config_path,
         tokenizer_path=tokenizer_path,
-        task_dict={
-            task.name: task,
-        }
+        task_dict={task.name: task},
+        task_to_submodel_map={task.name: task.name},
     )
 
 

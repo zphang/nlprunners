@@ -22,6 +22,8 @@ class RunConfiguration(zconf.RunConfig):
     sampler_config_path = zconf.attr(type=str, required=True)
     global_train_config_path = zconf.attr(type=str, required=True)
     task_specific_configs_dict_path = zconf.attr(type=str, required=True)
+    submodels_config_path = zconf.attr(type=str, default=None)
+    task_run_config_path = zconf.attr(type=str, default=None)
     metric_aggregator_config_path = zconf.attr(type=str, required=True)
     output_dir = zconf.attr(type=str, required=True)
 
@@ -74,6 +76,8 @@ def setup_runner(args: RunConfiguration, quick_init_out,
         sampler_config_path=args.sampler_config_path,
         global_train_config_path=args.global_train_config_path,
         task_specific_configs_dict_path=args.task_specific_configs_dict_path,
+        submodels_config_path=args.submodels_config_path,
+        task_run_config_path=args.task_run_config_path,
         metric_aggregator_config_path=args.metric_aggregator_config_path,
         verbose=verbose,
     )
@@ -84,6 +88,7 @@ def setup_runner(args: RunConfiguration, quick_init_out,
             model_config_path=args.model_config_path,
             tokenizer_path=args.model_tokenizer_path,
             task_dict=jiant_task_container.task_dict,
+            task_to_submodel_map=jiant_task_container.submodels_config.task_to_submodel_map,
         )
         jiant_model_setup.delegate_load_from_path(
             jiant_model=jiant_model,
@@ -166,7 +171,9 @@ def run_loop(args: RunConfiguration, checkpoint=None):
             )
 
         if args.do_val:
-            val_results_dict = runner.run_val()
+            val_results_dict = runner.run_val(
+                task_name_list=runner.jiant_task_container.task_run_config.val_task_list,
+            )
             jiant_evaluate.write_val_results(
                 val_results_dict=val_results_dict,
                 metrics_aggregator=runner.jiant_task_container.metrics_aggregator,

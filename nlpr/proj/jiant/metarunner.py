@@ -1,4 +1,3 @@
-import os
 from dataclasses import dataclass
 
 from pyutils.functional import always_false
@@ -179,7 +178,10 @@ class JiantMetarunner(AbstractMetarunner):
         pass
 
     def eval_save(self):
-        val_results_dict = self.runner.run_val(use_subset=True)
+        val_results_dict = self.runner.run_val(
+            task_name_list=self.runner.jiant_task_container.task_run_config.train_val_task_list,
+            use_subset=True
+        )
         aggregated_major = jiant_task_sampler.compute_aggregate_major_metrics_from_results_dict(
             metrics_aggregator=self.runner.jiant_task_container.metrics_aggregator,
             results_dict=val_results_dict,

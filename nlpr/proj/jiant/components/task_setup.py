@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, List, Optional
+import warnings
 
 import pyutils.io as io
 
@@ -24,12 +25,27 @@ class GlobalTrainConfig(pycore.ExtendedDataClassMixin):
 
 
 @dataclass
+class SubmodelsConfig(pycore.ExtendedDataClassMixin):
+    task_to_submodel_map: Dict[str, str]
+
+
+@dataclass
+class TaskRunConfig(pycore.ExtendedDataClassMixin):
+    train_task_list: List[str]
+    train_val_task_list: List[str]
+    val_task_list: List[str]
+    test_task_list: List[str]
+
+
+@dataclass
 class JiantTaskContainer:
     task_dict: Dict[str, tasks.Task]
     task_sampler: jiant_task_sampler.BaseMultiTaskSampler
     task_cache_dict: Dict
     global_train_config: GlobalTrainConfig
     task_specific_configs: Dict[str, TaskSpecificConfig]
+    submodels_config: SubmodelsConfig
+    task_run_config: TaskRunConfig
     metrics_aggregator: jiant_task_sampler.BaseMetricAggregator
 
 
@@ -83,6 +99,8 @@ def create_jiant_task_container(task_config_path_dict_path: Dict,
                                 global_train_config: Dict,
                                 task_specific_configs_dict: Dict,
                                 metric_aggregator_config: Dict,
+                                submodels_config: Dict,
+                                task_run_config: Dict,
                                 verbose: bool = True) \
         -> JiantTaskContainer:
     task_dict = create_task_dict(
@@ -104,6 +122,24 @@ def create_jiant_task_container(task_config_path_dict_path: Dict,
     task_specific_config = create_task_specific_configs(
         task_specific_configs_dict=task_specific_configs_dict,
     )
+    if submodels_config is None:
+        submodels_config = SubmodelsConfig(task_to_submodel_map={
+            task_name: task_name
+            for task_name in sorted(list(task_dict))
+        })
+    else:
+        submodels_config = SubmodelsConfig.from_dict(submodels_config)
+
+    if task_run_config is None:
+        task_list = sorted(list(task_dict))
+        task_run_config = TaskRunConfig(
+            train_task_list=task_list,
+            train_val_task_list=task_list,
+            val_task_list=task_list,
+            test_task_list=task_list,
+        )
+    else:
+        task_run_config = TaskRunConfig.from_dict(task_run_config)
     metric_aggregator = jiant_task_sampler.create_metric_aggregator(
         metric_aggregator_config=metric_aggregator_config,
     )
@@ -113,24 +149,43 @@ def create_jiant_task_container(task_config_path_dict_path: Dict,
         global_train_config=global_train_config,
         task_cache_dict=task_cache_dict,
         task_specific_configs=task_specific_config,
+        submodels_config=submodels_config,
+        task_run_config=task_run_config,
         metrics_aggregator=metric_aggregator,
     )
 
 
-def create_jiant_task_container_from_paths(task_config_path_dict_path: Dict,
-                                           task_cache_config_dict_path: Dict,
-                                           sampler_config_path: Dict,
-                                           global_train_config_path: Dict,
-                                           task_specific_configs_dict_path: Dict,
-                                           metric_aggregator_config_path: Dict,
+def create_jiant_task_container_from_paths(task_config_path_dict_path: str,
+                                           task_cache_config_dict_path: str,
+                                           sampler_config_path: str,
+                                           global_train_config_path: str,
+                                           task_specific_configs_dict_path: str,
+                                           submodels_config_path: Optional[str],
+                                           task_run_config_path: Optional[str],
+                                           metric_aggregator_config_path: str,
                                            verbose: bool = True) \
         -> JiantTaskContainer:
+
+    if submodels_config_path is None:
+        warnings.warn("Avoid default submodels_config_path", DeprecationWarning)
+        submodels_config = None
+    else:
+        submodels_config = io.read_json(submodels_config_path)
+
+    if task_run_config_path is None:
+        warnings.warn("Avoid default task_run_config_path", DeprecationWarning)
+        task_run_config = None
+    else:
+        task_run_config = io.read_json(task_run_config_path)
+
     return create_jiant_task_container(
         task_config_path_dict_path=io.read_json(task_config_path_dict_path),
         task_cache_config_dict=io.read_json(task_cache_config_dict_path),
         sampler_config=io.read_json(sampler_config_path),
         global_train_config=io.read_json(global_train_config_path),
         task_specific_configs_dict=io.read_json(task_specific_configs_dict_path),
+        submodels_config=submodels_config,
+        task_run_config=task_run_config,
         metric_aggregator_config=io.read_json(metric_aggregator_config_path),
         verbose=verbose,
     )

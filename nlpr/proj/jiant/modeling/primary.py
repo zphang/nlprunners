@@ -11,11 +11,13 @@ class JiantStyleModel(nn.Module):
                  task_dict: Dict[str, tasks.Task],
                  encoder: nn.Module,
                  submodels_dict: Dict[str, submodels.Submodel],
+                 task_to_submodel_map: Dict[str, str],
                  tokenizer):
         super().__init__()
         self.task_dict = task_dict
         self.encoder = encoder
         self.submodels_dict = nn.ModuleDict(submodels_dict)
+        self.task_to_submodel_map = task_to_submodel_map
         self.tokenizer = tokenizer
 
     def forward(self, batch, task, compute_loss: bool = False):
@@ -25,7 +27,8 @@ class JiantStyleModel(nn.Module):
         else:
             task_name = task.name
             task = task
-        submodel = self.submodels_dict[task_name]
+        submodel_key = self.task_to_submodel_map[task_name]
+        submodel = self.submodels_dict[submodel_key]
         return submodel(
             batch=batch,
             task=task,

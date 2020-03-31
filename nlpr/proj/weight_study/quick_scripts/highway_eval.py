@@ -60,7 +60,9 @@ def main(args: RunConfiguration):
     val_results_list = []
     for i in display.trange(13):
         runner.jiant_model.encoder.encoder.layer = runner.jiant_model.encoder.encoder.old_layer[:i]
-        val_results_dict = runner.run_val()
+        val_results_dict = runner.run_val(
+            task_name_list=runner.jiant_task_container.task_run_config.val_task_list,
+        )
         val_results_list.append(val_results_dict[task_name]["metrics"].major)
     io.write_json(val_results_list, path=args.output_path)
 
