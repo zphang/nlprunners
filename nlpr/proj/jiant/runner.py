@@ -264,6 +264,7 @@ def run_val(val_dataloader,
         nb_eval_examples += len(batch)
         nb_eval_steps += 1
     eval_loss = total_eval_loss / nb_eval_steps
+    tokenizer = jiant_model.tokenizer if not torch_utils.is_data_parallel(jiant_model) else jiant_model.module.tokenizer
     return {
         "accumulator": eval_accumulator,
         "loss": eval_loss,
@@ -271,6 +272,6 @@ def run_val(val_dataloader,
             task=task,
             accumulator=eval_accumulator,
             labels=val_labels,
-            tokenizer=jiant_model.tokenizer,
+            tokenizer=tokenizer,
         ),
     }

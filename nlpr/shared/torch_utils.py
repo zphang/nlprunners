@@ -106,6 +106,10 @@ class DataLoaderWithLength(DataLoader):
             raise e
 
 
+def is_data_parallel(torch_module):
+    return isinstance(torch_module, nn.DataParallel)
+
+
 def safe_save(obj, path, temp_path=None):
     if temp_path is None:
         temp_path = path + "._temp"
