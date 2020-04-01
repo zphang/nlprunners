@@ -74,10 +74,13 @@ def create_task_cache_dict(task_cache_config_dict: Dict) -> Dict:
 
 
 def get_num_train_examples(task_cache_dict: Dict) -> Dict[str, int]:
-    return {
-        task_name: len(single_task_cache_dict["train"])
-        for task_name, single_task_cache_dict in task_cache_dict.items()
-    }
+    num_train_examples_dict = {}
+    for task_name, single_task_cache_dict in task_cache_dict.items():
+        if "train" in single_task_cache_dict:
+            num_train_examples_dict[task_name] = len(single_task_cache_dict["train"])
+        else:
+            num_train_examples_dict[task_name] = 0
+    return num_train_examples_dict
 
 
 def create_task_specific_configs(task_specific_configs_dict) -> Dict[str, TaskSpecificConfig]:
@@ -93,18 +96,18 @@ def create_task_specific_configs(task_specific_configs_dict) -> Dict[str, TaskSp
     return task_specific_configs
 
 
-def create_jiant_task_container(task_config_path_dict_path: Dict,
+def create_jiant_task_container(task_config_path_dict: Dict,
                                 task_cache_config_dict: Dict,
                                 sampler_config: Dict,
                                 global_train_config: Dict,
                                 task_specific_configs_dict: Dict,
                                 metric_aggregator_config: Dict,
-                                submodels_config: Dict,
-                                task_run_config: Dict,
+                                submodels_config: Optional[Dict] = None,
+                                task_run_config: Optional[Dict] = None,
                                 verbose: bool = True) \
         -> JiantTaskContainer:
     task_dict = create_task_dict(
-        task_config_dict=task_config_path_dict_path,
+        task_config_dict=task_config_path_dict,
         verbose=verbose,
     )
     task_cache_dict = create_task_cache_dict(
@@ -179,7 +182,7 @@ def create_jiant_task_container_from_paths(task_config_path_dict_path: str,
         task_run_config = io.read_json(task_run_config_path)
 
     return create_jiant_task_container(
-        task_config_path_dict_path=io.read_json(task_config_path_dict_path),
+        task_config_path_dict=io.read_json(task_config_path_dict_path),
         task_cache_config_dict=io.read_json(task_cache_config_dict_path),
         sampler_config=io.read_json(sampler_config_path),
         global_train_config=io.read_json(global_train_config_path),

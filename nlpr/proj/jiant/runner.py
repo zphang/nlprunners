@@ -16,7 +16,7 @@ from nlpr.proj.simple.runner import (
     get_eval_dataloader_from_cache,
 )
 import nlpr.shared.pycore as pycore
-from nlpr.proj.jiant.modeling.primary import JiantStyleModel
+from nlpr.proj.jiant.modeling.primary import JiantStyleModel, wrap_jiant_forward
 import nlpr.tasks.evaluate as evaluate
 from nlpr.proj.jiant.components.task_setup import JiantTaskContainer
 from nlpr.constants import PHASE
@@ -70,7 +70,7 @@ class JiantRunner(BaseRunner):
 
     def run_train_context(self, verbose=True):
         train_dataloader_dict = self.get_train_dataloader_dict()
-        train_state = TrainState.from_task_name_list(list(self.jiant_task_container.task_dict))
+        train_state = TrainState.from_task_name_list(self.jiant_task_container.task_run_config.train_task_list)
         for _ in maybe_tqdm(range(self.jiant_task_container.global_train_config.max_steps),
                             desc="Training", verbose=verbose):
             self.run_train_step(train_dataloader_dict=train_dataloader_dict, train_state=train_state)
@@ -95,7 +95,8 @@ class JiantRunner(BaseRunner):
         for i in range(task_specific_config.gradient_accumulation_steps):
             batch, batch_metadata = train_dataloader_dict[task_name].pop()
             batch = batch.to(self.device)
-            model_output = self.jiant_model(
+            model_output = wrap_jiant_forward(
+                jiant_model=self.jiant_model,
                 batch=batch,
                 task=task,
                 compute_loss=True,
@@ -121,7 +122,8 @@ class JiantRunner(BaseRunner):
         evaluate_dict = {}
         val_dataloader_dict = self.get_val_dataloader_dict(task_name_list=task_name_list, use_subset=use_subset)
         val_labels_dict = self.get_val_labels_dict(task_name_list=task_name_list, use_subset=use_subset)
-        for task_name, task in self.jiant_task_container.task_dict.items():
+        for task_name in task_name_list:
+            task = self.jiant_task_container.task_dict[task_name]
             evaluate_dict[task_name] = run_val(
                 val_dataloader=val_dataloader_dict[task_name],
                 val_labels=val_labels_dict[task_name],
@@ -244,7 +246,8 @@ def run_val(val_dataloader,
         batch = batch.to(device)
 
         with torch.no_grad():
-            model_output = jiant_model(
+            model_output = wrap_jiant_forward(
+                jiant_model=jiant_model,
                 batch=batch,
                 task=task,
                 compute_loss=True,

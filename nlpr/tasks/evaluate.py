@@ -570,6 +570,7 @@ def get_evaluation_scheme_for_task(task) -> BaseEvaluationScheme:
                 tasks.SstTask,
                 tasks.WiCTask,
                 tasks.WSCTask,
+                tasks.XnliTask,
                 tasks.YelpPolarityTask,
              )):
         return SimpleAccuracyEvaluationScheme()

@@ -1,25 +1,11 @@
 import abc
 from dataclasses import dataclass
-from typing import NamedTuple, Any
+from typing import Any
 
 import torch
 import torch.nn as nn
 import nlpr.proj.jiant.modeling.heads as heads
-
-
-class BaseModelOutput:
-    pass
-
-
-class LogitsOutput(NamedTuple, BaseModelOutput):
-    logits: torch.Tensor
-    other: Any = None
-
-
-class LogitsAndLossOutput(NamedTuple, BaseModelOutput):
-    logits: torch.Tensor
-    loss: torch.Tensor
-    other: Any = None
+from nlpr.proj.jiant.components.outputs import LogitsOutput, LogitsAndLossOutput
 
 
 class Submodel(nn.Module, metaclass=abc.ABCMeta):

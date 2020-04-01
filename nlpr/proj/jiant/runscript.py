@@ -133,6 +133,7 @@ def setup_runner(args: RunConfiguration, quick_init_out,
 def run_loop(args: RunConfiguration, checkpoint=None):
     is_resumed = checkpoint is not None
     quick_init_out = initialization.quick_init(args=args, verbose=True)
+    print(quick_init_out.n_gpu)
     with quick_init_out.log_writer.log_context():
         runner = setup_runner(
             args=args,
