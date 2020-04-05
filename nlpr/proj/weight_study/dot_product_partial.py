@@ -18,6 +18,7 @@ class RunConfiguration(zconf.RunConfig):
     start_a = zconf.attr(type=int, required=True)
     end_a = zconf.attr(type=int, required=True)
     segment_size = zconf.attr(type=int, default=None)
+    base_path = zconf.attr(type=str, default=None)
     output_base_path = zconf.attr(type=str, required=True)
 
 
@@ -39,8 +40,7 @@ def load_variances(squared_differences_path, prefix):
 
 def get_arr(path_ls, prefix, start_i, segment_size):
     arr = None
-    i_range = range(start_i, start_i + segment_size)
-    for i, idx in enumerate(tqdm.tqdm(i_range, desc="Loading curr")):
+    for i, idx in enumerate(tqdm.trange(start_i, start_i + segment_size, desc="Loading curr")):
         loaded = flatten_dict(split_dict.load_split_dict(path_ls[idx], prefix_ls=[prefix]))
         if arr is None:
             arr = np.empty([segment_size, len(loaded)], dtype=np.float32)
@@ -48,18 +48,22 @@ def get_arr(path_ls, prefix, start_i, segment_size):
     return arr
 
 
-def row_compute_dot_product_partial(path_ls, prefix, start_a, segment_size):
+def row_compute_dot_product_partial(path_ls, prefix, start_a, segment_size, base=None):
     n = len(path_ls)
+    actual_segment_size = min(start_a + segment_size, len(path_ls)) - start_a
     arr_a = get_arr(
         path_ls=path_ls,
         prefix=prefix,
         start_i=start_a,
-        segment_size=segment_size,
+        segment_size=actual_segment_size,
     )
+    if base is not None:
+        arr_a -= base
     tensor_a = torch.from_numpy(arr_a).cuda()
-    sum_of_products_arr = np.zeros([segment_size, n])
+    sum_of_products_arr = np.zeros([actual_segment_size, n])
     for idx_b in tqdm.trange(start_a, len(path_ls)):
         arr_b = flatten_dict(split_dict.load_split_dict(path_ls[idx_b], prefix_ls=[prefix]))
+        arr_b -= base
         tensor_b = torch.FloatTensor(arr_b).cuda().view(1, -1)
         sum_of_products_arr[:, idx_b] = (tensor_a * tensor_b).sum(1).cpu().numpy()
 
@@ -73,12 +77,17 @@ def row_compute_dot_product_partial(path_ls, prefix, start_a, segment_size):
 def main(args: RunConfiguration):
     path_ls = io.read_json(args.path_ls_path)
     os.makedirs(args.output_base_path, exist_ok=True)
-    for start_a in range(args.start_a, args.end_a, args.segment_size):
+    if args.base_path:
+        base = flatten_dict(split_dict.load_split_dict(args.base_path, prefix_ls=[args.prefix]))
+    else:
+        base = None
+    for start_a in range(args.start_a, min(args.end_a, len(path_ls)), args.segment_size):
         sub_results = row_compute_dot_product_partial(
             path_ls=path_ls,
             prefix=args.prefix,
             start_a=start_a,
             segment_size=args.segment_size,
+            base=base,
         )
         torch.save(sub_results, os.path.join(args.output_base_path, f"part___{start_a:05d}.p"))
 
