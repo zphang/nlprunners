@@ -117,3 +117,10 @@ def safe_save(obj, path, temp_path=None):
     if os.path.exists(path):
         os.remove(path)
     os.rename(temp_path, path)
+
+
+def get_model_for_saving(model: nn.Module) -> nn.Module:
+    if isinstance(model, nn.DataParallel):
+        return model.module
+    else:
+        return model

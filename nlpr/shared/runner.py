@@ -233,7 +233,7 @@ def optim_step_grad_accum(optimizer_scheduler: OptimizerScheduler,
 
 def save_model_with_metadata(model: nn.Module, metadata: dict, output_dir: str, file_name="model"):
     torch.save(
-        model.state_dict(),
+        torch_utils.get_model_for_saving(model).state_dict(),
         os.path.join(output_dir, f"{file_name}.p")
     )
     io.write_json(

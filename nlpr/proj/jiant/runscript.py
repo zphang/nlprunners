@@ -7,6 +7,7 @@ import zconf
 import nlpr.shared.initialization as initialization
 import nlpr.shared.distributed as distributed
 import nlpr.shared.model_setup as model_setup
+import nlpr.shared.torch_utils as torch_utils
 import nlpr.proj.jiant.modeling.model_setup as jiant_model_setup
 import nlpr.proj.jiant.runner as jiant_runner
 import nlpr.proj.jiant.components.task_setup as jiant_task_setup
@@ -167,7 +168,7 @@ def run_loop(args: RunConfiguration, checkpoint=None):
 
         if args.do_save:
             torch.save(
-                runner.jiant_model.state_dict(),
+                torch_utils.get_model_for_saving(runner.jiant_model).state_dict(),
                 os.path.join(args.output_dir, "model.p")
             )
 

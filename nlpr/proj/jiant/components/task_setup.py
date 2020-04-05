@@ -116,11 +116,6 @@ def create_jiant_task_container(task_config_path_dict: Dict,
     num_train_examples_dict = get_num_train_examples(
         task_cache_dict=task_cache_dict,
     )
-    task_sampler = jiant_task_sampler.create_task_sampler(
-        sampler_config=sampler_config,
-        task_dict=task_dict,
-        task_to_examples_dict=num_train_examples_dict,
-    )
     global_train_config = GlobalTrainConfig.from_dict(global_train_config)
     task_specific_config = create_task_specific_configs(
         task_specific_configs_dict=task_specific_configs_dict,
@@ -143,6 +138,15 @@ def create_jiant_task_container(task_config_path_dict: Dict,
         )
     else:
         task_run_config = TaskRunConfig.from_dict(task_run_config)
+    task_sampler = jiant_task_sampler.create_task_sampler(
+        sampler_config=sampler_config,
+        # TODO: Hack
+        task_dict={
+            task_name: task_dict[task_name]
+            for task_name in task_run_config.train_task_list
+        },
+        task_to_examples_dict=num_train_examples_dict,
+    )
     metric_aggregator = jiant_task_sampler.create_metric_aggregator(
         metric_aggregator_config=metric_aggregator_config,
     )

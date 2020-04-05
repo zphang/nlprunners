@@ -201,13 +201,13 @@ class JiantRunner(BaseRunner):
     def get_runner_state(self):
         # Todo: Add fp16
         state = {
-            "model": self.jiant_model.state_dict(),
+            "model": torch_utils.get_model_for_saving(self.jiant_model).state_dict(),
             "optimizer": self.optimizer_scheduler.optimizer.state_dict(),
         }
         return state
 
     def load_state(self, runner_state):
-        self.jiant_model.load_state_dict(runner_state["model"])
+        torch_utils.get_model_for_saving(self.jiant_model).load_state_dict(runner_state["model"])
         self.optimizer_scheduler.optimizer.load_state_dict(runner_state["optimizer"])
 
 

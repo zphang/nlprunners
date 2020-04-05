@@ -125,6 +125,7 @@ class Example(BaseExample):
                 pad_to_max_length=True,
                 stride=max_seq_length - doc_stride - len(truncated_query) - sequence_pair_added_tokens,
                 truncation_strategy="only_second" if tokenizer.padding_side == "right" else "only_first",
+                return_token_type_ids=True,
             )
 
             paragraph_len = min(
@@ -350,7 +351,7 @@ class PartialDataRow(ExtendedDataClassMixin):
 
     @classmethod
     def from_data_row(cls, data_row: DataRow):
-        data_row_dict = data_row.asdict()
+        data_row_dict = data_row.to_dict()
         return PartialDataRow(**{k: data_row_dict[k] for k in cls.get_fields()})
 
 

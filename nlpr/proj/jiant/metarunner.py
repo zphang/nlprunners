@@ -8,7 +8,7 @@ from nlpr.shared.runner import (
     compare_steps_max_steps,
 )
 from nlpr.shared.pycore import ExtendedDataClassMixin
-from nlpr.shared.torch_utils import copy_state_dict, CPU_DEVICE
+from nlpr.shared.torch_utils import copy_state_dict, CPU_DEVICE, get_model_for_saving
 from nlpr.shared.metarunner_v2 import AbstractMetarunner
 import nlpr.proj.jiant.runner as jiant_runner
 import nlpr.proj.jiant.components.task_sampler as jiant_task_sampler
@@ -206,7 +206,7 @@ class JiantMetarunner(AbstractMetarunner):
                     file_name="best_model",
                 )
             self.best_state_dict = copy_state_dict(
-                state_dict=self.model.state_dict(),
+                state_dict=get_model_for_saving(self.model).state_dict(),
                 target_device=CPU_DEVICE,
             )
         self.val_state_history.append(val_state)

@@ -490,7 +490,7 @@ class SQuADEvaluationScheme(BaseEvaluationScheme):
 
     @classmethod
     def get_labels_from_cache(cls, cache):
-        return [cls.get_label_from_data_row(datum) for datum in cache.iter_all()]
+        return [cls.get_label_from_data_row(datum["data_row"]) for datum in cache.iter_all()]
 
     @classmethod
     def get_labels_from_cache_and_examples(cls, task, cache, examples):
