@@ -595,7 +595,9 @@ def get_evaluation_scheme_for_task(task) -> BaseEvaluationScheme:
         return AccAndF1EvaluationScheme()
     elif isinstance(task, (
                 tasks.MultiQATask,
-                tasks.SquadTask
+                tasks.SquadTask,
+                tasks.XquadTask,
+                tasks.MlqaTask,
             )):
         return SQuADEvaluationScheme()
     elif isinstance(task, tasks.MultiRCTask):

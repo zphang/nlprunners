@@ -13,6 +13,7 @@ from nlpr.tasks.lib.hellaswag import HellaSwagTask
 from nlpr.tasks.lib.imdb import IMDBTask
 from nlpr.tasks.lib.mlm import MLMTask
 from nlpr.tasks.lib.maskedwiki import MaskedWikiTask
+from nlpr.tasks.lib.mlqa import MlqaTask
 from nlpr.tasks.lib.mnli import MnliTask
 from nlpr.tasks.lib.mrpc import MrpcTask
 from nlpr.tasks.lib.multiqa import MultiQATask
@@ -32,6 +33,7 @@ from nlpr.tasks.lib.wic import WiCTask
 from nlpr.tasks.lib.wnli import WnliTask
 from nlpr.tasks.lib.wsc import WSCTask
 from nlpr.tasks.lib.xnli import XnliTask
+from nlpr.tasks.lib.xquad import XquadTask
 from nlpr.tasks.lib.yelp import YelpPolarityTask
 from nlpr.tasks.lib.templates.shared import Task
 
@@ -52,6 +54,7 @@ TASK_DICT = {
     "imdb": IMDBTask,
     "masked_wiki": MaskedWikiTask,
     "mlm_wikitext103": MLMTask,
+    "mlqa": MlqaTask,
     "mnli": MnliTask,
     "mrc": MultiRCTask,
     "mrpc": MrpcTask,
@@ -85,6 +88,7 @@ TASK_DICT = {
     "wnli": WnliTask,
     "wsc": WSCTask,
     "xnli": XnliTask,
+    "xquad": XquadTask,
     "yelp": YelpPolarityTask,
 }
 
