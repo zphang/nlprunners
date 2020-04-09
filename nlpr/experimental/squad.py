@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import List, Dict
 
 from transformers.tokenization_bert import BasicTokenizer
-from  pyutils.display import maybe_tqdm
+from pyutils.display import maybe_tqdm
 
 
 @dataclass

@@ -11,7 +11,7 @@ from pyutils.datastructures import take_one
 
 import nlpr.shared.initialization as initialization
 import nlpr.proj.jiant.modeling.model_setup as jiant_model_setup
-from nlpr.proj.jiant.modeling.primary import JiantStyleModel
+from nlpr.proj.jiant.modeling.primary import JiantStyleModel, wrap_jiant_forward
 import nlpr.tasks as tasks
 import nlpr.shared.runner as shared_runner
 import nlpr.shared.caching as caching
@@ -68,6 +68,7 @@ def main(args):
             model_config_path=args.model_config_path,
             tokenizer_path=args.model_tokenizer_path,
             task_dict={task.name: task},
+            task_to_submodel_map={task.name: task.name},
         )
         jiant_model.encoder.encoder.output_hidden_states = True
         data_obj = DataObj.from_path(
@@ -178,7 +179,8 @@ def compute_cka(act_a, act_b, device, cka_kernel):
 
 
 def get_hidden_act(task: tasks.Task, jiant_model: JiantStyleModel, batch):
-    model_output = jiant_model(
+    model_output = wrap_jiant_forward(
+        jiant_model=jiant_model,
         batch=batch,
         task=task,
         compute_loss=False,
