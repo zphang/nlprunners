@@ -9,7 +9,7 @@ This repository contains code for various NLP fine-tuning/transfer learning expe
 ### Quick Setup
 
 * For a quick environment setup, see: [Simple Setup](packaging/simple_setup.md)
-* For Adapters/Multi-Adapters, see: [Adapters/Multi-Adapters](packaging/adapters.md)
+* For Adapters/Multi-Adapters, see: [Adapters/Multi-Adapters](packaging/adapters/README.md)
 
 ----
 

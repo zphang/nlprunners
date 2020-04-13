@@ -1,0 +1,6 @@
+{
+  "task_config_path": "${NLPR_BASE_DIR}/data/nlpr_data/configs/mrpc.json",
+  "train_batch_size": 16,
+  "task_cache_base_path": "${NLPR_BASE_DIR}/cache/roberta-base/mrpc",
+  "epochs": 3
+}

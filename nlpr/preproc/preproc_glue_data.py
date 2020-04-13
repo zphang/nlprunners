@@ -161,7 +161,7 @@ def preprocess_all_glue_data(input_base_path, output_base_path):
             task_name=task_name,
             input_base_path=input_base_path,
         )
-        config = {"task": task_name, "paths": {}}
+        config = {"task": task_name, "paths": {}, "name": task_name}
         for phase, phase_data in task_all_examples.items():
             phase_data_path = os.path.join(task_data_path, f"{phase}.jsonl")
             io.write_jsonl(

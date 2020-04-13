@@ -4,7 +4,7 @@ This README goes over the procedure for tuning single-task [adapters](https://ar
 
 ### 0. Choose the working directory
 
-Re-use `NLPR_BASE_DIR` from [Simple Setup](simple_setup.md), which has our standard task and model configurations, weights and data. Set our working directory:
+Re-use `NLPR_BASE_DIR` from [Simple Setup](../simple_setup.md), which has our standard task and model configurations, weights and data. Set our working directory:
 
 ```bash
 export NLPR_ADAPTER_DIR=${NLPR_BASE_DIR}/working/adapters/
@@ -99,7 +99,7 @@ plot_df.plot()
 
 You should get a plot that looks something like this:
 
-![Plot of Multi-Adapter Adapter-weights](adapters_resources/multiadapters_fig_1.png)
+![Plot of Multi-Adapter Adapter-weights](multiadapters_fig_1.png)
 
 
 ### 6. Pretrained Weights
