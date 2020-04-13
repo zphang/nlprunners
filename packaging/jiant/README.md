@@ -18,6 +18,8 @@ python \
 
 ### 2. Write run config
 
+(This is a stop-gap solution.)
+
 ```bash
 python nlprunners/nlpr/proj/jiant/scripts/configurator.py \
     json \
